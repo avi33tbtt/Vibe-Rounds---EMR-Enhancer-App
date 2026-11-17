@@ -1,5 +1,5 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EMR Enhancer</title><style>
+<title>EMR Enhancer — 25G Shell polish</title><style>
 :root{--bg:#fff;--fg:#1d2433;--mu:#5b6578;--cd:#f5f7fb;--bd:#d9dfeb;--ac:#0b6e5f;--r:#c0392b;--a:#d68910;--g:#1e8449}
 @media(prefers-color-scheme:dark){:root{--bg:#121722;--fg:#e6eaf2;--mu:#98a2b8;--cd:#1a2130;--bd:#2c364b;--ac:#4cc9b0;--r:#ff6b5b;--a:#f0b050;--g:#5fd08a}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,sans-serif}
@@ -74,11 +74,69 @@ textarea{min-height:70px}label{display:block;margin:10px 0 3px;font-weight:600}b
 #noCase{display:none;max-width:680px;margin:9vh auto;padding:24px;text-align:center}
 #noCase.show{display:block}#noCase .actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 #noCase select{max-width:360px}
+/* Phase 4B / 25F: Patients landing / ward list */
+.patients-screen{max-width:1180px!important;margin:18px auto!important;padding:18px!important;text-align:left!important}
+.patients-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.patients-head h2{margin:0 0 3px}
+.patients-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0 8px}.patients-tools input[type=search]{flex:1;min-width:190px}.patients-tools select{width:auto;min-width:130px}.mypts-toggle{display:flex;align-items:center;gap:5px;white-space:nowrap;margin:0}
+.patients-table-wrap{overflow-x:auto;margin-top:8px}.patients-table{width:100%;border-collapse:collapse;min-width:760px;font-size:13px}.patients-table th,.patients-table td{padding:9px 8px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}.patients-table th{color:var(--mu);font-weight:600;white-space:nowrap}.patients-row{cursor:pointer}.patients-row:hover{background:var(--cd)}.patients-row:focus{outline:2px solid var(--ac);outline-offset:-2px}.patient-name{font-weight:700}.patient-sub{font-size:11px;color:var(--mu);margin-top:2px}.patient-chip{display:inline-block;border:1px solid var(--bd);border-radius:99px;padding:2px 7px;margin:1px 3px 2px 0;font-size:11px}.patient-age{white-space:nowrap;font-size:12px}.patient-alert{font-weight:700}.patient-empty{padding:18px;text-align:center;color:var(--mu);border:1px dashed var(--bd);border-radius:8px}
+@media(max-width:700px){.patients-screen{margin:8px!important;padding:12px!important}.patients-tools{align-items:stretch}.patients-tools input[type=search]{flex-basis:100%}.patients-tools select{flex:1}.patients-head{align-items:flex-start}}
 body.shell #oldnav{display:none}
 @media(max-width:700px){#patientbar{gap:6px;padding:7px 10px}#shellnav{overflow-x:auto}#shellnav button{white-space:nowrap;padding:7px 9px}#patientedit{position:fixed;top:100px;right:8px}}
+
+/* Phase 4B / 25D: notes workspace */
+.notes-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.note-card{border:1px solid var(--bd);border-radius:9px;padding:12px;margin:10px 0;background:var(--cd)}
+.note-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.note-meta{color:var(--mu);font-size:12px}
+.note-body textarea{min-height:150px}
+.note-state{font-size:12px;border:1px solid var(--bd);border-radius:99px;padding:2px 8px}
+.note-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.note-set-form{margin-top:10px}
+.note-empty{padding:18px;border:1px dashed var(--bd);border-radius:9px;color:var(--mu)}
+
+
+#layout{display:block}
+#addPanel{display:none;position:fixed;z-index:50;top:calc(var(--patientbar-height,0px) + 8px);right:12px;width:min(440px,calc(100vw - 24px));max-height:calc(100vh - var(--patientbar-height,0px) - 24px);overflow:auto;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px;box-shadow:0 12px 34px #0003}
+#addPanel.open{display:block}#addPanel #sb{display:block;position:static;max-height:none;width:auto;border:0;padding:0;background:transparent}
+#layout #cm{min-width:0}
+@media(max-width:700px){#addPanel{inset:0;width:100%;height:100dvh;max-height:100dvh;border-radius:0;padding:16px}}
+
+/* Phase 4B / 25G: final shell polish, accessibility and responsive density */
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+button:disabled{opacity:.55;cursor:not-allowed}
+kbd{font:inherit;font-size:11px;padding:1px 5px;border:1px solid var(--bd);border-bottom-width:2px;border-radius:4px;background:var(--cd);color:var(--fg)}
+.patients-hint{margin:2px 0 8px}
+#densityToggle[aria-pressed="true"]{border-color:var(--ac);color:var(--ac)}
+body.compact{font-size:13px;line-height:1.4}
+body.compact main{padding:9px}
+body.compact #shellnav{padding:2px 10px;gap:2px}
+body.compact #shellnav button{padding:5px 9px}
+body.compact #patientbar{padding:5px 10px;gap:6px}
+body.compact #chartbar{padding:4px 9px;gap:5px}
+body.compact .cd,body.compact .note-card{padding:8px;margin:7px 0}
+body.compact .summary-stat{padding:6px}
+body.compact .patients-table th,body.compact .patients-table td{padding:5px 6px}
+body.compact .flw-table th,body.compact .flw-table td{padding:4px}
+body.compact label{margin:7px 0 2px}
+@media(max-width:700px){
+  header{padding:8px 10px;gap:7px}
+  header>.mu{font-size:11px}
+  #shellnav{gap:1px;padding:3px 6px;scrollbar-width:thin}
+  #shellnav button{font-size:12px;padding:7px 8px}
+  #tools summary{font-size:12px;padding:6px 8px;white-space:nowrap}
+  #patientbar .ptmain{flex-basis:calc(100% - 110px)}
+  #patientbar .ptchips{max-width:100%}
+  #chartbar{align-items:flex-start}
+  #chartbar .chartbar-label{padding-top:5px}
+  .patients-table-wrap{margin-left:-4px;margin-right:-4px}
+  .patients-screen{overflow:hidden}
+  .patients-tools select{min-width:0}
+  .summary-list{font-size:12px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 </style></head><body>
 <div class="ban">Not for clinical use – synthetic data only. Codes from an LLM are unverified until checked.</div>
-<header><b>EMR Enhancer</b><span class="mu">standalone clinical record</span><span style="flex:1"></span><span class="mu" id="saveState">Demo workspace</span></header>
+<header><b>EMR Enhancer</b><span class="mu">standalone clinical record</span><button class="b sm" id="patientsLink" type="button" title="Open the patient list (Alt+P)">Patients</button><button class="b sm" id="densityToggle" type="button" aria-pressed="false" title="Switch between comfortable and compact spacing">Compact view</button><span style="flex:1"></span><span class="mu" id="saveState">Demo workspace</span></header>
 <div id="patientbar">
   <div class="ptmain"><b id="ptName">No patient</b><div class="ptmeta" id="ptMeta"></div></div>
   <div class="ptchips" id="ptDiagnosis"></div><div class="ptchips" id="ptPathways"></div>
@@ -101,10 +159,10 @@ body.shell #oldnav{display:none}
 <hr><button class="b" onclick="exp()">Export all data</button> <button class="b" onclick="resetRank()">Reset sidebar ranking</button> <label style="display:inline">Import <input type="file" id="imp" accept=".json" style="width:auto" onchange="imp(this.files[0])"></label> <button class="b" style="background:var(--r)" onclick="wipe()">Delete all data</button>
 <div class="mu">Export contains cases, generated sets, alert rules, your verified codes and set usage; the API key is never exported. Browser storage is not encrypted: use synthetic data only.</div></div>
 <nav id="oldnav" aria-hidden="true"></nav>
-<div id="shellnav">
-  <button class="on" data-shell-t="ov">Summary</button><button data-shell-t="flw">Flowsheets</button><button data-shell-t="cp">Chart</button>
+<div id="shellnav" role="navigation" aria-label="Patient chart sections">
+  <button class="on" data-shell-t="ov" aria-current="page">Summary</button><button data-shell-t="flw">Flowsheets</button><button data-shell-t="nt">Notes</button><button data-shell-t="pw">Pathway</button><button data-shell-t="al">Alerts</button><button data-shell-t="ex">Export</button>
   <details id="tools"><summary>Tools ▾</summary><div class="toolitems">
-    <button data-shell-t="in">Set builder</button><button data-shell-t="fh">Codes &amp; FHIR export</button>
+    <button data-shell-t="in">Set builder</button><button data-shell-t="fh">Codes</button>
     <button data-shell-t="an">Analytics</button><button data-shell-t="ab">About</button>
     <button type="button" id="settingsTool">Settings</button>
   </div></details>
@@ -113,10 +171,13 @@ body.shell #oldnav{display:none}
   <b class="chartbar-label">Chart now</b><div id="chartbarItems"></div>
   <button class="b sm" type="button" data-chart-add="1">+ Add context</button>
 </div>
-<div id="noCase" class="cd">
-  <h2>Select or create a case</h2><p class="mu">Open a synthetic demo case or start a new chart.</p>
-  <div class="actions"><select id="landingPicker"><option value="">Select an existing case…</option></select>
-  <button class="b" id="landingOpen" type="button">Open case</button><button class="b" id="landingNew" type="button">Create case</button></div>
+<div id="addPanel"><div class="sh"><b>Add to chart</b><span style="flex:1"></span><button class="b sm" type="button" id="addClose">Close</button></div><aside id="sb"><b>Suggested</b><div id="chips"></div><button class="b sm" id="sugb" style="margin-top:6px" onclick="suggestSets()">Suggest sets &amp; pathways from narrative</button><div id="sugs"></div><label for="ctxp" style="margin-top:14px">Context</label><select id="ctxp" onchange="CTX=this.value;sidebar()"></select><label for="q" style="margin-top:10px">Element sets</label><input id="q" placeholder="Search sets…"><div id="slist"></div></aside></div>
+<div id="noCase" class="cd patients-screen">
+  <div class="patients-head"><div><h2>Patients</h2><div class="mu">Ward list · synthetic demo records only</div></div><button class="b" id="patientsNew" type="button">+ New patient</button></div>
+  <div class="patients-tools"><input id="patientsSearch" type="search" placeholder="Search name or MRN…" aria-label="Search patients by name or MRN"><select id="patientsWard" aria-label="Filter by ward"><option value="">All wards</option></select><select id="patientsSort" aria-label="Sort patients"><option value="bed">Sort: bed</option><option value="recent">Sort: most recent activity</option></select><label class="mypts-toggle"><input id="myPatients" type="checkbox"> My patients</label></div>
+  <div class="mu patients-hint">Keyboard: <kbd>/</kbd> search · <kbd>Alt</kbd>+<kbd>1</kbd>–<kbd>6</kbd> chart sections · <kbd>Alt</kbd>+<kbd>P</kbd> patients</div>
+  <div id="patientsCount" class="mu" aria-live="polite"></div>
+  <div id="patientsRows" class="patients-table-wrap"></div>
 </div>
 <main><div id="toast"></div>
 <div class="pane" id="ab">
@@ -278,7 +339,7 @@ body.shell #oldnav{display:none}
 <div class="cd"><b>Typical workflow</b>
 <ol>
 <li>Sign in and open a patient from the Patients list (or register one).</li>
-<li>Write a short narrative in Notes, or skip it and use Chart now for vitals.</li>
+<li>Write a draft note in Notes, or skip it and use Chart now for vitals.</li>
 <li>Apply a disease set, care sets or a pathway from + Add.</li>
 <li>Enter single values and add readings over time with Chart now.</li>
 <li>Check Summary, Alerts and Pathway; acknowledge alerts that fire.</li>
@@ -292,15 +353,27 @@ body.shell #oldnav{display:none}
 <div class="pane" id="in"><label>Primary diagnosis</label><input id="dx" value="Snake envenomation (hemotoxic)"><div class="mu">Any diagnosis works with a model key. Examples: <a href="#" onclick="return ex(this)">Acute ischemic stroke</a> · <a href="#" onclick="return ex(this)">Dengue fever</a> · <a href="#" onclick="return ex(this)">Sepsis</a> · <a href="#" onclick="return ex(this)">Acute myocardial infarction</a> · <a href="#" onclick="return ex(this)">Organophosphate poisoning</a> · <a href="#" onclick="return ex(this)">Pre-eclampsia</a></div>
 <label>Clinical vignette (optional)</label><textarea id="vg"></textarea><label>Custom instructions (optional)</label><textarea id="ins" placeholder="e.g. focus on coagulopathy markers"></textarea>
 <button class="b" id="go" onclick="gen()">Generate schema</button><details><summary class="mu">Raw JSON</summary><pre id="raw"></pre></details></div>
-<div class="pane on" id="cp"><div id="layout"><aside id="sb"><b>Suggested</b><div id="chips"></div><button class="b sm" id="sugb" style="margin-top:6px" onclick="suggestSets()">Suggest sets &amp; pathways from narrative</button><div id="sugs"></div><label for="ctxp" style="margin-top:14px">Context</label><select id="ctxp" onchange="CTX=this.value;sidebar()"></select><label for="q" style="margin-top:10px">Element sets</label><input id="q" placeholder="Search sets…"><div id="slist"></div></aside>
-<section id="cm"><div id="ctl"><select id="cpick" style="width:auto;max-width:260px" onchange="openCase()"></select><button class="b" onclick="newCaseUI()">New case</button><button class="b" onclick="save()">Save now</button><button class="b" style="background:var(--r)" onclick="delCase()">Delete case</button><span id="sv" class="mu"></span><button class="b" id="sbt" onclick="$('sb').classList.toggle('open')">Element sets</button></div><div id="qb" class="qb"></div><div id="pinp"></div><div id="td"></div><div id="qr"></div><div id="cbody"></div></section></div></div>
+<div class="pane" id="nt">
+  <div class="cd">
+    <div class="sh"><div><b style="font-size:17px">Clinical notes</b><div class="mu">Drafts can be edited. Signing locks a note; corrections are separate amendments.</div></div><span style="flex:1"></span><button class="b sm" type="button" id="newNoteBtn">+ New note</button></div>
+    <div id="noteComposer" hidden class="note-card">
+      <div class="notes-toolbar"><label for="noteType">Note type</label><select id="noteType" style="width:auto">
+        <option value="free">Free-text note</option><option value="template">Basic EMR note</option><option value="disease">Applied disease set</option>
+      </select><select id="noteSet" style="width:auto;max-width:300px" hidden></select></div>
+      <div id="noteDraftText" style="margin-top:8px"><label for="noteDraft">Note text</label><textarea id="noteDraft" placeholder="Write a clinical note…"></textarea></div>
+      <div class="note-actions"><button class="b" id="createNoteBtn">Create draft</button><button class="b sm" id="cancelNoteBtn" type="button">Cancel</button></div>
+    </div>
+    <div id="notesList"></div>
+  </div>
+</div>
 <div class="pane" id="flw">
   <div class="cd">
     <div class="sh"><div><b style="font-size:17px">Flowsheets</b><div class="mu">Recorded observations, newest first. Values are shown as entered.</div></div><span style="flex:1"></span><button class="b sm" type="button" data-flw-refresh="1">Refresh</button></div>
     <div id="flwPickers" class="flw-pickers"></div>
     <div id="flwWorkspace"></div>
   </div>
-</div>
+<div id="cp"><div id="layout">
+<section id="cm"><div id="ctl"><select id="cpick" style="width:auto;max-width:260px" onchange="openCase()"></select><button class="b" onclick="newCaseUI()">New case</button><button class="b" onclick="save()">Save now</button><button class="b" style="background:var(--r)" onclick="delCase()">Delete case</button><span id="sv" class="mu"></span></div><div id="qb" class="qb"></div><div id="pinp"></div><div id="td"></div><div id="qr"></div><div id="cbody"></div></section></div></div></div>
 <div class="pane" id="ov">
   <div id="summaryHome">
     <div class="cd">
@@ -318,11 +391,14 @@ body.shell #oldnav{display:none}
     <details class="cd"><summary><b>Full record overview</b> <span class="mu">Narrative, applied sets, all readings and trend charts</span></summary><div id="ovb"></div></details>
   </div>
 </div>
+<div class="pane" id="pw"><div class="cd"><b>Care pathways</b><div class="mu">Pathway membership and data presence only; this is not a judgement of care.</div><div id="pwst"></div></div></div>
+<div class="pane" id="al"><div class="cd"><b>Clinical alerts</b><div class="mu">Decision support only. Alerts are prompts for review, not orders.</div><div id="alb"></div></div><div class="cd"><b>Rule editor</b><div class="mu">Rules are evaluated only when enabled and approved by a clinician.</div><div id="alertRuleEditors"></div></div></div>
 <div class="pane" id="fh"><div class="cd"><b>Code validation</b><div id="sum" class="mu">Add an element set in the Case tab first.</div><div id="ctab"></div>
 <button class="b" onclick="liveCheck()">Verify live (tx.fhir.org)</button>
 <div class="mu" style="margin-top:8px">Add a code you verified yourself in the SNOMED / LOINC browsers:</div>
 <select id="afld" style="width:auto;max-width:260px"><option value="">Field to attach to (optional)</option></select> <select id="asys" style="width:110px"><option>snomed</option><option>loinc</option></select> <input id="acode" placeholder="code" style="width:130px"> <input id="adisp" placeholder="display (as in browser)" style="width:260px"> <button class="b" onclick="addCode()">Add</button></div>
-<div class="cd"><b>FHIR R4 bundle</b> <span class="mu">(from the current case values; unverified codes are left out, text kept)</span><br>
+</div>
+<div class="pane" id="ex"><div class="cd"><b>FHIR R4 bundle</b> <span class="mu">(from the current case values; unverified codes are left out, text kept)</span><br>
 <button class="b" onclick="bundle()">Build bundle</button><button class="b" onclick="navigator.clipboard.writeText($('bj').textContent)">Copy</button><button class="b" onclick="dl()">Download</button>
 <div id="bchk" class="mu"></div><pre id="bj"></pre></div></div>
 <div class="pane" id="an"><div class="cd"><button class="b" onclick="synth()">Load 12 synthetic cases</button><button class="b" onclick="clearSyn()">Clear synthetic</button><span id="acnt" class="mu"></span>
@@ -642,7 +718,10 @@ function ruleUI(owner){const el=$('rl_'+owner);if(!el||!CUR)return;let res;try{r
 const rf=RF&&RF.owner==owner?ruleForm(owner,RF.rid?((userRules()[owner]||[]).find(x=>x.ruleId==RF.rid)||null):null):'<button class="b sm" data-cadd="'+esc(owner)+'">+ Add rule</button>';
 const dr=RF?'':`<div class="mu" style="margin-top:8px">Or describe the rule in plain words. The model sees only this set's field names and units plus your sentence, never patient values. The result is a draft that cannot run until you edit and approve it.</div><textarea data-cd="text" style="min-height:44px" maxlength="300" placeholder="e.g. warn when the latest temperature is above 38"></textarea><button class="b sm" data-cdraft="${esc(owner)}" style="margin-top:4px">Draft rule</button>`;
 el.innerHTML=ruleList(owner,res)+rf+dr}
-function cdsRender(){RF=null;if(!CUR)return;[...(CUR.applied||[]).map(a=>a.setId),...(CUR.pathways||[]).map(x=>x.pathwayId)].forEach(ruleUI);alertsRender()}
+function cdsRender(){RF=null;if(!CUR)return;
+const owners=[...new Set([...(CUR.applied||[]).map(a=>a.setId),...(CUR.pathways||[]).map(x=>x.pathwayId)])],host=$('alertRuleEditors');
+if(host)host.innerHTML=owners.map(id=>`<div class="sec"><b>${esc((getSet(id)||{}).title||id)}</b>${ruleBox(id)}</div>`).join('')||'<div class="mu">No applied sets or pathways with rules to review.</div>';
+owners.forEach(ruleUI);alertsRender()}
 function pwRuleBoxes(){return(CUR.pathways||[]).filter(x=>isPw(getSet(x.pathwayId))).map(x=>`<div class="cd"><b>${esc(getSet(x.pathwayId).title||x.pathwayId)}</b> <span class="mu">pathway rules</span>${ruleBox(x.pathwayId)}</div>`).join('')}
 const IC={critical:'--r',warning:'--a',info:'--ac'};
 function alertsRender(){const el=$('alb');if(!el)return;if(!CUR){el.innerHTML='';return}let res;try{res=evalRules(CUR,ruleReg())}catch(e){el.innerHTML='';return}
@@ -698,7 +777,7 @@ function cdsApprove(owner,rid){const all=userRules(),arr=Array.isArray(all[owner
 const f=ruleFields(owner).find(x=>x.ref==r.fieldRef);if(!f)return toast('The rule\'s field no longer exists. Edit or delete it.');if(problem(r))return toast('This rule is invalid and cannot be approved.');
 const by=(prompt('Check the rule in plain words:\n\n'+describe(r,f.label)+'\n\nVerified by (name / role). Leave empty to cancel:','')||'').trim();if(!by)return;
 r.provenance={source:(r.provenance&&r.provenance.source)||'manual',verifiedBy:by,verifiedAt:new Date().toISOString()};r.enabled=true;if(saveUserRules(all)){ruleUI(owner);alertsRender();toast('Approved by '+by+'. The rule now runs.')}}
-function cdsInit(){if(inited)return;inited=true;const cp=$('cp');if(!cp)return;
+function cdsInit(){if(inited)return;inited=true;const cp=$('al');if(!cp)return;
 cp.addEventListener('click',e=>{const t=e.target,b=k=>t.closest('['+k+']');let x;
 if(b('data-ccopy'))return cdsCopy();
 if(x=b('data-cdraft'))return cdsDraft(x.dataset.cdraft,x);
@@ -822,15 +901,39 @@ function loadSet(){const s=cfgGet();$('prov').value=s.p||'or';$('model').value=s
 function saveSet(){try{localStorage.setItem('set',JSON.stringify({p:$('prov').value,m:$('model').value,k:$('key').value,d:$('demo').checked}))}catch(e){}tg('set')}
 function showShellTab(id){
   document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
-  document.querySelectorAll('[data-shell-t]').forEach(x=>x.classList.toggle('on',x.dataset.shellT===id));
+  document.querySelectorAll('[data-shell-t]').forEach(x=>{const active=x.dataset.shellT===id;x.classList.toggle('on',active);if(x.closest('#shellnav')){if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')}});
   const pane=$(id);if(pane)pane.classList.add('on');
   const tools=$('tools');if(tools&&['in','fh','an','ab'].includes(id))tools.open=false;
   if(id==='an')ana();if(id==='fh')codesUI();if(id==='ov')summaryWorkspace();
-  if(id==='cp')renderCase();if(id==='flw')renderFlowsheets();
+  if(id==='cp')renderCase();if(id==='flw'){renderFlowsheets();renderCase()}if(id==='nt')renderNotes();if(id==='pw')pathwayWorkspace();if(id==='al'){cdsRender();alertsRender()}
 }
 document.querySelectorAll('[data-shell-t]').forEach(b=>b.addEventListener('click',()=>{if(!CASE_OPEN)return toast('Open or create a case first.');showShellTab(b.dataset.shellT)}));
 $('settingsTool').addEventListener('click',()=>{if($('tools'))$('tools').open=false;tg('set')});
 
+// Chunk 25G: a local presentation preference; it never changes clinical data.
+function setDensity(compact){document.body.classList.toggle('compact',!!compact);const b=$('densityToggle');if(b){b.setAttribute('aria-pressed',compact?'true':'false');b.textContent=compact?'Comfortable view':'Compact view'}try{localStorage.setItem('emrDensity',compact?'compact':'comfortable')}catch(e){}}
+$('densityToggle').addEventListener('click',()=>setDensity(!document.body.classList.contains('compact')));
+try{setDensity(localStorage.getItem('emrDensity')==='compact')}catch(e){setDensity(false)}
+// Keyboard shortcuts are ignored while typing in an editable control.
+document.addEventListener('keydown',e=>{
+  const t=e.target,editing=t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+  if(e.key==='Escape'){
+    if($('patientedit')?.classList.contains('open')){$('patientedit').classList.remove('open');$('ptEditBtn').focus();return}
+    if($('addPanel')?.classList.contains('open')){$('addPanel').classList.remove('open');$('ptAddBtn').focus();return}
+    if($('tools')?.open){$('tools').open=false;return}
+  }
+  if(editing)return;
+  if(e.altKey&&e.key.toLowerCase()==='p'){e.preventDefault();persist();showNoCase();$('patientsSearch')?.focus();return}
+  if(e.altKey&&/^[1-6]$/.test(e.key)){
+    const ids=['ov','flw','nt','pw','al','ex'];if(CASE_OPEN){e.preventDefault();showShellTab(ids[Number(e.key)-1]);}return;
+  }
+  if(e.key==='/'&&!e.altKey&&!e.ctrlKey&&!e.metaKey&&$('noCase')?.classList.contains('show')){e.preventDefault();$('patientsSearch')?.focus()}
+});
+
+
+
+$('al').addEventListener('click',e=>{const t=e.target.closest('[data-cack]');if(t)cdsAck(t.dataset.cack,t.dataset.csid)});
+$('pw').addEventListener('click',e=>{const t=e.target.closest('[data-pwgo],[data-pwx],[data-pwsave]');if(!t)return;const d=t.dataset;if(d.pwgo)return addPathway(d.pwgo);if(d.pwx!==undefined){CUR.pathways=(CUR.pathways||[]).filter(x=>x.pathwayId!==d.pwx);persist();pathwayWorkspace();renderPatientBanner();return}if(d.pwsave!==undefined)return savePathway()});
 async function callLLM(u,sys){const s=cfgGet();if(!s.k||!s.m)throw Error('Any diagnosis needs a model: set provider, model and key in Settings. (Demo mode only has snake envenomation and DKA.)');
 let r;if(s.p=='an'){r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:AbortSignal.timeout(60000),headers:{'content-type':'application/json','x-api-key':s.k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:s.m,max_tokens:3000,system:sys||SYS,messages:[{role:'user',content:u}]})});const j=await r.json();if(!r.ok)throw Error(j.error?.message||r.status);return j.content[0].text}
 r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',signal:AbortSignal.timeout(60000),headers:{'content-type':'application/json',Authorization:'Bearer '+s.k},body:JSON.stringify({model:s.m,max_tokens:3000,messages:[{role:'system',content:sys||SYS},{role:'user',content:u}]})});
@@ -955,24 +1058,25 @@ const gi=glucoseNow(a.setId,s),gv=gi.v;if(!ok||isNaN(gv)){m.innerHTML='';return}
 const num=x=>x===''||x==null?null:parseFloat(x),hit=p.bands.filter(b=>{const lo=num(b.min),hi=num(b.max);return String(b.instruction||'').trim()&&(lo===null||gv>=lo)&&(hi===null||gv<=hi)});
 m.innerHTML=hit.length?`<div class="cd" style="margin:6px 0">Latest glucose ${esc(gv)}${ageTxt(gi.t)}: typed band${hit.length>1?'s (overlapping, check the protocol)':''}:<br>${hit.map(b=>`<b>${esc(b.min||'…')}–${esc(b.max||'…')}</b> → ${esc(b.instruction)}`).join('<br>')}</div>`:`<div class="mu">No typed band covers latest glucose ${esc(gv)}${ageTxt(gi.t)}.</div>`})}
 function renderCase(){if(!CUR)return;CUR.narrative=CUR.narrative||'';CUR.values=CUR.values||{};if(!CASE_OPEN){showNoCase();return}renderPatientBanner();
-let h=`<div id="alb"></div><label for="nar">Case narrative <span class="mu">(plain text; will be stored as FHIR Composition/DocumentReference text)</span></label><textarea id="nar" placeholder="Start with a clean slate: describe the case in plain text, then add element sets from the sidebar.">${esc(CUR.narrative)}</textarea>`;
-h+=pwStrip()+pwRuleBoxes();
+let h=`<div class="cd mu">Clinical narrative and disease-specific documentation are managed in the Notes tab. Care and monitoring sets remain here for structured charting.</div>`;
 if(!CUR.applied.length)h+='<div class="cd mu">No element sets yet. Add one from the sidebar.</div>';
 CUR.applied.forEach(a=>{const s=getSet(a.setId);
+if(s&&(s.kind==='disease'||s.kind==='template'))return;
 if(!s){h+=`<div class="cd"><span class="mu">Set not found in registry: ${esc(a.setId)}</span> <button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div>`;return}
-h+=`<div class="cd" id="cd_${esc(a.setId)}"><div class="sh"><b>${esc(s.title||s.setId)}</b><span class="mu">${esc(s.kind||'')} · v${esc(s.version||1)}</span><span style="flex:1"></span><button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div><details open><summary class="mu">Fields</summary>${setForm(s)}</details>${ruleBox(s.setId)}</div>`});
+h+=`<div class="cd" id="cd_${esc(a.setId)}"><div class="sh"><b>${esc(s.title||s.setId)}</b><span class="mu">${esc(s.kind||'')} · v${esc(s.version||1)}</span><span style="flex:1"></span><button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div><details open><summary class="mu">Fields</summary>${setForm(s)}</details></div>`});
 $('cbody').innerHTML=h;
 Object.keys(CUR.values).forEach(k=>{const e=$('f_'+k),v=CUR.values[k];if(e&&!Array.isArray(v))e.value=v});
-drawAll();calc();codesUI();sidebar();picker();qbar();cdsRender()}
-function sidebar(){if(!CUR)return;const q=($('q').value||'').toLowerCase().trim(),done=new Set(CUR.applied.map(a=>a.setId)),K=['pathway','care','template','disease','custom'],kd=s=>K.includes(s.kind)?s.kind:'custom';
+drawAll();calc();codesUI();sidebar();picker();qbar();cdsRender();pathwayWorkspace()}
+function sidebar(){if(!CUR)return;const q=($('q').value||'').toLowerCase().trim(),done=new Set(CUR.applied.map(a=>a.setId)),K=['template','disease','care','pathway','custom'],kd=s=>K.includes(s.kind)?s.kind:'custom';
 const chip=s=>`<button class="chip" data-add="${esc(s.setId)}" title="${esc(s.description||'')}">+ ${esc(s.title||s.setId)}</button>`,sg=suggested();
 $('chips').innerHTML=sg.length?sg.map(chip).join(''):'<span class="mu">No suggestions yet. Pick a set below; the most used ones appear here.</span>';
 const r=registry().filter(s=>inCtx(s)&&(!q||[s.title,s.description,s.kind,s.setId].join(' ').toLowerCase().includes(q)));let h='';
 const sgp=SUGG.id==CUR.id?(SUGG.pw||[]).filter(x=>isPw(getSet(x.pathwayId))&&!(CUR.pathways||[]).some(p=>p.pathwayId==x.pathwayId)):[],sgpIds=new Set(sgp.map(x=>x.pathwayId));
-K.forEach(k=>{const m=r.filter(s=>kd(s)==k);if(!m.length)return;h+=`<div class="kh">${k}</div>`+m.map(s=>k=='pathway'?pwRow(s)+(PWPV==s.setId&&!sgpIds.has(s.setId)?pwPrev(s):''):done.has(s.setId)?`<div class="row off">✓ ${esc(s.title||s.setId)}</div>`:`<button class="row" data-add="${esc(s.setId)}">${esc(s.title||s.setId)}<span class="mu">${esc(s.description||'')}</span></button>`).join('')});
+K.forEach(k=>{const m=r.filter(s=>kd(s)==k);if(!m.length)return;const head=(k=='template'||k=='disease')?'Forms':k=='care'?'Flowsheets':k=='pathway'?'Pathways':'Other';if(k=='template'||k=='care'||k=='pathway'||k=='custom')h+=`<div class="kh">${head}</div>`+m.map(s=>k=='pathway'?pwRow(s)+(PWPV==s.setId&&!sgpIds.has(s.setId)?pwPrev(s):''):done.has(s.setId)?`<div class="row off">✓ ${esc(s.title||s.setId)}</div>`:`<button class="row" data-add="${esc(s.setId)}">${esc(s.title||s.setId)}<span class="mu">${esc(s.description||'')}</span></button>`).join('')});
 $('slist').innerHTML=h||'<span class="mu">No matching sets.</span>';
 const sg2=SUGG.id==CUR.id?SUGG.items.filter(x=>getSet(x.setId)&&!done.has(x.setId)):[];
 $('sugs').innerHTML=sg2.map(x=>{const t=getSet(x.setId);return`<button class="chip" data-add="${esc(x.setId)}" title="${esc(x.reason)}">+ ${esc(t.title||x.setId)}</button><div class="mu" style="margin:-2px 0 4px 8px">${esc(x.reason)}</div>`}).join('')+sgp.map(x=>{const t=getSet(x.pathwayId);return`<button class="chip" data-pw="${esc(x.pathwayId)}" title="${esc(x.reason)}">Preview pathway: ${esc(t.title||x.pathwayId)}</button><div class="mu" style="margin:-2px 0 4px 8px">${esc(x.reason)}</div>`+(PWPV==x.pathwayId?pwPrev(t):'')}).join('')}
+$('sb').addEventListener('click',e=>{const a=e.target.closest('[data-add]');if(a){addSet(a.dataset.add);$('addPanel').classList.remove('open');return}const pw=e.target.closest('[data-pw]');if(pw){pwOpen(pw.dataset.pw);return}const pg=e.target.closest('[data-pwgo]');if(pg){pwGo(pg.dataset.pwgo);$('addPanel').classList.remove('open');return}const pc=e.target.closest('[data-pwcl]');if(pc){pwOpen('');return}});
 function picker(){const c=getC().filter(x=>!x.syn),lab=x=>(x.saved||x.updatedAt||'').slice(0,10)+' · '+((x.narrative||'').trim().slice(0,28)||(x.applied||[]).map(a=>{const s=getSet(a.setId);return s&&s.title}).filter(Boolean).join(', ').slice(0,28)||'(empty)');
 $('cpick').innerHTML='<option value="">— current / new case —</option>'+c.map(x=>`<option value="${esc(x.id)}">${esc(lab(x))}</option>`).join('');$('cpick').value=c.some(x=>x.id==CUR.id)?CUR.id:''}
 function addSet(id){const had=CUR.applied.some(a=>a.setId==id);if(!applySet(CUR,id))return toast('Set not found: '+id);if(!had)bumpUsage(id);persist();renderCase();renderPatientBanner()}
@@ -980,7 +1084,7 @@ function rmSet(id){if(!getSet(id))CUR.applied=CUR.applied.filter(a=>a.setId!=id)
 function persist(msg){if(!CUR)return;clearTimeout(PT);const c=getC(),i=c.findIndex(x=>x.id==CUR.id),p=CUR.patient||{},hasPatient=!!(p.name||p.ageSex||p.bed||p.mrn),empty=!(CUR.narrative||'').trim()&&!CUR.applied.length&&!(CUR.pathways||[]).length&&!hasPatient;
 if(empty){if(i>=0){c.splice(i,1);setC(c)}picker();return}
 CUR.updatedAt=new Date().toISOString();patientOf(CUR);const cp=JSON.parse(JSON.stringify(CUR));if(i<0)c.push(cp);else c[i]=cp;if(!setC(c)){$('sv').textContent='NOT SAVED';return}
-$('sv').textContent='Saved '+new Date().toLocaleTimeString();if(msg)toast('Saved ('+c.length+' cases)');picker();pwRefresh();alertsRender();if($('ov')&&$('ov').classList.contains('on'))summaryWorkspace();renderPatientBanner()}
+$('sv').textContent='Saved '+new Date().toLocaleTimeString();if(msg)toast('Saved ('+c.length+' cases)');picker();pwRefresh();alertsRender();if($('ov')&&$('ov').classList.contains('on'))summaryWorkspace();renderPatientBanner();if(!CASE_OPEN)renderPatients()}
 const persistSoon=()=>{clearTimeout(PT);PT=setTimeout(()=>persist(),400);today();alertsRender()};
 function save(){persist(true)}
 function openCase(){const id=$('cpick').value;if(!id)return;persist();const x=getC().find(y=>y.id==id);if(x)enterCase(JSON.parse(JSON.stringify(x)),'ov')}
@@ -1040,12 +1144,26 @@ try{localStorage.setItem('codes',JSON.stringify(t))}catch(e){}toast(`Live check:
 /* FHIR bundle: Patient, optional Composition (narrative), Condition per disease set, one resource per value / per repeat row, Provenance.
    Protocol data (setId/__protocol bands) is never read here, so sliding-scale bands cannot reach the bundle. Doses are copied exactly as typed. */
 const isoOf=(f,x)=>{if(f.type=='date')return String(x);const d=new Date(x);return isNaN(d)?null:d.toISOString()};
-function bundle(){const sets=(CUR.applied||[]).map(a=>getSet(a.setId)).filter(Boolean);if(!sets.length)return toast('Add an element set in the Case tab first');
+function bundle(){const sets=(CUR.applied||[]).map(a=>getSet(a.setId)).filter(Boolean);if(!sets.length&&!(CUR.notes||[]).length&&!(CUR.narrative||'').trim())return toast('Add a note or an element set first');
 const v=CUR.values,pid='urn:uuid:'+crypto.randomUUID(),E=[],per={},urls={};let sk=0,skipped=0,nots=0;
 const add=(r,sid)=>{const u='urn:uuid:'+crypto.randomUUID();E.push({fullUrl:u,resource:r,request:{method:'POST',url:r.resourceType}});if(sid){per[sid]=(per[sid]||0)+1;(urls[sid]=urls[sid]||[]).push(u)}return u};
 E.push({fullUrl:pid,resource:{resourceType:'Patient',identifier:[{value:'SYNTHETIC-001'}]},request:{method:'POST',url:'Patient'}});
+ensureNotes(CUR);
+const noteRecords=(CUR.notes||[]).filter(n=>(n.text||'').trim()||n.setId);
 const nar=(CUR.narrative||'').trim();
-if(nar)add({resourceType:'Composition',status:'preliminary',type:{text:'Clinical case narrative'},subject:{reference:pid},date:new Date().toISOString(),author:[{display:'EMR Enhancer (synthetic data)'}],title:'Case narrative',section:[{title:'Narrative',text:{status:'generated',div:'<div xmlns="http://www.w3.org/1999/xhtml">'+esc(nar).replace(/\n/g,'<br/>')+'</div>'}}]});
+if(noteRecords.length){
+  noteRecords.forEach(n=>{
+    const linked=n.setId?getSet(n.setId):null;
+    const title=n.type==='narrative'?'Clinical narrative':(linked?.title||'Clinical note');
+    const body=(n.text||'').trim()||(linked?'Structured note linked to '+(linked.title||linked.setId):'');
+    if(!body)return;
+    add({resourceType:'Composition',status:n.status==='signed'?'final':'preliminary',
+      type:{text:n.type==='narrative'?'Clinical case narrative':'Clinical note'},
+      subject:{reference:pid},date:n.signedAt||n.createdAt||new Date().toISOString(),
+      author:[{display:n.signedBy||'EMR Enhancer (synthetic data)'}],title,
+      section:[{title,text:{status:'generated',div:'<div xmlns="http://www.w3.org/1999/xhtml">'+esc(body).replace(/\n/g,'<br/>')+'</div>'}}]});
+  });
+}else if(nar)add({resourceType:'Composition',status:'preliminary',type:{text:'Clinical case narrative'},subject:{reference:pid},date:new Date().toISOString(),author:[{display:'EMR Enhancer (synthetic data)'}],title:'Case narrative',section:[{title:'Narrative',text:{status:'generated',div:'<div xmlns="http://www.w3.org/1999/xhtml">'+esc(nar).replace(/\n/g,'<br/>')+'</div>'}}]});
 sets.forEach(s=>{if(s.kind!='disease'||!s.diagnosis)return;const dx=s.diagnosis,dc=dx.snomed&&dx.snomed.code&&codes()['snomed|'+dx.snomed.code]?{coding:[{system:SYSU.snomed,code:dx.snomed.code,display:dx.snomed.display}],text:dx.text}:{text:dx.text};
 add({resourceType:'Condition',subject:{reference:pid},code:dc,clinicalStatus:{coding:[{system:'http://terminology.hl7.org/CodeSystem/condition-clinical',code:'active'}]}},s.setId)});
 /* eff: undefined = scalar field, null = repeat row without a valid timestamp, string = row timestamp */
@@ -1095,7 +1213,7 @@ add({resourceType:'Provenance',target:E.map(e=>({reference:e.fullUrl})),recorded
 entity:sets.map(s=>({role:'source',what:{display:(s.title||s.setId)+' ['+(s.kind||'custom')+', v'+(s.version||1)+', '+s.setId+']'}})).concat(pws.map(x=>{const p=getSet(x.pathwayId);return{role:'source',what:{display:'Pathway: '+(p?p.title||p.setId:x.pathwayId)+' [pathway, v'+(+x.version||1)+', '+x.pathwayId+', started '+x.startedAt+']'}}}))});
 const B={resourceType:'Bundle',type:'transaction',entry:E};$('bj').textContent=JSON.stringify(B,null,1);
 const bad=E.filter(e=>{const r=e.resource,t=r.resourceType;return !t||(['Observation','Procedure'].includes(t)&&(!r.code||!r.subject))||(t=='MedicationAdministration'&&(!r.medicationCodeableConcept||!r.subject))||(t=='Provenance'&&!(r.target||[]).length)||(t=='CarePlan'&&(!r.subject||!r.status||!r.intent))}).length;
-$('bchk').innerHTML=`${E.length} entries · per set: ${sets.map(x=>esc(x.title||x.setId)+' '+(per[x.setId]||0)).join(' · ')} · ${nar?'Composition 1':'no narrative, no Composition'} · CarePlans ${cps}${pwMiss?' ('+pwMiss+' pathway not in registry, listed without activities)':''} · ${sk} resources without verified coding (text only)${skipped?' · <b>'+skipped+' row value(s) skipped: no valid row timestamp (administrations need a time)</b>':''}${nots?' · '+nots+' resource(s) emitted without effectiveDateTime (no timestamp)':''} · structural problems: ${bad}. Run through a FHIR validator before real use.`}
+$('bchk').innerHTML=`${E.length} entries · per set: ${sets.map(x=>esc(x.title||x.setId)+' '+(per[x.setId]||0)).join(' · ')} · ${noteRecords.length?'Notes '+noteRecords.length:(nar?'Composition 1':'no narrative, no Composition')} · CarePlans ${cps}${pwMiss?' ('+pwMiss+' pathway not in registry, listed without activities)':''} · ${sk} resources without verified coding (text only)${skipped?' · <b>'+skipped+' row value(s) skipped: no valid row timestamp (administrations need a time)</b>':''}${nots?' · '+nots+' resource(s) emitted without effectiveDateTime (no timestamp)':''} · structural problems: ${bad}. Run through a FHIR validator before real use.`}
 function dl(){const t=$('bj').textContent;if(!t)return toast('Build a bundle first');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='bundle.json';a.click()}
 const getC=()=>{const raw=localStorage.getItem('cases')||'[]';try{const a=JSON.parse(raw);if(!Array.isArray(a))throw 0;return a}catch(e){try{if(!localStorage.getItem('cases_corrupt'))localStorage.setItem('cases_corrupt',raw)}catch(x){}toast('Saved cases could not be read; a raw copy was kept under localStorage key cases_corrupt. Do not clear browser data until you have inspected it.');return[]}};
 const setC=c=>{try{localStorage.setItem('cases',JSON.stringify(c));return true}catch(e){toast('Storage full or blocked: changes are NOT saved. Use Settings > Export all data now.');return false}};
@@ -1446,21 +1564,21 @@ function renderChartBar(){
 }
 $('chartbar').addEventListener('click',e=>{
   const t=e.target.closest('[data-chart-go],[data-chart-quick],[data-chart-add]');if(!t||!CASE_OPEN)return;
-  if(t.dataset.chartAdd!==undefined){showShellTab('cp');const side=$('sb');if(side){side.classList.add('open');side.scrollIntoView({block:'start',behavior:'smooth'})}return}
+  if(t.dataset.chartAdd!==undefined){showShellTab('flw');const side=$('sb');if(side){side.classList.add('open');side.scrollIntoView({block:'start',behavior:'smooth'})}return}
   const id=t.dataset.chartGo||t.dataset.chartQuick;
   if(!getSet(id))return;
   if(!CUR.applied.some(a=>a.setId===id))addSet(id);
-  showShellTab('cp');
+  showShellTab('flw');
   if(t.dataset.chartQuick!==undefined){qrOpen(id);$('qr').scrollIntoView({block:'center',behavior:'smooth'})}
   else quickGo(id);
 });
 $('summaryHome').addEventListener('click',e=>{
   const t=e.target.closest('[data-summary-chart],[data-summary-builder],[data-summary-refresh]');if(!t)return;
   if(t.dataset.summaryRefresh!==undefined){summaryWorkspace();return}
-  if(t.dataset.summaryBuilder!==undefined){showShellTab('cp');const side=$('sb');if(side){side.classList.add('open');side.scrollIntoView({block:'start',behavior:'smooth'})}return}
+  if(t.dataset.summaryBuilder!==undefined){showShellTab('flw');const side=$('sb');if(side){side.classList.add('open');side.scrollIntoView({block:'start',behavior:'smooth'})}return}
   const id=t.dataset.summaryChart;if(!getSet(id))return;
   if(!CUR.applied.some(a=>a.setId===id))addSet(id);
-  showShellTab('cp');quickGo(id);
+  showShellTab('flw');quickGo(id);
 });
 
 function overview(){const el=$('ovb');if(!el||!CUR)return;
@@ -1509,7 +1627,7 @@ toast('Pathway "'+(p.title||id)+'": '+r.added.length+' set(s) added'+(r.had.leng
 function rmPathway(id){if(!removePathway(CUR,id))return;persist();renderCase();toast('Pathway record removed. Its sets and all entered values were kept.')}
 function pwRow(s){const on=(CUR.pathways||[]).some(x=>x.pathwayId==s.setId),n=pwMembers(s).length;
 return`<button class="row" data-pw="${esc(s.setId)}">${on?'✓ ':''}${esc(s.title||s.setId)}<span class="mu">${esc(s.description||'')} ${n} set${n==1?'':'s'}${on?' · on this case. Click to preview':' · click to preview'}</span></button>`}
-function pwOpen(id){PWPV=(id&&PWPV!=id)?id:'';sidebar()}
+function pwOpen(id){PWPV=(id&&PWPV!=id)?id:'';sidebar();pathwayWorkspace()}
 function pwGo(id){PWPV='';addPathway(id)}
 function pwPrev(s){const ms=pwMembers(s),ap=new Set(CUR.applied.map(a=>a.setId)),on=(CUR.pathways||[]).some(x=>x.pathwayId==s.setId);let add=0;
 const li=ms.map(m=>{const t=getSet(m.setId),ok=t&&!isPw(t),st=!ok?'not in registry, will be skipped':ap.has(m.setId)?'already applied':'will add';if(ok&&!ap.has(m.setId))add++;
@@ -1521,7 +1639,7 @@ return Object.keys(c.values||{}).some(k=>{if(k.indexOf(pre)!==0)return false;con
 if(r[0]=='@')return Array.isArray(v)&&v.some(row=>row&&typeof row=='object'&&Object.keys(row).some(id=>{const f=F[id];return f&&!f.meta&&f.type!='datetime'&&f.type!='date'&&String(row[id]==null?'':row[id]).trim()!==''}));
 const f=F[r];return !!f&&!f.derived&&!f.meta&&v!=null&&typeof v!='object'&&String(v).trim()!==''})}
 function pwBoost(r){const out=[];(CUR.pathways||[]).forEach(x=>pwMembers(getSet(x.pathwayId)).forEach(m=>{const t=r.find(y=>y.setId==m.setId);if(t&&!out.includes(t))out.push(t)}));return out}
-function pwInner(){const a=CUR.pathways||[];let h='';
+function pwInner(){const a=CUR.pathways||[];let h='';if(!a.length)h+='<div class="mu">No pathways are currently applied to this chart. Use + Add to preview or apply a pathway.</div>';
 if(a.length){const LAB={missing:'not in registry',na:'not applied',ns:'not started',ip:'in progress'};
 h+='<div class="cd"><b>Pathway status</b> <span class="mu">shows whether data has been entered, not whether care was adequate. A pathway is a bundle of sets, not a protocol.</span>'+a.map(x=>{
 const p=getSet(x.pathwayId),d=new Date(x.startedAt),dy=isNaN(d)?null:Math.max(0,Math.floor((Date.now()-d)/864e5)),ap=new Set(CUR.applied.map(y=>y.setId)),
@@ -1533,8 +1651,9 @@ return`<div class="sec"><div class="sh"><b>${esc(p?p.title||p.setId:x.pathwayId+
 +'<table class="pt pst">'+rows.map(r=>`<tr><td>${esc(r.ok?r.t.title||r.t.setId:r.m.setId)}${r.m.optional?' <span class="mu">(optional)</span>':''}</td><td class="mu">${LAB[r.st]}</td></tr>`).join('')+'</table></div>'}).join('')+'</div>'}
 if(CUR.applied.length)h+='<div class="cd"><button class="b sm" data-pwsave="1">Save applied sets as my pathway</button> <span class="mu">saves set ids only, never values</span></div>';
 return h}
-function pwStrip(){return'<div id="pwst">'+pwInner()+'</div>'}
-function pwRefresh(){const e=$('pwst');if(e&&CUR)e.innerHTML=pwInner()}
+function pwStrip(){return pwInner()}
+function pathwayWorkspace(){const e=$('pwst');if(!e||!CUR)return;const p=PWPV&&getSet(PWPV)&&isPw(getSet(PWPV))?pwPrev(getSet(PWPV)):'';e.innerHTML=pwInner()+(p?'<div class="cd"><b>Pathway preview</b>'+p+'</div>':'')}
+function pwRefresh(){pathwayWorkspace()}
 function savePathway(){if(!CUR||!CUR.applied.length)return toast('Apply at least one set first.');
 const ids=[...new Set(CUR.applied.map(a=>a.setId))].filter(id=>{const t=getSet(id);return t&&!isPw(t)});
 if(!ids.length)return toast('None of the applied sets is in the registry.');
@@ -1544,7 +1663,7 @@ if(ex){const old=pwMembers(ex).map(m=>m.setId).sort().join('|');if(old==ids.slic
 ver=(+ex.version||1)+1;if(!confirm('"'+(ex.title||t)+'" already exists (v'+(+ex.version||1)+'). Save these sets as v'+ver+'? The old member list will be replaced.'))return}
 addUserSet({setId:id,kind:'pathway',version:ver,title:t,description:'Saved from a case: '+ids.length+' set'+(ids.length==1?'':'s'),contexts:['care'],requires:[],suggests:[],members:ids.map(x=>({setId:x,optional:false})),rules:[]});
 if(!userSets().some(x=>x.setId==id&&(+x.version||1)==ver))return;
-const sk=CUR.applied.length-ids.length;sidebar();toast('Saved pathway "'+t+'" v'+ver+' with '+ids.length+' set(s)'+(sk?'. '+sk+' applied set(s) not in the registry were left out':'')+'. Find it under Pathway in the sidebar.')}
+const sk=CUR.applied.length-ids.length;sidebar();toast('Saved pathway "'+t+'" v'+ver+' with '+ids.length+' set(s)'+(sk?'. '+sk+' applied set(s) not in the registry were left out':'')+'. Open it in the Pathway tab or under Add.')}
 /* repeat tables must be arrays of objects; drop anything else (corrupted storage or hand-edited import) */
 function cleanRows(c){if(!c||!c.values||typeof c.values!='object')return;Object.keys(c.values).forEach(k=>{if(/\/@[^/]+$/.test(k)){const v=c.values[k];c.values[k]=Array.isArray(v)?v.filter(x=>x&&typeof x=='object'&&!Array.isArray(x)):[]}})}
 function cleanPw(c){if(!c||typeof c!='object')return;const seen=new Set();c.pathways=(Array.isArray(c.pathways)?c.pathways:[]).filter(x=>x&&typeof x.pathwayId=='string'&&x.pathwayId&&!seen.has(x.pathwayId)&&seen.add(x.pathwayId)).map(x=>({pathwayId:x.pathwayId,version:+x.version||1,startedAt:typeof x.startedAt=='string'&&!isNaN(new Date(x.startedAt))?x.startedAt:new Date().toISOString()}))}
@@ -1578,20 +1697,64 @@ function refreshLandingPicker(){
     return `<option value="${esc(c.id)}">${esc(label)}</option>`;
   }).join('');
 }
+/* ---------------- Phase 4B / chunk 25F: Patients landing screen ---------------- */
+const MYPTS_KEY='mypts';
+function myPatientIds(){try{const a=JSON.parse(localStorage.getItem(MYPTS_KEY)||'[]');return Array.isArray(a)?a.filter(x=>typeof x==='string'):[]}catch(e){return[]}}
+function wardOf(c){const b=String((c&&c.patient&&c.patient.bed)||'').trim();if(!b)return'';return b.split(/\s*\/\s*|\s+[·|]\s+/)[0].trim()||b}
+function patientBedKey(c){return String((c.patient||{}).bed||'').trim().toLowerCase()||'~'}
+function patientLatestTime(c,s){
+  let best=null;const fs=flS(s),groups=[...new Set(fs.filter(f=>f.repeat).map(f=>f.group||f.id))];
+  groups.forEach(g=>{const fields=grp(s,g),tc=tcol(fields);if(!tc)return;rowsOf(c,s.setId,g).forEach(r=>{const t=rowT(r,tc);if(!Number.isFinite(t))return;const hasValue=fields.some(f=>f!==tc&&!f.meta&&r[f.id]!==undefined&&String(r[f.id]).trim()!=='');if(hasValue&&(best===null||t>best))best=t})});
+  fs.filter(f=>!f.repeat&&['date','datetime'].includes(f.type)).forEach(f=>{const v=(c.values||{})[vk(s.setId,f.id)],t=v?new Date(v).getTime():NaN;if(Number.isFinite(t)&&(best===null||t>best))best=t});
+  return best;
+}
+function patientAgeLabel(t){if(t==null)return'';const m=Math.max(0,Math.round((Date.now()-t)/60000));return m<90?m+' min':Math.round(m/60)+' h'}
+function patientDueItems(c){const out=[];(c.applied||[]).forEach(a=>{const s=getSet(a.setId);if(!s)return;flS(s).filter(f=>f.type==='date'&&/due|follow.?up|next/i.test((f.label||'')+' '+f.id)).forEach(f=>{const v=(c.values||{})[vk(s.setId,f.id)];if(v&&!isNaN(new Date(v)))out.push({set:s.setId,field:f.label||f.id,value:v,time:new Date(v).getTime()})})});out.sort((a,b)=>a.time-b.time);return out}
+function patientDueLabel(x){if(x.set==='care.hba1c_monitoring'&&x.field.toLowerCase().includes('hba1c')){const n=Math.round((new Date(x.value).getTime()-new Date().setHours(0,0,0,0))/864e5);return n<0?'HbA1c overdue '+(-n)+' d':n===0?'HbA1c due today':'HbA1c due in '+n+' d'}return x.field+': '+x.value}
+function pinListFor(c){let p=c&&Array.isArray(c.pinned)?c.pinned:null;if(!p){try{const l=JSON.parse(localStorage.getItem('pinned')||'null');if(Array.isArray(l))p=l}catch(e){}}if(!p)p=registry().filter(x=>x.direct).sort((a,b)=>((a.quick||{}).order||99)-((b.quick||{}).order||99)).map(x=>x.setId);return p.filter(id=>getSet(id))}
+function patientRowModel(c){
+  const p=patientOf(c),ap=new Set((c.applied||[]).map(a=>a.setId)),diagnoses=(c.applied||[]).map(a=>getSet(a.setId)).filter(s=>s&&s.kind==='disease'),pathways=(c.pathways||[]).map(x=>getSet(x.pathwayId)).filter(Boolean);
+  let alerts=[];try{if(window.CDS&&CDS.evalRules)alerts=CDS.evalRules(c,ruleReg())}catch(e){}
+  const log=Array.isArray(c.alertLog)?c.alertLog:[],isAck=a=>{for(let i=log.length-1;i>=0;i--){const l=log[i];if(l&&l.ruleId===a.ruleId&&l.setId===a.setId)return l.sig===a.sig}return false};alerts=alerts.filter(a=>!isAck(a));
+  const pins=pinListFor(c),minuteAlerts=alerts.filter(a=>a.op==='minutes_since_gt'),reading=pins.map(id=>{const s=getSet(id);if(!s)return'';const a=minuteAlerts.find(x=>x.setId===id);if(a)return`<span class="patient-chip">${esc(shortOf(s))}: No reading for ${esc(a.value)} min</span>`;if(!ap.has(id))return`<span class="patient-chip">${esc(shortOf(s))}: not added</span>`;const t=patientLatestTime(c,s);return`<span class="patient-chip">${esc(shortOf(s))} ${t==null?'—':esc(patientAgeLabel(t))}</span>`}).join('');
+  const activity=new Date(c.updatedAt||c.saved||0).getTime();
+  return{c,p,ward:wardOf(c),bed:patientBedKey(c),activity:Number.isFinite(activity)?activity:0,alerts,diagnoses,pathways,reading,due:patientDueItems(c)};
+}
+function renderPatientRow(m){
+  const name=(m.p.name||'Unnamed patient').trim(),dx=m.diagnoses.map(s=>`<span class="patient-chip">${esc(s.title||s.setId)}</span>`).join('')||'<span class="mu">—</span>',pw=m.pathways.map(s=>`<span class="patient-chip">${esc(s.title||s.setId)}</span>`).join('')||'<span class="mu">—</span>';
+  const pinned=myPatientIds().includes(m.c.id);return `<tr class="patients-row" tabindex="0" role="button" aria-label="Open patient ${esc(name)}" data-patient-open="${esc(m.c.id)}"><td><button class="b sm" type="button" data-my-pin="${esc(m.c.id)}" aria-label="${pinned?'Remove from':'Add to'} My patients" title="${pinned?'Remove from':'Add to'} My patients">${pinned?'★':'☆'}</button></td><td><b>${esc(m.p.bed||'—')}</b><div class="patient-sub">${esc(m.ward||'Ward not set')}</div></td><td><div class="patient-name">${esc(name)}</div><div class="patient-sub">${esc([m.p.ageSex,m.p.mrn?'MRN '+m.p.mrn:''].filter(Boolean).join(' · ')||'Details not entered')}</div></td><td>${dx}</td><td>${pw}</td><td>${m.reading||'<span class="mu">No pinned direct sets</span>'}</td><td>${m.alerts.length?`<span class="patient-alert">${m.alerts.length} open</span>`:'0'}</td><td>${m.due.length?m.due.map(x=>`<span class="patient-chip">${esc(patientDueLabel(x))}</span>`).join(''):'—'}</td></tr>`;
+}
+function renderPatients(){
+  const host=$('patientsRows');if(!host)return;const all=getC().filter(Boolean),mine=new Set(myPatientIds()),q=String($('patientsSearch')?.value||'').trim().toLowerCase(),ward=$('patientsWard')?.value||'',sort=$('patientsSort')?.value||'bed',onlyMine=!!$('myPatients')?.checked;
+  const models=all.map(patientRowModel);const wards=[...new Set(models.map(m=>m.ward).filter(Boolean))].sort((a,b)=>a.localeCompare(b));const w=$('patientsWard'),prev=ward;if(w){w.innerHTML='<option value="">All wards</option>'+wards.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');w.value=wards.includes(prev)?prev:''}
+  let rows=models.filter(m=>(!q||[m.p.name,m.p.mrn].join(' ').toLowerCase().includes(q))&&(!ward||m.ward===ward)&&(!onlyMine||mine.has(m.c.id)));
+  rows.sort(sort==='recent'?(a,b)=>b.activity-a.activity:(a,b)=>a.bed.localeCompare(b.bed,undefined,{numeric:true})||String(a.p.name||'').localeCompare(String(b.p.name||'')));
+  $('patientsCount').textContent=`${rows.length} of ${models.length} patient${models.length===1?'':'s'}`;
+  host.innerHTML=rows.length?`<table class="patients-table"><thead><tr><th scope="col">My</th><th scope="col">Ward / bed</th><th scope="col">Patient</th><th scope="col">Diagnosis</th><th scope="col">Active pathway</th><th scope="col">Latest pinned readings</th><th scope="col">Alerts</th><th scope="col">Next due</th></tr></thead><tbody>${rows.map(renderPatientRow).join('')}</tbody></table>`:'<div class="patient-empty">No patients match these filters. Create a new patient or adjust the search.</div>';
+}
+function openPatientFromList(id){const c=getC().find(x=>x.id===id);if(!c)return;persist();enterCase(JSON.parse(JSON.stringify(c)),'ov')}
+function createPatientFromList(){persist();const c=newCase();c.patient.name='New patient';enterCase(c,'ov');persist();$('patientedit').classList.add('open');$('pt_name').focus()}
+function toggleMyPatient(id){const a=myPatientIds(),i=a.indexOf(id);if(i>=0)a.splice(i,1);else a.push(id);try{localStorage.setItem(MYPTS_KEY,JSON.stringify(a))}catch(e){toast('Could not save My patients pin.')}renderPatients()}
+$('patientsRows').addEventListener('click',e=>{const pin=e.target.closest('[data-my-pin]');if(pin){e.stopPropagation();toggleMyPatient(pin.dataset.myPin);return}const row=e.target.closest('[data-patient-open]');if(row)openPatientFromList(row.dataset.patientOpen)});
+$('patientsRows').addEventListener('keydown',e=>{if(e.target.closest('[data-my-pin]'))return;if(e.key!=='Enter'&&e.key!==' ')return;const row=e.target.closest('[data-patient-open]');if(row){e.preventDefault();openPatientFromList(row.dataset.patientOpen)}});
+['patientsSearch','patientsWard','patientsSort','myPatients'].forEach(id=>$(id).addEventListener(id==='patientsSearch'?'input':'change',renderPatients));
+$('patientsNew').addEventListener('click',createPatientFromList);
+$('patientsLink').addEventListener('click',()=>{persist();showNoCase()});
+
 function showNoCase(){
   CASE_OPEN=false;
   $('noCase').classList.add('show');
-  $('chartbar').classList.remove('open');
+  $('chartbar').classList.remove('open');$('addPanel').classList.remove('open');
   $('patientbar').classList.remove('open');document.documentElement.style.setProperty('--patientbar-height','0px');
   $('shellnav').style.display='none';
   document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
   $('toast').textContent='';
-  refreshLandingPicker();
+  refreshLandingPicker();renderPatients();
 }
 function enterCase(c,tab){
   CUR=c;cleanRows(CUR);cleanPw(CUR);patientOf(CUR);CASE_OPEN=true;
   $('noCase').classList.remove('show');$('shellnav').style.display='flex';$('chartbar').classList.add('open');
-  renderPatientBanner();renderCase();renderChartBar();showShellTab(tab||'ov');picker();
+  renderPatientBanner();renderCase();renderChartBar();showShellTab(tab||'ov');if((tab||'ov')==='nt')renderNotes();picker();
 }
 $('ptEditBtn').addEventListener('click',()=>{if(CASE_OPEN)$('patientedit').classList.toggle('open')});
 $('ptCancel').addEventListener('click',()=>$('patientedit').classList.remove('open'));
@@ -1600,8 +1763,10 @@ $('ptSave').addEventListener('click',()=>{
   p.name=$('pt_name').value.trim();p.ageSex=$('pt_ageSex').value.trim();p.bed=$('pt_bed').value.trim();p.mrn=$('pt_mrn').value.trim();
   $('patientedit').classList.remove('open');persist();renderPatientBanner();refreshLandingPicker();if($('ov').classList.contains('on'))summaryWorkspace();
 });
-$('ptAlerts').addEventListener('click',()=>{if(CASE_OPEN){showShellTab('ov');$('summaryAlerts').scrollIntoView({block:'center',behavior:'smooth'})}});
-$('ptAddBtn').addEventListener('click',()=>{if(CASE_OPEN){const side=$('sb');if(side){side.classList.add('open');side.scrollIntoView({behavior:'smooth',block:'start'})}}});
+$('ptAlerts').addEventListener('click',()=>{if(CASE_OPEN)showShellTab('al')});
+$('ptAddBtn').addEventListener('click',()=>{if(CASE_OPEN){$('addPanel').classList.toggle('open');if($('addPanel').classList.contains('open'))sidebar()}});
+$('addClose').addEventListener('click',()=>$('addPanel').classList.remove('open'));
+document.addEventListener('click',e=>{const panel=$('addPanel');if(!panel||!panel.classList.contains('open'))return;if(e.target.closest('#addPanel')||e.target.closest('#ptAddBtn'))return;panel.classList.remove('open')});
 $('landingOpen').addEventListener('click',()=>{
   const id=$('landingPicker').value;if(!id)return toast('Choose a case first.');
   const c=getC().find(x=>x.id===id);if(c)enterCase(JSON.parse(JSON.stringify(c)),'ov');
@@ -1611,4 +1776,150 @@ $('landingNew').addEventListener('click',()=>newCaseUI());
 loadSet();migrateCases();if(!window.SEED_SETS)toast('element-sets.js not found next to enhancer.html: demo sets unavailable.');
 $('ctxp').innerHTML='<option value="all">All contexts</option>'+CONTEXTS.map(c=>`<option value="${c.id}"${c.enabled?'':' disabled'}>${esc(c.label)}</option>`).join('');
 applyBinds();cdsInit();CUR=newCase();refreshLandingPicker();showNoCase();
+
+/* ---------------- Phase 4B / chunk 25D: Notes ---------------- */
+function noteNow(){return new Date().toISOString()}
+function noteId(){return (crypto.randomUUID?crypto.randomUUID():'note-'+Date.now()+'-'+Math.random().toString(36).slice(2))}
+function ensureNotes(c){
+  if(!c)return;
+  if(!Array.isArray(c.notes)){
+    // One-time, lossless migration: preserve the original case before introducing notes.
+    try{
+      if(!localStorage.getItem('cases_backup_v5'))localStorage.setItem('cases_backup_v5',JSON.stringify(getC()));
+    }catch(e){toast('Could not create notes migration backup. Notes were not migrated.');return}
+    c.notes=[];
+    const now=noteNow();
+    if((c.narrative||'').trim())c.notes.push({id:noteId(),type:'narrative',text:c.narrative,status:'draft',signedBy:'',signedAt:'',createdAt:now});
+    (c.applied||[]).forEach(a=>{
+      const set=getSet(a.setId);if(!set||!['disease','template'].includes(set.kind))return;
+      c.notes.push({id:noteId(),type:set.kind,setId:set.setId,text:'',status:'draft',signedBy:'',signedAt:'',createdAt:a.addedAt||now});
+    });
+    c.notes.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  }
+  c.notes=c.notes.filter(n=>n&&typeof n==='object').map(n=>({
+    id:n.id||noteId(),type:['narrative','template','disease'].includes(n.type)?n.type:'narrative',
+    setId:n.setId||'',text:typeof n.text==='string'?n.text:'',status:n.status==='signed'?'signed':'draft',
+    signedBy:n.signedBy||'',signedAt:n.signedAt||'',amends:n.amends||'',reason:n.reason||'',createdAt:n.createdAt||noteNow()
+  }));
+  // Compatibility bridge for the existing FHIR Composition builder.
+  const primary=[...c.notes].reverse().find(n=>n.type==='narrative');
+  if(primary)c.narrative=primary.text||'';
+  else if((c.narrative||'').trim())c.notes.push({id:noteId(),type:'narrative',text:c.narrative,status:'draft',signedBy:'',signedAt:'',createdAt:noteNow()});
+}
+function notesSetOptions(){
+  const sets=registry().filter(x=>x&&x.kind==='disease');
+  $('noteSet').innerHTML=sets.length?sets.map(x=>`<option value="${esc(x.setId)}">${esc(x.title||x.setId)}</option>`).join(''):'<option value="">No disease sets applied</option>';
+}
+function renderNotes(){
+  if(!CUR||!CASE_OPEN)return;
+  ensureNotes(CUR);notesSetOptions();
+  const list=$('notesList');if(!list)return;
+  const notes=[...(CUR.notes||[])].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  if(!notes.length){list.innerHTML='<div class="note-empty">No notes yet. Create a free-text note, a Basic EMR note, or a note linked to an applied disease set.</div>';return}
+  list.innerHTML=notes.map(n=>{
+    const linked=n.setId?getSet(n.setId):null;
+    const title=n.type==='narrative'?'Clinical narrative':n.type==='template'?(linked?.title||'Basic EMR note'):(linked?.title||'Disease note');
+    const meta=[n.status==='signed'?'Signed':'Draft',n.createdAt?new Date(n.createdAt).toLocaleString():'',n.signedBy?'Signed by '+n.signedBy:'',n.amends?'Amends '+n.amends.slice(0,8):''].filter(Boolean).join(' · ');
+    const content=(n.type==='narrative'||!n.setId)
+      ? `<div class="note-body"><label>Note text</label><textarea data-note-text="${esc(n.id)}" ${n.status==='signed'?'disabled':''}>${esc(n.text)}</textarea></div>`
+      : `<div class="note-set-form" ${n.status==='signed'?'inert aria-disabled="true"':''}>${linked?setForm(linked):`<div class="mu">Linked set is not available: ${esc(n.setId)}</div>`}</div>`;
+    return `<article class="note-card" data-note-card="${esc(n.id)}"><div class="note-head"><b>${esc(title)}</b><span class="note-state">${n.status==='signed'?'Signed':'Draft'}</span><span class="note-meta">${esc(meta)}</span><span style="flex:1"></span><button class="b sm" type="button" data-note-toggle="${esc(n.id)}">Details</button></div><div data-note-detail="${esc(n.id)}" ${n.status==='signed'?'':' '}>${content}${n.status==='draft'?`<div class="note-actions"><button class="b sm" type="button" data-note-sign="${esc(n.id)}">Sign</button><button class="b sm" type="button" data-note-delete="${esc(n.id)}">Remove draft</button></div>`:`<div class="note-actions"><button class="b sm" type="button" data-note-amend="${esc(n.id)}">Amend</button></div>`}</div></article>`;
+  }).join('');
+}
+function createNote(){
+  if(!CUR)return;
+  ensureNotes(CUR);
+  const type=$('noteType').value,now=noteNow();
+  let n={id:noteId(),type:type==='free'?'narrative':type,setId:'',text:'',status:'draft',signedBy:'',signedAt:'',createdAt:now};
+  if(type==='disease'){
+    const sid=$('noteSet').value,set=getSet(sid);
+    if(!set||set.kind!=='disease')return toast('Apply a disease set first, then create its note.');
+    if(!(CUR.applied||[]).some(a=>a.setId===sid))CUR.applied.push({setId:sid,addedAt:now});
+    if(CUR.notes.some(x=>x.setId===sid&&!x.amends))return toast('A note for this disease set already exists.');
+    n.setId=sid;
+  }else if(type==='template'){
+    const set=registry().find(x=>x.setId==='template.basic_emr');
+    if(set){n.setId=set.setId;if(!(CUR.applied||[]).some(a=>a.setId===set.setId))CUR.applied.push({setId:set.setId,addedAt:now});}
+    else n.text='Presenting concern:\nHistory:\nRelevant examination:\nAssessment:\nPlan:\n';
+  }
+  CUR.notes.push(n);if(n.type==='narrative')CUR.narrative=n.text;
+  $('noteComposer').hidden=true;persist();renderNotes();toast('Draft note created.');
+}
+function signNote(id){
+  const n=CUR?.notes?.find(x=>x.id===id);if(!n||n.status==='signed')return;
+  const signer=prompt('Enter the signer name (demo only):');if(!signer||!signer.trim())return toast('Signing cancelled: signer name is required.');
+  n.status='signed';n.signedBy=signer.trim();n.signedAt=noteNow();
+  if(n.type==='narrative')CUR.narrative=n.text;
+  persist();renderNotes();toast('Note signed and locked.');
+}
+function amendNote(id){
+  const old=CUR?.notes?.find(x=>x.id===id);if(!old||old.status!=='signed')return;
+  const reason=prompt('Reason for amendment (required):');if(!reason||!reason.trim())return toast('Amendment cancelled: a reason is required.');
+  const n={...old,id:noteId(),status:'draft',signedBy:'',signedAt:'',amends:old.id,reason:reason.trim(),createdAt:noteNow()};
+  if(old.type!=='narrative'){
+    const linked=old.setId?getSet(old.setId):null;
+    n.type='narrative';n.setId='';
+    n.text='Amendment to '+(linked?.title||'signed note')+'\nReason: '+reason.trim()+'\n\n';
+  }else n.text=old.text+'\n\nAmendment ('+reason.trim()+'):\n';
+  CUR.notes.push(n);persist();renderNotes();toast('A new amendment draft was created; the signed note is unchanged.');
+}
+$('newNoteBtn')?.addEventListener('click',()=>{$('noteComposer').hidden=false;notesSetOptions()});
+$('cancelNoteBtn')?.addEventListener('click',()=>$('noteComposer').hidden=true);
+$('createNoteBtn')?.addEventListener('click',createNote);
+$('noteType')?.addEventListener('change',()=>{const t=$('noteType').value;$('noteSet').hidden=t!=='disease';$('noteDraftText').hidden=t!=='free';notesSetOptions()});
+$('noteDraftText').hidden=true;$('noteSet').hidden=true;
+$('notesList')?.addEventListener('input',e=>{
+  const id=e.target.dataset.noteText;if(!id||!CUR)return;
+  const n=CUR.notes.find(x=>x.id===id);if(!n||n.status==='signed')return;
+  n.text=e.target.value;if(n.type==='narrative')CUR.narrative=n.text;persistSoon();
+});
+$('notesList')?.addEventListener('input',e=>{
+  const t=e.target;if(!CUR)return;
+  const card=t.closest('[data-note-card]'),owner=card&&CUR.notes.find(x=>x.id===card.dataset.noteCard);if(owner&&owner.status==='signed')return;
+  if(t.dataset&&t.dataset.rs!==undefined&&t.dataset.ri!==undefined){
+    const sid=t.dataset.rs,g=t.dataset.rg,rows=CUR.values[vk(sid,'@'+g)];
+    if(Array.isArray(rows)&&rows[+t.dataset.ri]){rows[+t.dataset.ri][t.dataset.rf]=t.value;drawCharts(getSet(sid),g);protoShow();persistSoon()}return;
+  }
+  if(t.dataset&&t.dataset.p){const sid=t.dataset.p,p=protoOf(sid);if(t.dataset.f==='verifiedBy')p.verifiedBy=t.value;else if(p.bands[+t.dataset.i])p.bands[+t.dataset.i][t.dataset.f]=t.value;CUR.values[vk(sid,'__protocol')]=p;saveProto(sid,p);persistSoon();return}
+  if(t.id&&t.id.startsWith('f_')){CUR.values[t.id.slice(2)]=t.value;calc();persistSoon()}
+});
+$('notesList')?.addEventListener('click',e=>{
+  const t=e.target.closest('[data-radd],[data-rdel],[data-rm],[data-padd],[data-pdel],[data-pload]');
+  if(!t||!CUR)return;
+  const ownerCard=t.closest('[data-note-card]'),ownerNote=ownerCard&&CUR.notes.find(x=>x.id===ownerCard.dataset.noteCard);if(ownerNote&&ownerNote.status==='signed'&&!t.dataset.noteAmend&&!t.dataset.noteToggle)return;
+  if(t.dataset.rm){const n=t.closest('[data-note-card]'),note=CUR.notes.find(x=>x.id===n?.dataset.noteCard);if(note&&note.status==='draft'&&confirm('Remove this linked draft note and its set?')){CUR.notes=CUR.notes.filter(x=>x.id!==note.id);if(note.setId)removeSet(CUR,note.setId);persist();renderNotes()}return}
+  const ra=t.dataset.radd!==undefined,rd=t.dataset.rdel!==undefined;
+  if(ra||rd){const sid=t.dataset[ra?'radd':'rdel'],g=t.dataset.rg,set=getSet(sid);if(!set)return;const tc=tcol(grp(set,g)),k=vk(sid,'@'+g),rows=Array.isArray(CUR.values[k])?CUR.values[k]:[];
+    if(ra){if(rows.length>=500)return toast('Row limit reached (500 readings per table).');const row={};grp(set,g).forEach(f=>{if(f!==tc&&dflt(f)!=='')row[f.id]=dflt(f)});if(tc)row[tc.id]=nowStr(tc.type);rows.push(row)}
+    else{if(!confirm('Delete this reading?'))return;rows.splice(+t.dataset.ri,1)}
+    sortRows(rows,tc);if(rows.length)CUR.values[k]=rows;else delete CUR.values[k];persist();renderNotes();return;
+  }
+  if(t.dataset.padd||t.dataset.pdel){const sid=t.dataset.padd||t.dataset.pdel,p=protoOf(sid);if(t.dataset.padd)p.bands.push({min:'',max:'',instruction:''});else p.bands.splice(+t.dataset.i,1);CUR.values[vk(sid,'__protocol')]=p;saveProto(sid,p);persist();renderNotes();return}
+  if(t.dataset.pload){const sid=t.dataset.pload;let last;try{last=(JSON.parse(localStorage.getItem('protocols')||'{}')||{})[sid]}catch(x){}if(!last||!(last.bands||[]).length)return toast('No previously entered protocol to load.');const np=JSON.parse(JSON.stringify(last));np.verifiedBy='';CUR.values[vk(sid,'__protocol')]=np;persist();renderNotes();toast('Protocol loaded. Check it, then enter who verified it.')}
+});
+$('notesList')?.addEventListener('change',e=>{
+  const t=e.target;if(!CUR||!t.dataset.rs||t.dataset.ri===undefined)return;
+  const sid=t.dataset.rs,g=t.dataset.rg,rows=CUR.values[vk(sid,'@'+g)];
+  if(Array.isArray(rows)&&rows[+t.dataset.ri]){rows[+t.dataset.ri][t.dataset.rf]=t.value;persistSoon()}
+});
+$('notesList')?.addEventListener('click',e=>{
+  const t=e.target.closest('[data-note-sign],[data-note-amend],[data-note-delete],[data-note-toggle]');if(!t||!CUR)return;
+  if(t.dataset.noteSign)return signNote(t.dataset.noteSign);
+  if(t.dataset.noteAmend)return amendNote(t.dataset.noteAmend);
+  if(t.dataset.noteDelete){const n=CUR.notes.find(x=>x.id===t.dataset.noteDelete);if(n&&n.status==='draft'&&confirm('Remove this unsigned draft note?')){CUR.notes=CUR.notes.filter(x=>x.id!==n.id);persist();renderNotes()}return}
+  if(t.dataset.noteToggle){const el=document.querySelector(`[data-note-detail="${CSS.escape(t.dataset.noteToggle)}"]`);if(el)el.hidden=!el.hidden}
+});
+/* Wrap case entry so older records migrate once before rendering. */
+const _enterCase25D=enterCase;
+enterCase=function(c,tab){
+  // Migrate every stored case after preserving the full pre-migration collection once.
+  const all=getC();let changed=false;
+  all.forEach(x=>{if(!Array.isArray(x.notes)){ensureNotes(x);changed=true}});
+  if(changed)setC(all);
+  const hadNotes=Array.isArray(c?.notes);ensureNotes(c);
+  const result=_enterCase25D(c,tab);
+  if(!hadNotes&&CASE_OPEN)persist();
+  return result;
+};
+
 </script></body></html>
