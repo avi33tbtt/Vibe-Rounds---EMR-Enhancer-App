@@ -405,7 +405,10 @@
     enqueue('proto:' + sid, async () => {
       const cur = S.protocols[sid]; if (!cur) return; const sn = snap['proto:' + sid];
       if (sn && eq(sn.data, cur)) return;
-      const r = await api('PUT', '/protocols/' + sid, { body: cur, expectedVersion: sn ? sn.ver : 0 }); snap['proto:' + sid] = { ver: r.version, data: clone(cur) };
+      let r = await api('PUT', '/protocols/' + sid, { body: cur, expectedVersion: sn ? sn.ver : 0 });
+      // The server never trusts a typed name: saving always lands unverified. If a verifier was typed, ask the server to stamp approval (by the signed-in user).
+      if (String(cur.verifiedBy || '').trim()) r = await api('POST', '/protocols/' + sid + '/approve', { expectedVersion: r.version });
+      snap['proto:' + sid] = { ver: r.version, data: clone(cur) };
     });
     return true;
   };

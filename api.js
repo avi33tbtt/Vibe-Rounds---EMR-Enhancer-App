@@ -55,7 +55,7 @@ const S = {
   noteAmend: z.object({ reason: z.string().trim().min(3).max(1000), text: z.string().max(200000) }).strict(),
   setPost: z.object({ setId: ident, kind: z.enum(['care', 'template', 'disease', 'custom', 'pathway']), body: z.record(z.string(), z.any()).refine(jsonSize(500000), 'set too large'),
     expectedVersion: ver.optional() }).strict(),
-  usagePost: z.object({ dx: z.string().max(100).optional() }).strict(),
+  usagePost: z.object({ dx: z.string().max(100).optional(), dxs: z.array(z.string().min(1).max(100)).max(20).optional() }).strict(),
   codePost: z.object({ system: sysEnum, code: z.string().trim().min(1).max(20), display: z.string().trim().min(1).max(300) }).strict().superRefine(codeShape),
   codeLive: z.object({ ok: z.boolean(), display: z.string().trim().max(300).optional() }).strict(),
   bindPut: z.object({ setId: ident, fieldId: ident, system: sysEnum, code: z.string().trim().min(1).max(20), display: z.string().trim().min(1).max(300) }).strict().superRefine(codeShape),
@@ -328,13 +328,17 @@ function mountApi(app, { db, getActor }) {
   }));
   r.post('/usage/:setId', wrap(async (req, res) => {
     const sid = identParam(req.params.setId), b = parse(S.usagePost, req.body || {});
-    const dx = b.dx ? JSON.stringify({ [b.dx]: 1 }) : '{}';
-    const u = await db.query(`INSERT INTO set_usage (user_id,set_id,count,last_used,with_dx) VALUES ($1,$2,1,now(),$3)
-      ON CONFLICT (user_id,set_id) DO UPDATE SET count=set_usage.count+1, last_used=now(),
-        with_dx = CASE WHEN $4::text IS NULL THEN set_usage.with_dx
-          ELSE jsonb_set(set_usage.with_dx, ARRAY[$4::text], to_jsonb(COALESCE((set_usage.with_dx->>$4::text)::int,0)+1)) END
-      RETURNING count,last_used,with_dx`, [req.actor.id, sid, dx, b.dx || null]);
-    res.json({ count: u.rows[0].count, lastUsed: iso(u.rows[0].last_used), withDx: u.rows[0].with_dx });
+    const dl = [...new Set([...(b.dx ? [b.dx] : []), ...(b.dxs || [])])];        // each diagnosis key counts once per use
+    const out = await db.withTx(async (c) => {
+      let u = (await c.query(`INSERT INTO set_usage (user_id,set_id,count,last_used,with_dx) VALUES ($1,$2,1,now(),'{}')
+        ON CONFLICT (user_id,set_id) DO UPDATE SET count=set_usage.count+1, last_used=now() RETURNING count,last_used,with_dx`, [req.actor.id, sid])).rows[0];
+      for (const k of dl) {
+        u = (await c.query(`UPDATE set_usage SET with_dx = jsonb_set(with_dx, ARRAY[$3::text], to_jsonb(COALESCE((with_dx->>$3::text)::int,0)+1))
+          WHERE user_id=$1 AND set_id=$2 RETURNING count,last_used,with_dx`, [req.actor.id, sid, k])).rows[0];
+      }
+      return u;
+    });
+    res.json({ count: out.count, lastUsed: iso(out.last_used), withDx: out.with_dx });
   }));
   r.delete('/usage', wrap(async (req, res) => { await db.query('DELETE FROM set_usage WHERE user_id=$1', [req.actor.id]); res.status(204).end(); }));
 

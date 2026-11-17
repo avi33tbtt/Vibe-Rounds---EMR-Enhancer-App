@@ -243,6 +243,37 @@ test('usage, codes, bindings, prefs', async () => {
   assert.deepEqual((await api().get('/api/prefs')).body.pinned, ['care.vitals']);
 });
 
+test('usage: the client payload (dxs) works; counts are per user; reset only touches the caller', async () => {
+  await api().delete('/api/usage');
+  const u = await api().post('/api/usage/care.vitals').send({ dxs: ['111', '222', '111'] });
+  assert.equal(u.status, 200); assert.equal(u.body.count, 1); assert.deepEqual(u.body.withDx, { 111: 1, 222: 1 });
+  const u2 = await api().post('/api/usage/care.vitals').send({ dx: '111', dxs: ['333'] });
+  assert.equal(u2.body.count, 2); assert.deepEqual(u2.body.withDx, { 111: 2, 222: 1, 333: 1 });
+  assert.equal((await api().post('/api/usage/care.vitals').send({ dxs: new Array(21).fill('x') })).status, 400);
+  assert.equal((await api().post('/api/usage/care.vitals').send({ dxs: [''] })).status, 400);
+  assert.equal((await api().post('/api/usage/care.vitals').send({ other: 1 })).status, 400);
+  const other = (await db.query(`INSERT INTO users (username,name,role) VALUES ('other_user','Other','nurse') RETURNING id`)).rows[0].id;
+  await db.query(`INSERT INTO set_usage (user_id,set_id,count) VALUES ($1,'care.vitals',7)`, [other]);
+  assert.equal((await api().get('/api/usage')).body['care.vitals'].count, 2, 'another user\'s count is not mine');
+  assert.equal((await api().delete('/api/usage')).status, 204);
+  assert.deepEqual((await api().get('/api/usage')).body, {});
+  assert.equal((await db.query('SELECT count FROM set_usage WHERE user_id=$1', [other])).rows[0].count, 7, 'reset never touches other users');
+});
+
+test('rules and protocols: delete needs the current version; protocol approval is stamped by the server', async () => {
+  const put = (b) => api().put('/api/rules/care.vitals/del1').send(b);
+  assert.equal((await put({ body: { op: '>=', threshold: 1 }, expectedVersion: 0 })).status, 200);
+  assert.equal((await api().delete('/api/rules/care.vitals/del1?expectedVersion=9')).status, 409);
+  assert.equal((await api().delete('/api/rules/care.vitals/del1?expectedVersion=1')).status, 204);
+  assert.equal((await api().get('/api/rules')).body['care.vitals'], undefined);
+  const p = await api().put('/api/protocols/care.sss30c').send({ body: { bands: [{ min: '', max: '', instruction: 'typed text' }], verifiedBy: 'someone typed' }, expectedVersion: 0 });
+  assert.equal(p.body.verifiedBy, null, 'a typed name in the body is never trusted');
+  const a = await api().post('/api/protocols/care.sss30c/approve').send({ expectedVersion: 1 });
+  assert.ok(a.body.verifiedBy && a.body.verifiedAt);
+  const all = (await api().get('/api/protocols')).body['care.sss30c'];
+  assert.equal(all.version, 2); assert.equal(all.body.bands[0].instruction, 'typed text');
+});
+
 test('GET /api/me returns the acting (development) user', async () => {
   const r = await api().get('/api/me');
   assert.equal(r.status, 200);

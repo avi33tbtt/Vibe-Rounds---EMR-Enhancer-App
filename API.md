@@ -51,7 +51,7 @@ Seed sets (loaded by `node seed.js`) and any set with `readOnly: true` (marketpl
 ## Reference data (per user or shared)
 | Route | Notes |
 |---|---|
-| `GET /usage`, `POST /usage/:setId {dx?}`, `DELETE /usage` | per user; DELETE resets only the caller's ranking |
+| `GET /usage`, `POST /usage/:setId {dx?, dxs?}` (`dxs`: up to 20 diagnosis keys, each counted once), `DELETE /usage` | per user; DELETE resets only the caller's ranking |
 | `GET /codes` | verified-code table: `{system,code,display,verifiedLive,addedBy,addedAt}` |
 | `POST /codes {system,code,display}` | `201`. The server stamps `addedBy` and `addedAt`. A code already in the table returns `409` with `current` and is **never overwritten**. There is no PUT. |
 | `POST /codes/:system/:code/live {ok,display?}` | result of "Verify live". The server stamps `checkedAt` and `checkedBy` into `verifiedLive`; the table display is not replaced. `404` if the code is not in the table. |

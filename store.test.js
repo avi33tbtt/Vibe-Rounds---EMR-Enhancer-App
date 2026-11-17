@@ -232,3 +232,48 @@ test('set versions (server): saving a user set sends expectedVersion and remembe
   assert.equal(t.Store.setVersion('user.s', 1).title, 'One', 'the replaced version is kept in memory, no fetch needed');
   assert.equal(t.calls.filter((c) => /versions\//.test(c.path)).length, 0);
 });
+
+test('protocols: saving PUTs the body; a typed verifier makes the Store ask the server to stamp approval', async () => {
+  const t = await readyServerStore();
+  t.custom = async (m, p, b) => {
+    if (m === 'PUT' && p === '/protocols/care.sss') return [200, { setId: 'care.sss', body: b.body, verifiedBy: null, version: b.expectedVersion + 1 }];
+    if (m === 'POST' && p === '/protocols/care.sss/approve') return [200, { setId: 'care.sss', verifiedBy: 'u1', version: b.expectedVersion + 1 }];
+    return null;
+  };
+  t.Store.saveProtocol('care.sss', { verifiedBy: '', bands: [{ min: '', max: '', instruction: 'typed' }] }); await t.Store.flush();
+  let w = t.writes(); assert.equal(w.length, 1); assert.equal(w[0].method, 'PUT'); assert.equal(w[0].body.expectedVersion, 0);
+  t.Store.saveProtocol('care.sss', { verifiedBy: 'Dr A', bands: [{ min: '', max: '', instruction: 'typed' }] }); await t.Store.flush();
+  w = t.writes(); assert.deepEqual(w.map((x) => x.method + ' ' + x.path), ['PUT /protocols/care.sss', 'PUT /protocols/care.sss', 'POST /protocols/care.sss/approve']);
+  assert.equal(w[1].body.expectedVersion, 1); assert.equal(w[2].body.expectedVersion, 2);
+  t.Store.saveProtocol('care.sss', { verifiedBy: 'Dr A', bands: [{ min: '', max: '', instruction: 'typed' }] }); await t.Store.flush();
+  assert.equal(t.writes().length, 3, 'unchanged protocol is not sent again');
+  assert.equal(t.Store.status().state, 'saved');
+});
+
+test('rules: an imported rule (no verifier) is saved unapproved; an approved rule is approved once; a disabled rule is disabled on the server', async () => {
+  const t = await readyServerStore();
+  t.custom = async (m, p, b) => {
+    if (m === 'PUT' && /^\/rules\//.test(p)) return [200, { version: b.expectedVersion + 1, enabled: false }];
+    if (m === 'POST' && /\/approve$/.test(p)) return [200, { version: b.expectedVersion + 1, enabled: true }];
+    if (m === 'POST' && /\/disable$/.test(p)) return [200, { version: b.expectedVersion + 1, enabled: false }];
+    return null;
+  };
+  const rule = (id, by, en) => ({ ruleId: id, fieldRef: 'care.vitals/temp', op: '>=', threshold: 1, indicator: 'info', summary: 's', enabled: en, provenance: { source: 'manual', verifiedBy: by, verifiedAt: by ? 'now' : '' } });
+  t.Store.saveRules({ 'care.vitals': [rule('imp', '', true), rule('ok', 'Dr A', true)] }); await t.Store.flush();
+  const w = t.writes().map((x) => x.method + ' ' + x.path);
+  assert.ok(w.includes('PUT /rules/care.vitals/imp')); assert.ok(!w.includes('POST /rules/care.vitals/imp/approve'), 'no verifier typed: never approved');
+  assert.ok(w.includes('POST /rules/care.vitals/ok/approve'));
+  t.Store.saveRules({ 'care.vitals': [rule('imp', '', true), rule('ok', 'Dr A', false)] }); await t.Store.flush();
+  assert.ok(t.writes().map((x) => x.path).includes('/rules/care.vitals/ok/disable'));
+  t.Store.saveRules({ 'care.vitals': [rule('imp', '', true)] }); await t.Store.flush();
+  assert.ok(t.writes().some((x) => x.method === 'DELETE' && /^\/rules\/care\.vitals\/ok\?expectedVersion=\d+$/.test(x.path)));
+});
+
+test('usage: a bump sends the diagnosis keys the server accepts; reset only clears the caller on the server', async () => {
+  const t = await readyServerStore();
+  t.Store.bumpUsage('care.vitals', ['111', '222']); await t.Store.flush();
+  const w = t.writes(); assert.equal(w[0].path, '/usage/care.vitals'); assert.deepEqual(w[0].body, { dxs: ['111', '222'] });
+  assert.equal(t.Store.usage()['care.vitals'].count, 1);
+  t.Store.resetUsage(); await t.Store.flush();
+  assert.equal(t.writes().pop().method, 'DELETE'); assert.equal(Object.keys(t.Store.usage()).length, 0);
+});
