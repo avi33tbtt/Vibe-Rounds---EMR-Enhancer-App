@@ -214,6 +214,13 @@ test('usage, codes, bindings, prefs', async () => {
   assert.deepEqual((await api().get('/api/prefs')).body.pinned, ['care.vitals']);
 });
 
+test('GET /api/me returns the acting (development) user', async () => {
+  const r = await api().get('/api/me');
+  assert.equal(r.status, 200);
+  assert.deepEqual(Object.keys(r.body).sort(), ['id', 'mode', 'name', 'role']);
+  assert.equal(r.body.mode, 'dev'); assert.equal(r.body.role, 'admin'); assert.match(r.body.id, /^[0-9a-f-]{36}$/);
+});
+
 test('auth placeholder refuses to run in production', async () => {
   const old = process.env.NODE_ENV; process.env.NODE_ENV = 'production';
   try { assert.equal((await api().get('/api/cases')).status, 503); } finally { process.env.NODE_ENV = old; }

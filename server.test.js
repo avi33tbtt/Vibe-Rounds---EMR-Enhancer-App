@@ -81,7 +81,7 @@ test('GET /api/health reports 503 when DB is down', async () => {
 });
 
 test('static: app files served, server files and dotfiles are not', async () => {
-  for (const f of ['/', '/enhancer.html', '/element-sets.js', '/cds-rules.js']) {
+  for (const f of ['/', '/enhancer.html', '/element-sets.js', '/cds-rules.js', '/store.js']) {
     const r = await request(app).get(f);
     assert.ok([200, 404].includes(r.status), f); // 404 only if that file is not in the folder yet
     if (fs.existsSync(path.join(__dirname, f === '/' ? 'enhancer.html' : f.slice(1)))) assert.equal(r.status, 200, f);

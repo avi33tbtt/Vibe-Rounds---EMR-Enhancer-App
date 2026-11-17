@@ -260,8 +260,9 @@
       S.cases = clone(arr); notify(); return true;
     }
     const next = clone(arr);
+    S.cases = next;                                        // before reconcile: the queue starts sending at once and reads the cache
     next.forEach(reconcile);
-    S.cases = next; notify(); return true;
+    notify(); return true;
   };
   Store.reloadCase = async function (id) {              // explicit "Reload theirs": drops this person's unsent edits for that case
     for (let i = Q.length - 1; i >= 0; i--) if (grpOf(Q[i].key) === id && !Q[i].started) Q.splice(i, 1);

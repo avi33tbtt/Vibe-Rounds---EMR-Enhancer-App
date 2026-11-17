@@ -4,7 +4,7 @@ Base path `/api`. JSON in, JSON out. Synthetic data only; not for clinical use.
 
 **Auth:** placeholder until chunk 32. Requests act as a development user, and the API answers `503 auth_not_configured` when `NODE_ENV=production`. `entered_by`, `created_by`, `signedBy` and approver ids always come from the acting user, never from a request body.
 
-**Errors:** `{ "error": { "code": "...", "message": "..." } }`. Codes: `validation` 400, `bad_json` 400, `not_found` 404, `conflict` 409, `signed` 409, `entered_in_error` 422, `too_many_rows` 422, `constraint` 422, `read_only` 403, `method_not_allowed` 405, `too_large` 413, `auth_not_configured` 503.
+**Errors:** `{ "error": { "code": "...", "message": "..." } }`. Codes: `validation` 400, `bad_json` 400, `not_found` 404, `conflict` 409, `signed` 409, `entered_in_error` 422, `too_many_rows` 422, `constraint` 422, `read_only` 403, `method_not_allowed` 405, `too_large` 413, `unauthorized` 401, `auth_not_configured` 503.
 
 **Concurrency:** every versioned write sends `expectedVersion`. A mismatch returns `409` with `{ "error": {...}, "current": <what the server holds> }`. Nothing is last-write-wins. `expectedVersion: 0` means "create, must not exist yet".
 
@@ -14,6 +14,9 @@ Base path `/api`. JSON in, JSON out. Synthetic data only; not for clinical use.
 
 ## Health
 `GET /api/health` → `200 {status:"ok",db:"ok"}` or `503`.
+
+## Me
+`GET /api/me` → `200 {id, name, role, mode}`. The acting user; `mode` is `"dev"` until chunk 32 replaces the placeholder with login sessions. The client Store calls this first when it starts (`Store.init`).
 
 ## Cases
 | Route | Body | Result |

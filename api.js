@@ -121,6 +121,13 @@ function mountApi(app, { db, getActor }) {
   const r = express.Router();
   r.use((req, res, next) => { Promise.resolve(actorOf(req)).then((a) => { req.actor = a; next(); }, next); });
 
+  // ================= who am I (chunk 29a; chunk 32 returns the session user and mode 'session') =================
+  r.get('/me', wrap(async (req, res) => {
+    const u = (await db.query('SELECT id,name,role FROM users WHERE id=$1', [req.actor.id])).rows[0];
+    if (!u) throw new ApiError(401, 'unauthorized', 'No such user');
+    res.json({ id: u.id, name: u.name, role: u.role, mode: 'dev' });
+  }));
+
   // ================= cases =================
   r.get('/cases', wrap(async (req, res) => {
     const q = await db.query('SELECT id,narrative,demo_patient,applied,pathways,version,updated_at FROM cases ORDER BY updated_at DESC LIMIT 1000');
