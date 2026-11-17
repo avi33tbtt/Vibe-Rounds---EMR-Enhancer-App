@@ -92,7 +92,10 @@ test('static: app files served, server files and dotfiles are not', async () => 
 });
 
 test('unknown API route returns the standard error shape', async () => {
-  const r = await request(app).get('/api/nope');
+  // The API resolves an actor (a users-table lookup) on every /api request, and the schema is only migrated
+  // in a later test, so this test supplies a stub actor and stays independent of the database schema.
+  const stubApp = createApp({ db, getActor: async () => ({ id: '00000000-0000-0000-0000-000000000000', role: 'admin' }) });
+  const r = await request(stubApp).get('/api/nope');
   assert.equal(r.status, 404);
   assert.equal(r.body.error.code, 'not_found');
 });

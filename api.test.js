@@ -218,3 +218,46 @@ test('auth placeholder refuses to run in production', async () => {
   const old = process.env.NODE_ENV; process.env.NODE_ENV = 'production';
   try { assert.equal((await api().get('/api/cases')).status, 503); } finally { process.env.NODE_ENV = old; }
 });
+
+// Chunk 28H: the seed loader against the REAL element-sets.js (earlier tests used a stand-in file).
+test('seed: real element-sets.js loads, ids unique, zero rules, zero protocol bands, zero thresholds', async () => {
+  const sets = readSeedSets();                                   // default path = the real element-sets.js
+  assert.ok(sets.length > 0, 'element-sets.js defines no sets');
+  const ids = Array.from(sets, (s) => s.setId);                  // sets come from a vm realm: copy into this realm's Array
+  const dup = ids.filter((id, i) => ids.indexOf(id) !== i);
+  assert.deepEqual(dup, [], 'duplicate setIds: ' + dup.join(', '));
+
+  const problems = [];
+  const fieldsOf = (s) => (s.sections || []).flatMap((sec) => sec.fields || []);
+  for (const s of sets) {
+    if (Array.isArray(s.rules) ? s.rules.length : s.rules != null) problems.push(`${s.setId}: ships with rules`);
+    if (s.protocol && !(Array.isArray(s.protocol.bands) && s.protocol.bands.length === 0)) problems.push(`${s.setId}: protocol has bands`);
+    if (s.kind === 'pathway') {                                  // a pathway bundles sets only
+      if (!Array.isArray(s.members) || !s.members.length) problems.push(`${s.setId}: pathway has no members`);
+      if (s.protocol) problems.push(`${s.setId}: pathway carries a protocol`);
+    }
+    // Threshold, target and band fields exist for the clinician to type into; none may be pre-filled.
+    const thrIds = new Set([s.view && s.view.thresholdField, s.view && s.view.thresholdUnitField].filter(Boolean));
+    for (const f of fieldsOf(s)) {
+      const thresholdLike = thrIds.has(f.id) || /(thr|thresh|target|tgt)/i.test(f.id) || /entered by clinician/i.test(f.label || '');
+      if (thresholdLike) for (const k of ['default', 'value', 'min', 'max']) if (k in f) problems.push(`${s.setId}.${f.id}: pre-filled "${k}"`);
+    }
+  }
+  assert.deepEqual(problems, [], 'seed safety problems:\n' + problems.join('\n'));
+
+  // Load into a database of its own: earlier tests in this file already created user sets such as care.vitals v1.
+  const seedName = 'emr_seed_' + crypto.randomBytes(4).toString('hex');
+  const admin = new Client({ connectionString: withDb('postgres') });
+  await admin.connect(); await admin.query(`CREATE DATABASE ${seedName}`);
+  const sdb = createDb(withDb(seedName));
+  try {
+    await migrate(sdb, __dirname);
+    assert.deepEqual(await seedSets(sdb, sets), { inserted: sets.length, unchanged: 0 });
+    assert.deepEqual(await seedSets(sdb, sets), { inserted: 0, unchanged: sets.length });      // re-runnable
+    const r = await sdb.query(`SELECT count(*)::int AS n, bool_and(read_only) AS ro FROM element_sets WHERE source='seed'`);
+    assert.equal(r.rows[0].n, sets.length); assert.equal(r.rows[0].ro, true);
+  } finally {
+    await sdb.close();
+    await admin.query(`DROP DATABASE IF EXISTS ${seedName} WITH (FORCE)`); await admin.end();
+  }
+});
