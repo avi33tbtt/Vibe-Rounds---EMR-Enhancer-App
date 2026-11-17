@@ -12,16 +12,16 @@
   const uid = () => (g.crypto && g.crypto.randomUUID ? g.crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   const IDENT = /^[A-Za-z0-9_.-]{1,100}$/, VALKEY = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.@-]{1,100}$/;
   const META = ['patient', 'narrative', 'applied', 'pathways', 'pinned', 'alertLog'];
-  const LS = { cases: 'cases', sets: 'sets', usage: 'setUsage', codes: 'codes', codeMeta: 'codeMeta', binds: 'binds', rules: 'rules', protocols: 'protocols' };
+  const LS = { cases: 'cases', sets: 'sets', usage: 'setUsage', codes: 'codes', codeMeta: 'codeMeta', binds: 'binds', rules: 'rules', protocols: 'protocols', setHist: 'setHist' };
   const PREF_LS = { pinned: 'pinned', mypts: 'mypts' };
 
   const Store = {
     mode: (function () { try { return g.localStorage.getItem('storeMode') === 'local' ? 'local' : 'server'; } catch (e) { return 'server'; } })(),
     base: '', ready: false, me: null,
     reasons: {},                                   // rowId -> reason typed when a reading is removed ("entered in error")
-    hooks: { onStatus() {}, onConflict() {}, onUnauthorized() {}, onCaseReloaded() {}, toast() {}, rowTime() { return null; } },
+    hooks: { onStatus() {}, onConflict() {}, onUnauthorized() {}, onCaseReloaded() {}, onSetVersion() {}, toast() {}, rowTime() { return null; } },
   };
-  const S = { cases: [], sets: [], usage: {}, codes: {}, codeMeta: {}, binds: {}, rules: {}, protocols: {}, prefs: {} };
+  const S = { cases: [], sets: [], usage: {}, codes: {}, codeMeta: {}, binds: {}, rules: {}, protocols: {}, prefs: {}, setHist: {} };
   const snap = {};                                  // entity key -> what the server last confirmed
   const Q = []; let running = false, timer = null, delay = 2000, savedAt = null, retrying = false;
   const failed = {}, conflicts = {};
@@ -274,8 +274,28 @@
 
   // ---------------------------------------------------------------- reference data (sync reads, queued writes)
   Store.userSets = () => clone(S.sets);
+  // Older versions stay readable: a case resolves a set by the version recorded when it was applied.
+  // setVersion is a synchronous read; in server mode a miss starts one fetch and calls hooks.onSetVersion when it lands.
+  const hk = (id, n) => id + '@' + n, histLoading = {};
+  Store.setVersion = function (id, n) {
+    n = +n; if (!IDENT.test(id) || !Number.isInteger(n) || n < 1) return null;
+    const cur = S.sets.find((x) => x.setId === id); if (cur && (+cur.version || 1) === n) return clone(cur);
+    const h = S.setHist[hk(id, n)]; if (h) return clone(h);
+    if (Store.mode === 'server' && Store.ready && !histLoading[hk(id, n)]) {
+      histLoading[hk(id, n)] = 1;
+      api('GET', '/element-sets/' + id + '/versions/' + n).then((r) => {
+        S.setHist[hk(id, n)] = Object.assign({}, r.body, { setId: id, version: r.version });
+        try { Store.hooks.onSetVersion(id, n, true); } catch (e) { /* UI */ }
+      }).catch(() => { setTimeout(() => { delete histLoading[hk(id, n)]; }, 30000); try { Store.hooks.onSetVersion(id, n, false); } catch (e) { /* UI */ } });
+    }
+    return null;
+  };
   Store.saveSet = function (s) {
     const i = S.sets.findIndex((x) => x.setId === s.setId); const c = clone(s);
+    if (i >= 0 && (+S.sets[i].version || 1) !== (+c.version || 1)) {      // keep the version being replaced
+      S.setHist[hk(s.setId, +S.sets[i].version || 1)] = clone(S.sets[i]);
+      if (Store.mode === 'local') lsSet(LS.setHist, S.setHist);
+    }
     if (i >= 0) S.sets[i] = c; else S.sets.push(c);
     if (Store.mode === 'local') return lsSet(LS.sets, S.sets);
     enqueue('set:' + s.setId, async () => {
@@ -416,7 +436,7 @@
       S.cases = cs; const a = lsGet(LS.sets, []); S.sets = Array.isArray(a) ? a : [];
       S.usage = isObj(lsGet(LS.usage, {})) ? lsGet(LS.usage, {}) : {}; S.codes = isObj(lsGet(LS.codes, {})) ? lsGet(LS.codes, {}) : {}; S.codeMeta = isObj(lsGet(LS.codeMeta, {})) ? lsGet(LS.codeMeta, {}) : {};
       S.binds = isObj(lsGet(LS.binds, {})) ? lsGet(LS.binds, {}) : {}; S.rules = isObj(lsGet(LS.rules, {})) ? lsGet(LS.rules, {}) : {};
-      S.protocols = isObj(lsGet(LS.protocols, {})) ? lsGet(LS.protocols, {}) : {};
+      S.protocols = isObj(lsGet(LS.protocols, {})) ? lsGet(LS.protocols, {}) : {}; S.setHist = isObj(lsGet(LS.setHist, {})) ? lsGet(LS.setHist, {}) : {};
       S.prefs = {}; Object.keys(PREF_LS).forEach((k) => { const v = lsGet(PREF_LS[k], undefined); if (v !== undefined) S.prefs[k] = v; });
       Store.me = { id: 'demo', name: 'Demo user', role: 'admin' }; Store.ready = true; notify(); return;
     }

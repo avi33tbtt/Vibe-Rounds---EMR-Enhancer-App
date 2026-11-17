@@ -725,7 +725,7 @@ function cdsRender(){RF=null;if(!CUR)return;
 const owners=[...new Set([...(CUR.applied||[]).map(a=>a.setId),...(CUR.pathways||[]).map(x=>x.pathwayId)])],host=$('alertRuleEditors');
 if(host)host.innerHTML=owners.map(id=>`<div class="sec"><b>${esc((getSet(id)||{}).title||id)}</b>${ruleBox(id)}</div>`).join('')||'<div class="mu">No applied sets or pathways with rules to review.</div>';
 owners.forEach(ruleUI);alertsRender()}
-function pwRuleBoxes(){return(CUR.pathways||[]).filter(x=>isPw(getSet(x.pathwayId))).map(x=>`<div class="cd"><b>${esc(getSet(x.pathwayId).title||x.pathwayId)}</b> <span class="mu">pathway rules</span>${ruleBox(x.pathwayId)}</div>`).join('')}
+function pwRuleBoxes(){return(CUR.pathways||[]).filter(x=>isPw(getSet(x.pathwayId,x))).map(x=>`<div class="cd"><b>${esc(getSet(x.pathwayId,x).title||x.pathwayId)}</b> <span class="mu">pathway rules</span>${ruleBox(x.pathwayId)}</div>`).join('')}
 const IC={critical:'--r',warning:'--a',info:'--ac'};
 function alertsRender(){const el=$('alb');if(!el)return;if(!CUR){el.innerHTML='';return}let res;try{res=evalRules(CUR,ruleReg())}catch(e){el.innerHTML='';return}
 const log=Array.isArray(CUR.alertLog)?CUR.alertLog:[],ackOf=a=>{for(let i=log.length-1;i>=0;i--){const l=log[i];if(l&&l.ruleId==a.ruleId&&l.setId==a.setId)return l.sig===a.sig?l:null}return null};
@@ -823,14 +823,18 @@ const DEMO=SEEDS.find(s=>s.setId=='disease.snake_envenomation')||{},DEMO2=SEEDS.
 /* Registry: seed sets (element-sets.js) + user sets (localStorage 'sets') */
 const userSets=()=>Store.userSets();
 const registry=()=>SEEDS.concat(userSets().filter(u=>u&&u.setId&&!SEEDS.some(x=>x.setId==u.setId)));
-const getSet=id=>registry().find(s=>s.setId==id);
+/* getSet(id) = latest. getSet(id, entry) = the version recorded on a case's applied/pathway entry (chunk 30b).
+   If that version is not loaded yet, the latest is shown and a notice appears once (the old version is fetched in the background). */
+const OLDV_SEEN={};
+function getSet(id,ref){const cur=registry().find(s=>s.setId==id),v=ref&&+ref.version;if(!cur||!v||v==(+cur.version||1))return cur;
+const o=Store.setVersion(id,v);if(o)return o;const k=id+'@'+v;if(!OLDV_SEEN[k]){OLDV_SEEN[k]=1;toast('Showing the latest version of "'+(cur.title||id)+'" (v'+(+cur.version||1)+'): this case used v'+v+', which is not available yet.')}return cur}
 const flS=s=>(s&&s.sections||[]).flatMap(x=>x.fields);
 function addUserSet(s){if(!Store.saveSet(s))toast('Storage full/blocked')}
 function asSet(sc){const t=(sc.diagnosis&&sc.diagnosis.text)||'Untitled',slug=t.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40);
 sc=Object.assign({},sc,{setId:'disease.user.'+slug+'_'+Date.now().toString(36)+(SEQ++).toString(36),kind:'disease',version:1,title:t,description:'Generated from diagnosis',contexts:['disease'],requires:[],suggests:[]});addUserSet(sc);return sc}
-/* Case model: {id,narrative,applied:[{setId,addedAt}],values,updatedAt} */
+/* Case model: {id,narrative,applied:[{setId,version,addedAt}],values,updatedAt} */
 function newCase(){const t=new Date().toISOString();return{id:crypto.randomUUID(),patient:{name:'',ageSex:'',bed:'',mrn:''},narrative:'',applied:[],pathways:[],alertLog:[],values:{},ns:true,rp:true,updatedAt:t,saved:t}}
-function applySet(c,id){const _s=getSet(id);if(!_s||_s.kind=='pathway')return null;if(!c.applied.some(a=>a.setId==id))c.applied.push({setId:id,addedAt:new Date().toISOString()});c.updatedAt=new Date().toISOString();return c}
+function applySet(c,id){const _s=getSet(id);if(!_s||_s.kind=='pathway')return null;if(!c.applied.some(a=>a.setId==id))c.applied.push({setId:id,version:+_s.version||1,addedAt:new Date().toISOString()});c.updatedAt=new Date().toISOString();return c}
 function removeSet(c,id){const s=getSet(id);if(!s||!c.applied.some(a=>a.setId==id))return false;
 const pk=vk(id,'__protocol'),own=[...new Set(flS(s).map(f=>f.repeat?vk(id,'@'+(f.group||f.id)):vk(id,f.id)))].concat(pk),filled=own.filter(k=>k==pk?(c.values[k]&&((c.values[k].bands||[]).length||c.values[k].verifiedBy)):has(c,k));
 if(filled.length&&!confirm('Remove "'+(s.title||id)+'"? '+filled.length+' entered value(s) will be deleted.'))return false;
@@ -874,7 +878,7 @@ const CONTEXTS=[{id:'disease',label:'Disease',enabled:true},{id:'care',label:'Ca
 let CTX='all',SUGG={id:'',items:[]},PWPV='';
 const inCtx=s=>CTX=='all'||(Array.isArray(s.contexts)&&s.contexts.length?s.contexts:[s.kind=='disease'?'disease':'care']).includes(CTX);
 /* Diagnosis keys of a case: SNOMED code when the disease set has one, else 'dx:' + lower-cased diagnosis text */
-const dxKeys=c=>{const k=[];(c.applied||[]).forEach(a=>{const s=getSet(a.setId);if(!s||s.kind!='disease'||!s.diagnosis)return;const code=String(s.diagnosis.snomed&&s.diagnosis.snomed.code||'').trim(),t=String(s.diagnosis.text||'').trim().toLowerCase();if(code)k.push(code);else if(t)k.push('dx:'+t)});return[...new Set(k)]};
+const dxKeys=c=>{const k=[];(c.applied||[]).forEach(a=>{const s=getSet(a.setId,a);if(!s||s.kind!='disease'||!s.diagnosis)return;const code=String(s.diagnosis.snomed&&s.diagnosis.snomed.code||'').trim(),t=String(s.diagnosis.text||'').trim().toLowerCase();if(code)k.push(code);else if(t)k.push('dx:'+t)});return[...new Set(k)]};
 function bumpUsage(id,c){Store.bumpUsage(id,dxKeys(c||CUR))}
 const DEF=['care.vitals','template.basic_emr','care.hba1c_monitoring','care.sliding_scale_insulin'];
 function suggested(){const u=usage(),dk=dxKeys(CUR),done=new Set(CUR.applied.map(a=>a.setId)),r=registry().filter(s=>!done.has(s.setId)&&s.kind!='pathway'&&inCtx(s));
@@ -976,7 +980,7 @@ const head=fs.map(f=>`<th>${esc(f.label)}${f.unit?' ('+esc(f.unit)+')':''}<span 
 const body=rows.map((r,i)=>'<tr>'+fs.map(f=>`<td>${cell(f,r[f.id],`data-rs="${sid}" data-rg="${eg}" data-ri="${i}" data-rf="${esc(f.id)}"`)}</td>`).join('')+`<td><button class="b sm" data-rdel="${sid}" data-rg="${eg}" data-ri="${i}">×</button></td></tr>`).join('');
 return`<table class="pt"><tr>${head}<th></th></tr>${body||`<tr><td colspan="${fs.length+1}" class="mu">No readings yet.</td></tr>`}</table><button class="b sm" data-radd="${sid}" data-rg="${eg}">+ Add reading</button><div id="rc_${sid}@${eg}"></div>`}
 function refreshGroup(sid,g){const s=getSet(sid),el=$('rg_'+sid+'@'+g);if(!s||!el)return;el.innerHTML=grpInner(s,g);drawCharts(s,g);codesUI()}
-function drawAll(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId);if(!s)return;[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>drawCharts(s,g))})}
+function drawAll(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId,a);if(!s)return;[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>drawCharts(s,g))})}
 let OVM=false;
 function chartHtml(s,g){
 if(s.view&&s.view.type=='fever'&&grp(s,g).some(f=>f.id==s.view.tempField)){try{return feverChart(s,rowsOf(CUR,s.setId,g))}catch(e){return'<div class="mu">Fever chart could not be drawn.</div>'}}if(s.view&&s.view.type=='dailygrid'&&grp(s,g).some(f=>f.id==s.view.glucoseField)){try{return dailyGrid(s,rowsOf(CUR,s.setId,g))}catch(e){return'<div class="mu">Daily grid could not be drawn.</div>'}}const fs=grp(s,g),tc=tcol(fs),rows=rowsOf(CUR,s.setId,g);let h='';if(s.view&&s.view.type=='flowsheet'&&fs.some(f=>f.id==s.view.timeField)){try{h+=fsToggle(s)+(FSV[s.setId]=='table'&&!OVM?'':flowsheet(s,rows))}catch(e){h+='<div class="mu">Flowsheet could not be drawn.</div>'}}
@@ -1058,7 +1062,7 @@ function saveProto(sid,p){Store.saveProtocol(sid,p)}
 function protoCard(s){const p=protoOf(s.setId),id=esc(s.setId),cell=(i,f,t)=>`<td><input data-p="${id}" data-i="${i}" data-f="${f}" ${t=='n'?'type="number" step="any"':''} value="${esc(p.bands[i][f])}"></td>`;
 const rows=p.bands.map((b,i)=>'<tr>'+cell(i,'min','n')+cell(i,'max','n')+cell(i,'instruction','t')+`<td><button class="b sm" data-pdel="${id}" data-i="${i}">×</button></td></tr>`).join('');
 return `<div class="sec proto"><b>Sliding-scale protocol</b><div class="mu">Typed by the clinician or institution. This tool never calculates or suggests a dose; it only shows the band you typed that covers the latest glucose reading entered below. Blank min or max means open-ended. Bands are compared with glucose in the unit shown on the field (mg/dL); there is no unit conversion.</div><div class="pn" id="pn_${id}"></div><table class="pt"><tr><th>Glucose min</th><th>Glucose max</th><th>Instruction (as typed)</th><th></th></tr>${rows}</table><button class="b sm" data-padd="${id}">+ Add band</button> <button class="b sm" data-pload="${id}">Load last entered protocol</button><label>Protocol verified by</label><input data-p="${id}" data-f="verifiedBy" value="${esc(p.verifiedBy)}" placeholder="name / role / date"><div class="pm" id="pm_${id}"></div></div>`}
-function protoShow(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId);if(!s||!s.protocol)return;const p=protoOf(a.setId),n=$('pn_'+a.setId),m=$('pm_'+a.setId);if(!n||!m)return;
+function protoShow(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId,a);if(!s||!s.protocol)return;const p=protoOf(a.setId),n=$('pn_'+a.setId),m=$('pm_'+a.setId);if(!n||!m)return;
 const ok=p.bands.some(b=>String(b.instruction||'').trim());
 n.innerHTML=!ok?'<span class="bd" style="background:var(--r);margin:0">Protocol not entered</span> <span class="mu">add the bands your clinician or institution has verified</span>':!String(p.verifiedBy||'').trim()?'<span class="bd" style="background:var(--a);margin:0">Not marked as verified</span>':'';
 const gi=glucoseNow(a.setId,s),gv=gi.v;if(!ok||isNaN(gv)){m.innerHTML='';return}
@@ -1067,7 +1071,7 @@ m.innerHTML=hit.length?`<div class="cd" style="margin:6px 0">Latest glucose ${es
 function renderCase(){if(!CUR)return;CUR.narrative=CUR.narrative||'';CUR.values=CUR.values||{};if(!CASE_OPEN){showNoCase();return}renderPatientBanner();
 let h=`<div class="cd mu">Clinical narrative and disease-specific documentation are managed in the Notes tab. Care and monitoring sets remain here for structured charting.</div>`;
 if(!CUR.applied.length)h+='<div class="cd mu">No element sets yet. Add one from the sidebar.</div>';
-CUR.applied.forEach(a=>{const s=getSet(a.setId);
+CUR.applied.forEach(a=>{const s=getSet(a.setId,a);
 if(s&&(s.kind==='disease'||s.kind==='template'))return;
 if(!s){h+=`<div class="cd"><span class="mu">Set not found in registry: ${esc(a.setId)}</span> <button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div>`;return}
 h+=`<div class="cd" id="cd_${esc(a.setId)}"><div class="sh"><b>${esc(s.title||s.setId)}</b><span class="mu">${esc(s.kind||'')} · v${esc(s.version||1)}</span><span style="flex:1"></span><button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div><details open><summary class="mu">Fields</summary>${setForm(s)}</details></div>`});
@@ -1101,7 +1105,7 @@ function save(){persist(true)}
 function openCase(){const id=$('cpick').value;if(!id)return;persist();const x=getC().find(y=>y.id==id);if(x)enterCase(JSON.parse(JSON.stringify(x)),'ov')}
 function newCaseUI(){persist();enterCase(newCase(),'ov');toast('')}
 function delCase(){if(!confirm('Delete this case?'))return;setC(getC().filter(x=>x.id!=CUR.id));CUR=newCase();showNoCase()}
-function calc(){if(!CUR)return;CUR.applied.forEach(a=>flS(getSet(a.setId)).forEach(f=>{if(!f.derived||f.derived.op!='minutes_between')return;
+function calc(){if(!CUR)return;CUR.applied.forEach(a=>flS(getSet(a.setId,a)).forEach(f=>{if(!f.derived||f.derived.op!='minutes_between')return;
 const k=vk(a.setId,f.id),[x,y]=f.derived.from.map(i=>{const e=$('f_'+vk(a.setId,i));return e&&e.value}),t=$('f_'+k),g=$('bg_'+k);if(!t||!g)return;
 if(!x||!y){t.value='';g.innerHTML='';delete CUR.values[k];return}
 const m=Math.round((new Date(y)-new Date(x))/60000);t.value=m;CUR.values[k]=String(m);const[l,h]=f.derived.flag||[60,240];
@@ -1130,7 +1134,7 @@ const ck=c=>c.system+'|'+c.code;
 function st(f){const c=f.coding;if(!c||!c.code)return'missing';const d=codes()[ck(c)];return d?'verified':'unverified'}
 function codeNote(f){const c=f.coding;if(!c||!c.code)return'';const m=Store.codeMeta()[ck(c)];if(!m)return'';const dt=x=>x?String(x).slice(0,10):'',lv=m.verifiedLive;return`<div class="mu" style="font-size:11px">${m.addedAt?'added '+esc(dt(m.addedAt)):''}${lv&&lv.ok?' · checked live '+esc(dt(lv.checkedAt)):''}</div>`}
 const COL={verified:'--g',unverified:'--a',missing:'--r'};
-function allF(){return(CUR&&CUR.applied||[]).flatMap(a=>{const s=getSet(a.setId);return flS(s).map(f=>({s,f,k:vk(a.setId,f.id)}))})}
+function allF(){return(CUR&&CUR.applied||[]).flatMap(a=>{const s=getSet(a.setId,a);return flS(s).map(f=>({s,f,k:vk(a.setId,f.id)}))})}
 function codesUI(){const L=allF();if(!L.length){$('sum').textContent='Add an element set in the Case tab first.';$('ctab').innerHTML='';return}
 const n={verified:0,unverified:0,missing:0};let rows='';
 L.forEach(({s,f,k})=>{const t=st(f);n[t]++;const bd=`<span class="bd" style="background:var(${COL[t]})">${t}</span>`,e=$('cb_'+k);if(e)e.innerHTML=bd;
@@ -1157,7 +1161,7 @@ Store.saveCodes(t);confirmed.forEach(([sy,cd,d])=>Store.saveLiveResult(sy,cd,tru
 /* FHIR bundle: Patient, optional Composition (narrative), Condition per disease set, one resource per value / per repeat row, Provenance.
    Protocol data (setId/__protocol bands) is never read here, so sliding-scale bands cannot reach the bundle. Doses are copied exactly as typed. */
 const isoOf=(f,x)=>{if(f.type=='date')return String(x);const d=new Date(x);return isNaN(d)?null:d.toISOString()};
-function bundle(){const sets=(CUR.applied||[]).map(a=>getSet(a.setId)).filter(Boolean);if(!sets.length&&!(CUR.notes||[]).length&&!(CUR.narrative||'').trim())return toast('Add a note or an element set first');
+function bundle(){const sets=(CUR.applied||[]).map(a=>getSet(a.setId,a)).filter(Boolean);if(!sets.length&&!(CUR.notes||[]).length&&!(CUR.narrative||'').trim())return toast('Add a note or an element set first');
 const v=CUR.values,pid='urn:uuid:'+crypto.randomUUID(),E=[],per={},urls={};let sk=0,skipped=0,nots=0;
 const add=(r,sid)=>{const u='urn:uuid:'+crypto.randomUUID();E.push({fullUrl:u,resource:r,request:{method:'POST',url:r.resourceType}});if(sid){per[sid]=(per[sid]||0)+1;(urls[sid]=urls[sid]||[]).push(u)}return u};
 E.push({fullUrl:pid,resource:{resourceType:'Patient',identifier:[{value:'SYNTHETIC-001'}]},request:{method:'POST',url:'Patient'}});
@@ -1214,7 +1218,7 @@ add(r,s.setId);if(st(f)!='verified')sk++})}));
 /* Pathway -> CarePlan. A pathway is a bundle of sets, so the plan lists set titles only: no doses, bands, thresholds or rules.
    activity.outcomeReference (Reference(Any)) is used because R4 limits activity.reference to request resources. detail.status stays 'unknown': it never claims care was done. */
 const pws=Array.isArray(CUR.pathways)?CUR.pathways:[];let cps=0,pwMiss=0;
-pws.forEach(x=>{const p=getSet(x.pathwayId);if(!p||!isPw(p))pwMiss++;
+pws.forEach(x=>{const p=getSet(x.pathwayId,x);if(!p||!isPw(p))pwMiss++;
 const ms=p&&isPw(p)?pwMembers(p).map(m=>getSet(m.setId)).filter(t=>t&&!isPw(t)&&sets.some(q=>q.setId==t.setId)):[],
 acts=ms.map(t=>{const a={detail:{status:'unknown',description:t.title||t.setId}},o=(urls[t.setId]||[]).map(u=>({reference:u}));if(o.length)a.outcomeReference=o;return a}),
 cp={resourceType:'CarePlan',status:'active',intent:'plan',title:p?p.title||p.setId:x.pathwayId,
@@ -1223,7 +1227,7 @@ category:[{text:'Care pathway'}],subject:{reference:pid}};
 if(x.startedAt&&!isNaN(new Date(x.startedAt)))cp.period={start:new Date(x.startedAt).toISOString()};
 if(acts.length)cp.activity=acts;add(cp);cps++});
 add({resourceType:'Provenance',target:E.map(e=>({reference:e.fullUrl})),recorded:new Date().toISOString(),agent:[{who:{display:'EMR Enhancer (synthetic data)'}}],
-entity:sets.map(s=>({role:'source',what:{display:(s.title||s.setId)+' ['+(s.kind||'custom')+', v'+(s.version||1)+', '+s.setId+']'}})).concat(pws.map(x=>{const p=getSet(x.pathwayId);return{role:'source',what:{display:'Pathway: '+(p?p.title||p.setId:x.pathwayId)+' [pathway, v'+(+x.version||1)+', '+x.pathwayId+', started '+x.startedAt+']'}}}))});
+entity:sets.map(s=>({role:'source',what:{display:(s.title||s.setId)+' ['+(s.kind||'custom')+', v'+(s.version||1)+', '+s.setId+']'}})).concat(pws.map(x=>{const p=getSet(x.pathwayId,x);return{role:'source',what:{display:'Pathway: '+(p?p.title||p.setId:x.pathwayId)+' [pathway, v'+(+x.version||1)+', '+x.pathwayId+', started '+x.startedAt+']'}}}))});
 const B={resourceType:'Bundle',type:'transaction',entry:E};$('bj').textContent=JSON.stringify(B,null,1);
 const bad=E.filter(e=>{const r=e.resource,t=r.resourceType;return !t||(['Observation','Procedure'].includes(t)&&(!r.code||!r.subject))||(t=='MedicationAdministration'&&(!r.medicationCodeableConcept||!r.subject))||(t=='Provenance'&&!(r.target||[]).length)||(t=='CarePlan'&&(!r.subject||!r.status||!r.intent))}).length;
 $('bchk').innerHTML=`${E.length} entries · per set: ${sets.map(x=>esc(x.title||x.setId)+' '+(per[x.setId]||0)).join(' · ')} · ${noteRecords.length?'Notes '+noteRecords.length:(nar?'Composition 1':'no narrative, no Composition')} · CarePlans ${cps}${pwMiss?' ('+pwMiss+' pathway not in registry, listed without activities)':''} · ${sk} resources without verified coding (text only)${skipped?' · <b>'+skipped+' row value(s) skipped: no valid row timestamp (administrations need a time)</b>':''}${nots?' · '+nots+' resource(s) emitted without effectiveDateTime (no timestamp)':''} · structural problems: ${bad}. Run through a FHIR validator before real use.`}
@@ -1413,7 +1417,7 @@ const tl=t=>new Date(t).toLocaleString([],{month:'short',day:'numeric',hour:'2-d
 const body=lines.map(l=>`<tr><th style="text-align:left;white-space:nowrap;position:sticky;left:0;background:var(--cd)">${esc(l.label)}</th>${cols.map(c=>`<td style="white-space:nowrap">${l.bp?sp(bp,c.r[bp.id])+' / '+sp(bd,c.r[bd.id]):sp(l.f,c.r[l.f.id])}</td>`).join('')}</tr>`).join('');
 const anyRef=gf.some(f=>{const r=refOf(s,f);return fnum(r.low)!=null||fnum(r.high)!=null});
 return head+`<div style="overflow-x:auto;max-width:100%"><table class="pt"><tr><th></th>${cols.map(c=>`<th style="white-space:nowrap">${esc(tl(c.t))}</th>`).join('')}</tr>${body}</table></div><div class="mu">${anyRef?'Red = outside a reference range you typed. ':'No colouring: no reference range entered. '}${skipped?skipped+' row(s) without a valid time were left out.':''}</div></div>`}
-function dueBadge(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId);if(!s||a.setId!='care.hba1c_monitoring')return;const k=vk(a.setId,'a1c_due'),g=$('bg_'+k);if(!g)return;
+function dueBadge(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId,a);if(!s||a.setId!='care.hba1c_monitoring')return;const k=vk(a.setId,'a1c_due'),g=$('bg_'+k);if(!g)return;
 const d=CUR.values[k];if(!d||isNaN(new Date(d))){g.innerHTML='';return}const n=Math.round((new Date(d)-new Date(nowStr('date')))/864e5);
 g.innerHTML=n<0?`<span class="bd" style="background:var(--r)">overdue by ${-n} day${n==-1?'':'s'}</span>`:n==0?'<span class="bd" style="background:var(--a)">due today</span>':`<span class="bd" style="background:var(--ac)">due in ${n} day${n==1?'':'s'}</span>`})}
 /* ---------------- Phase 4B / chunk 25C: dedicated Flowsheets ---------------- */
@@ -1422,7 +1426,7 @@ function repeatGroupsFor(s){
   return [...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))];
 }
 function flowsheetSets(){
-  return (CUR&&CUR.applied||[]).map(a=>getSet(a.setId)).filter(s=>s&&repeatGroupsFor(s).length);
+  return (CUR&&CUR.applied||[]).map(a=>getSet(a.setId,a)).filter(s=>s&&repeatGroupsFor(s).length);
 }
 function selectFlowsheet(sid,g){
   const s=getSet(sid);if(!s)return;
@@ -1520,7 +1524,7 @@ function latestGroupRow(s,g){
 function summaryWorkspace(){
   if(!CUR||!CASE_OPEN)return;
   overview();
-  const applied=(CUR.applied||[]).map(a=>getSet(a.setId)).filter(Boolean);
+  const applied=(CUR.applied||[]).map(a=>getSet(a.setId,a)).filter(Boolean);
   const groups=applied.reduce((n,s)=>n+[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].length,0);
   const rowCount=applied.reduce((n,s)=>n+[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].reduce((m,g)=>m+rowsOf(CUR,s.setId,g).length,0),0);
   const alerts=window.CDS&&CDS.evalRules?CDS.evalRules(CUR,ruleReg()):[];
@@ -1556,7 +1560,7 @@ function summaryWorkspace(){
 
   const pws=CUR.pathways||[];
   $('summaryPathways').innerHTML=pws.length?pws.map(x=>{
-    const p=getSet(x.pathwayId);if(!isPw(p))return`<div class="summary-empty">${esc(x.pathwayId)} — pathway definition unavailable</div>`;
+    const p=getSet(x.pathwayId,x);if(!isPw(p))return`<div class="summary-empty">${esc(x.pathwayId)} — pathway definition unavailable</div>`;
     const ms=pwMembers(p).map(m=>getSet(m.setId)).filter(Boolean);
     const entries=ms.map(m=>{const on=(CUR.applied||[]).some(a=>a.setId===m.setId),data=on&&hasData(CUR,m.setId);return `<span class="ptchip">${esc(m.title||m.setId)} · ${data?'has data':on?'applied, no data':'not applied'}</span>`}).join(' ');
     return `<div style="margin:7px 0"><b>${esc(p.title||p.setId)}</b><div class="mu">Started ${esc(String(x.startedAt||'').slice(0,10)||'date not recorded')}</div><div class="ptchips">${entries}</div></div>`;
@@ -1593,7 +1597,7 @@ $('summaryHome').addEventListener('click',e=>{
 });
 
 function overview(){const el=$('ovb');if(!el||!CUR)return;
-const ap=(CUR.applied||[]).map(a=>({a,s:getSet(a.setId)})),sets=ap.filter(x=>x.s&&!isPw(x.s)),pws=Array.isArray(CUR.pathways)?CUR.pathways:[];
+const ap=(CUR.applied||[]).map(a=>({a,s:getSet(a.setId,a)})),sets=ap.filter(x=>x.s&&!isPw(x.s)),pws=Array.isArray(CUR.pathways)?CUR.pathways:[];
 if(!sets.length&&!(CUR.narrative||'').trim()&&!pws.length){el.innerHTML='<div class="mu">This case is empty. Add a narrative or apply element sets in the Case tab; everything entered will be shown here.</div>';return}
 OVM=true;let out='';
 try{
@@ -1613,7 +1617,7 @@ const dx=s.kind=='disease'&&s.diagnosis?`<span class="mu">Diagnosis: ${esc(s.dia
 return`<div class="cd"><div class="sh"><b>${esc(s.title||sid)}</b><span class="mu">${esc(s.kind||'')}</span><span style="flex:1"></span>${dx}</div>`+
 (sc?`<table class="pt">${sc}</table>`:'')+(miss?`<div class="mu">${miss} field${miss==1?'':'s'} not filled</div>`:'')+gs+(!sc&&!gs?'<div class="mu">Nothing entered.</div>':'')+'</div>'});
 const miss=ap.filter(x=>!x.s).map(x=>esc(x.a.setId));
-const pw=pws.length?`<div class="cd"><b>Pathways</b>`+pws.map(x=>{const p=getSet(x.pathwayId);if(!isPw(p))return`<div class="mu">${esc(x.pathwayId)} (not in registry)</div>`;const ms=pwMembers(p).map(m=>getSet(m.setId)).filter(Boolean);
+const pw=pws.length?`<div class="cd"><b>Pathways</b>`+pws.map(x=>{const p=getSet(x.pathwayId,x);if(!isPw(p))return`<div class="mu">${esc(x.pathwayId)} (not in registry)</div>`;const ms=pwMembers(p).map(m=>getSet(m.setId)).filter(Boolean);
 return`<div class="kh">${esc(p.title||x.pathwayId)} <span class="mu">started ${esc(String(x.startedAt||'').slice(0,10))}</span></div><div>${ms.map(m=>{const on=(CUR.applied||[]).some(y=>y.setId==m.setId),d=on&&hasData(CUR,m.setId);return`<span class="bd" style="background:var(${d?'--g':on?'--a':'--mu'})" title="${d?'has data':on?'applied, no data yet':'not applied'}">${esc(m.title||m.setId)}</span> `}).join('')}</div>`}).join('')+'<div class="mu">Green = has data · amber = applied, empty · grey = not applied. A count of data, not a judgement of care.</div></div>':'';
 const nar=(CUR.narrative||'').trim();
 const sum=`<div class="cd"><b>Case summary</b><div class="mu" style="margin:2px 0 6px">${sets.length} element set${sets.length==1?'':'s'} · ${nFilled}/${nFields} single fields filled · ${nRows} timed reading${nRows==1?'':'s'}${isNaN(lastT)?'':' · latest reading '+esc(new Date(lastT).toLocaleString())}</div>${nar?`<div class="kh">Narrative</div><div style="white-space:pre-wrap">${esc(nar)}</div>`:'<div class="mu">No narrative entered.</div>'}${miss.length?`<div class="mu">Set not found in registry: ${miss.join(', ')}</div>`:''}</div>`;
@@ -1649,11 +1653,11 @@ function hasData(c,sid){const s=getSet(sid);if(!s)return false;const F={},pre=si
 return Object.keys(c.values||{}).some(k=>{if(k.indexOf(pre)!==0)return false;const r=k.slice(pre.length);if(r.indexOf('__')==0)return false;const v=c.values[k];
 if(r[0]=='@')return Array.isArray(v)&&v.some(row=>row&&typeof row=='object'&&Object.keys(row).some(id=>{const f=F[id];return f&&!f.meta&&f.type!='datetime'&&f.type!='date'&&String(row[id]==null?'':row[id]).trim()!==''}));
 const f=F[r];return !!f&&!f.derived&&!f.meta&&v!=null&&typeof v!='object'&&String(v).trim()!==''})}
-function pwBoost(r){const out=[];(CUR.pathways||[]).forEach(x=>pwMembers(getSet(x.pathwayId)).forEach(m=>{const t=r.find(y=>y.setId==m.setId);if(t&&!out.includes(t))out.push(t)}));return out}
+function pwBoost(r){const out=[];(CUR.pathways||[]).forEach(x=>pwMembers(getSet(x.pathwayId,x)).forEach(m=>{const t=r.find(y=>y.setId==m.setId);if(t&&!out.includes(t))out.push(t)}));return out}
 function pwInner(){const a=CUR.pathways||[];let h='';if(!a.length)h+='<div class="mu">No pathways are currently applied to this chart. Use + Add to preview or apply a pathway.</div>';
 if(a.length){const LAB={missing:'not in registry',na:'not applied',ns:'not started',ip:'in progress'};
 h+='<div class="cd"><b>Pathway status</b> <span class="mu">shows whether data has been entered, not whether care was adequate. A pathway is a bundle of sets, not a protocol.</span>'+a.map(x=>{
-const p=getSet(x.pathwayId),d=new Date(x.startedAt),dy=isNaN(d)?null:Math.max(0,Math.floor((Date.now()-d)/864e5)),ap=new Set(CUR.applied.map(y=>y.setId)),
+const p=getSet(x.pathwayId,x),d=new Date(x.startedAt),dy=isNaN(d)?null:Math.max(0,Math.floor((Date.now()-d)/864e5)),ap=new Set(CUR.applied.map(y=>y.setId)),
 rows=pwMembers(p).map(m=>{const t=getSet(m.setId),ok=!!t&&!isPw(t);return{m,t,ok,st:!ok?'missing':!ap.has(m.setId)?'na':hasData(CUR,m.setId)?'ip':'ns'}}),
 ok=rows.filter(r=>r.ok),n=ok.filter(r=>r.st=='ip').length,miss=ok.filter(r=>r.st=='na').length,
 ver=+x.version||1,when=dy==null?'start date unknown':dy==0?'started today':'started '+dy+' day'+(dy==1?'':'s')+' ago';
@@ -1691,9 +1695,9 @@ function renderPatientBanner(){
   const p=patientOf(CUR),name=(p.name||'Unnamed demo patient').trim();
   $('ptName').textContent=name;
   $('ptMeta').textContent=[p.ageSex,p.bed?'Ward / bed: '+p.bed:'',p.mrn?'MRN: '+p.mrn:''].filter(Boolean).join(' · ')||'Demo patient details not entered';
-  const ds=(CUR.applied||[]).map(a=>getSet(a.setId)).filter(s=>s&&s.kind==='disease');
+  const ds=(CUR.applied||[]).map(a=>getSet(a.setId,a)).filter(s=>s&&s.kind==='disease');
   $('ptDiagnosis').innerHTML=ds.map(s=>`<span class="ptchip">${esc(s.title||s.setId)}</span>`).join('');
-  const ps=(CUR.pathways||[]).map(x=>getSet(x.pathwayId)).filter(Boolean);
+  const ps=(CUR.pathways||[]).map(x=>getSet(x.pathwayId,x)).filter(Boolean);
   $('ptPathways').innerHTML=ps.map(s=>`<span class="ptchip">Pathway: ${esc(s.title||s.setId)}</span>`).join('');
   let n=0;try{if(window.CDS&&CDS.evalRules)n=CDS.evalRules(CUR,ruleReg()).length}catch(e){}
   $('ptAlerts').textContent='Alerts '+n;
@@ -1847,12 +1851,12 @@ function createNote(){
   if(type==='disease'){
     const sid=$('noteSet').value,set=getSet(sid);
     if(!set||set.kind!=='disease')return toast('Apply a disease set first, then create its note.');
-    if(!(CUR.applied||[]).some(a=>a.setId===sid))CUR.applied.push({setId:sid,addedAt:now});
+    if(!(CUR.applied||[]).some(a=>a.setId===sid))CUR.applied.push({setId:sid,version:+((getSet(sid)||{}).version)||1,addedAt:now});
     if(CUR.notes.some(x=>x.setId===sid&&!x.amends))return toast('A note for this disease set already exists.');
     n.setId=sid;
   }else if(type==='template'){
     const set=registry().find(x=>x.setId==='template.basic_emr');
-    if(set){n.setId=set.setId;if(!(CUR.applied||[]).some(a=>a.setId===set.setId))CUR.applied.push({setId:set.setId,addedAt:now});}
+    if(set){n.setId=set.setId;if(!(CUR.applied||[]).some(a=>a.setId===set.setId))CUR.applied.push({setId:set.setId,version:+set.version||1,addedAt:now});}
     else n.text='Presenting concern:\nHistory:\nRelevant examination:\nAssessment:\nPlan:\n';
   }
   CUR.notes.push(n);if(n.type==='narrative')CUR.narrative=n.text;
@@ -1962,6 +1966,7 @@ async function boot(){
   }
 }
 Store.hooks.toast=toast;
+Store.hooks.onSetVersion=(id,n,ok)=>{if(ok&&CUR&&CASE_OPEN)renderCase()};
 Store.hooks.rowTime=(sid,gid,row)=>{const set=getSet(sid);if(!set)return null;const tc=tcol(grp(set,gid));if(!tc)return null;const t=rowT(row,tc);return Number.isFinite(t)?t:null};
 Store.hooks.onCaseReloaded=(id,c)=>{if(CUR&&CUR.id===id&&CASE_OPEN)enterCase(JSON.parse(JSON.stringify(c)),'ov');else renderPatients()};
 $('conflictBan').addEventListener('click',e=>{const b=e.target.closest('[data-reload]');if(!b)return;if(!confirm('Reload the other version? Your unsent edits to this patient will be discarded.'))return;Store.reloadCase(b.dataset.reload).catch(err=>toast('Reload failed: '+err.message))});

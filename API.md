@@ -45,7 +45,7 @@ A row with an invalid or missing time is stored with `rowTime: null` and still s
 `POST /cases/:id/notes` `{id?, type:"narrative|template|disease", setId?, text?}` · `PATCH .../notes/:nid` `{expectedVersion,text}` (drafts only) · `POST .../notes/:nid/sign` `{expectedVersion}` (signer = session user; signed notes are read-only, 409 `signed`) · `POST .../notes/:nid/amend` `{reason,text}` creates a new draft linked by `amends`.
 
 ## Element sets
-`GET /element-sets` (latest version of each), `GET /element-sets/:setId`, `POST /element-sets` `{setId, kind, body, expectedVersion?}` creates v1 or version n+1 (`expectedVersion` must equal the latest).
+`GET /element-sets` (latest version of each), `GET /element-sets/:setId`, `GET /element-sets/:setId/versions` (list of versions, no bodies), `GET /element-sets/:setId/versions/:n` (one stored version; 404 if missing; older versions stay readable for ever), `POST /element-sets` `{setId, kind, body, expectedVersion?}` creates v1 or version n+1 (`expectedVersion` must equal the latest).
 Seed sets (loaded by `node seed.js`) and any set with `readOnly: true` (marketplace) cannot be changed: `PATCH`/`DELETE` → 403 `read_only`, and `POST` of a new version → 403. For user sets `PATCH`/`DELETE` → 405 (save a new version instead). Seed sets contain no rules, thresholds or protocol bands; that is asserted in chunk 39.
 
 ## Reference data (per user or shared)

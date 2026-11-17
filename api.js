@@ -26,7 +26,7 @@ const isoTime = z.string().max(40).refine((s) => !Number.isNaN(Date.parse(s)), '
 const jsonSize = (max) => (v) => JSON.stringify(v ?? null).length <= max;
 const rowObj = z.record(z.string().max(100), z.any()).refine(jsonSize(20000), 'row too large');
 const anyJson = (max) => z.any().refine((v) => v !== undefined, 'required').refine(jsonSize(max), `value larger than ${max} characters`);
-const appliedArr = z.array(z.object({ setId: ident, addedAt: z.string().max(40) }).strict()).max(200);
+const appliedArr = z.array(z.object({ setId: ident, version: z.number().int().min(1).optional(), addedAt: z.string().max(40) }).strict()).max(200);
 const pathwaysArr = z.array(z.object({ pathwayId: ident, version: z.number().int().min(1).optional(), startedAt: z.string().max(40) }).strict()).max(50);
 const patientObj = z.object({ name: z.string().max(200), ageSex: z.string().max(50), bed: z.string().max(50), mrn: z.string().max(50) }).strict();
 const alertLogArr = z.array(z.object({ ruleId: ident, ackedAt: z.string().max(40) }).passthrough()).max(2000);
@@ -282,6 +282,18 @@ function mountApi(app, { db, getActor }) {
   r.get('/element-sets/:setId', wrap(async (req, res) => {
     const s = (await db.query('SELECT * FROM element_sets_latest WHERE set_id=$1', [identParam(req.params.setId)])).rows[0];
     if (!s) throw new ApiError(404, 'not_found', 'Set not found');
+    res.json(setOut(s));
+  }));
+  // older versions stay readable for ever: a case resolves a set by the version recorded when it was applied
+  r.get('/element-sets/:setId/versions', wrap(async (req, res) => {
+    const q = await db.query('SELECT set_id,version,created_at,content_hash FROM element_sets WHERE set_id=$1 ORDER BY version', [identParam(req.params.setId)]);
+    if (!q.rows.length) throw new ApiError(404, 'not_found', 'Set not found');
+    res.json(q.rows.map((v) => ({ setId: v.set_id, version: v.version, contentHash: v.content_hash, createdAt: iso(v.created_at) })));
+  }));
+  r.get('/element-sets/:setId/versions/:n', wrap(async (req, res) => {
+    if (!/^[1-9][0-9]{0,8}$/.test(req.params.n)) throw new ApiError(400, 'validation', 'Version must be a positive whole number');
+    const s = (await db.query('SELECT * FROM element_sets WHERE set_id=$1 AND version=$2', [identParam(req.params.setId), +req.params.n])).rows[0];
+    if (!s) throw new ApiError(404, 'not_found', 'Set version not found');
     res.json(setOut(s));
   }));
   r.post('/element-sets', wrap(async (req, res) => {

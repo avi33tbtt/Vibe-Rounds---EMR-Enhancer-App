@@ -186,3 +186,49 @@ test('codes: live result goes to the server route; Demo mode keeps it in the bro
   d.Store.saveLiveResult('loinc', '8310-5', true); assert.equal(d.writes().length, 0);
   assert.equal(JSON.parse(d.ls.get('codeMeta'))['loinc|8310-5'].verifiedLive.ok, true);
 });
+
+test('set versions: saving a new version keeps the old one; a case can resolve it (Demo mode)', async () => {
+  const { Store, ls } = boot(async () => { throw new Error('no fetch in Demo mode'); }, { mode: 'local' });
+  await Store.init();
+  Store.saveSet({ setId: 'pathway.user.p', kind: 'pathway', version: 1, title: 'P', members: [{ setId: 'a' }] });
+  Store.saveSet({ setId: 'pathway.user.p', kind: 'pathway', version: 2, title: 'P', members: [{ setId: 'b' }] });
+  assert.equal(Store.userSets().length, 1); assert.equal(Store.userSets()[0].version, 2);
+  assert.equal(Store.setVersion('pathway.user.p', 1).members[0].setId, 'a');
+  assert.equal(Store.setVersion('pathway.user.p', 2).members[0].setId, 'b');
+  assert.equal(Store.setVersion('pathway.user.p', 3), null, 'unknown version: caller falls back to latest');
+  assert.equal(Store.setVersion('bad id!', 1), null);
+  assert.ok(JSON.parse(ls.get('setHist'))['pathway.user.p@1'], 'history survives a reload in Demo mode');
+});
+
+test('set versions (server): a missing old version is fetched once, then served from memory', async () => {
+  const t = await readyServerStore(); const got = [];
+  t.Store.hooks.onSetVersion = (id, n, ok) => got.push([id, n, ok]);
+  t.custom = async (m, p) => (m === 'GET' && p === '/element-sets/user.s/versions/1' ? [200, { setId: 'user.s', version: 1, body: { title: 'Old', sections: [] } }] : null);
+  assert.equal(t.Store.setVersion('user.s', 1), null, 'first read is a miss and starts one fetch');
+  assert.equal(t.Store.setVersion('user.s', 1), null, 'no second fetch while loading');
+  await until(() => got.length === 1, 'version fetch');
+  assert.deepEqual(got[0], ['user.s', 1, true]);
+  assert.equal(t.Store.setVersion('user.s', 1).title, 'Old'); assert.equal(t.Store.setVersion('user.s', 1).version, 1);
+  assert.equal(t.calls.filter((c) => /versions\/1$/.test(c.path)).length, 1);
+  assert.equal(t.writes().length, 0, 'reading old versions never writes');
+});
+
+test('set versions (server): a failed fetch reports failure and the app falls back to the latest', async () => {
+  const t = await readyServerStore(); const got = [];
+  t.Store.hooks.onSetVersion = (id, n, ok) => got.push(ok);
+  t.custom = async (m, p) => (/versions\/4$/.test(p) ? [404, { error: { code: 'not_found', message: 'Set version not found' } }] : null);
+  assert.equal(t.Store.setVersion('user.s', 4), null);
+  await until(() => got.length === 1, 'failure report'); assert.deepEqual(got, [false]);
+  assert.equal(t.Store.setVersion('user.s', 4), null);
+});
+
+test('set versions (server): saving a user set sends expectedVersion and remembers the replaced version', async () => {
+  const t = await readyServerStore();
+  t.custom = async (m, p, b) => (m === 'POST' && p === '/element-sets' ? [201, { setId: b.setId, version: b.expectedVersion ? b.expectedVersion + 1 : 1, body: b.body }] : null);
+  t.Store.saveSet({ setId: 'user.s', kind: 'custom', version: 1, title: 'One' }); await t.Store.flush();
+  t.Store.saveSet({ setId: 'user.s', kind: 'custom', version: 2, title: 'Two' }); await t.Store.flush();
+  const w = t.writes().filter((c) => c.path === '/element-sets');
+  assert.equal(w.length, 2); assert.equal(w[0].body.expectedVersion, undefined); assert.equal(w[1].body.expectedVersion, 1);
+  assert.equal(t.Store.setVersion('user.s', 1).title, 'One', 'the replaced version is kept in memory, no fetch needed');
+  assert.equal(t.calls.filter((c) => /versions\//.test(c.path)).length, 0);
+});

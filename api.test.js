@@ -174,6 +174,35 @@ test('element sets: seed sets are read-only (PATCH, DELETE, POST all 403); user 
   assert.equal(list.find((s) => s.setId === 'care.vitals').readOnly, true);
 });
 
+test('element sets: old versions stay readable; applied/pathway entries may record a version', async () => {
+  const id = 'user.versioned';
+  await api().post('/api/element-sets').send({ setId: id, kind: 'custom', body: { title: 'A' } });
+  await api().post('/api/element-sets').send({ setId: id, kind: 'custom', body: { title: 'B' }, expectedVersion: 1 });
+  const v1 = await api().get(`/api/element-sets/${id}/versions/1`);
+  assert.equal(v1.status, 200); assert.equal(v1.body.version, 1); assert.equal(v1.body.body.title, 'A');
+  const v2 = await api().get(`/api/element-sets/${id}/versions/2`);
+  assert.equal(v2.body.body.title, 'B');
+  assert.equal((await api().get(`/api/element-sets/${id}`)).body.version, 2);       // latest is still v2
+  const all = await api().get(`/api/element-sets/${id}/versions`);
+  assert.deepEqual(all.body.map((v) => v.version), [1, 2]); assert.equal(all.body[0].body, undefined);
+  assert.equal((await api().get(`/api/element-sets/${id}/versions/3`)).status, 404);
+  assert.equal((await api().get(`/api/element-sets/${id}/versions/0`)).status, 400);
+  assert.equal((await api().get(`/api/element-sets/${id}/versions/abc`)).status, 400);
+  assert.equal((await api().get('/api/element-sets/user.nope/versions')).status, 404);
+  assert.equal((await api().get('/api/element-sets/user.nope/versions/1')).status, 404);
+  // a pathway saved twice: both versions resolvable; read-only seed/marketplace sets still refuse edits
+  const p1 = await api().post('/api/element-sets').send({ setId: 'pathway.user.p', kind: 'pathway', body: { title: 'P', members: [{ setId: 'a', optional: false }] } });
+  const p2 = await api().post('/api/element-sets').send({ setId: 'pathway.user.p', kind: 'pathway', body: { title: 'P', members: [{ setId: 'b', optional: false }] }, expectedVersion: 1 });
+  assert.equal(p1.body.version, 1); assert.equal(p2.body.version, 2);
+  assert.equal((await api().get('/api/element-sets/pathway.user.p/versions/1')).body.body.members[0].setId, 'a');
+  assert.equal((await api().post('/api/element-sets').send({ setId: 'pkg.x', kind: 'care', body: {}, expectedVersion: 1 })).status, 403);
+  // a case can record the version it applied
+  const c = await api().post('/api/cases').send({ applied: [{ setId: id, version: 1, addedAt: new Date().toISOString() }], pathways: [{ pathwayId: 'pathway.user.p', version: 1, startedAt: new Date().toISOString() }] });
+  assert.equal(c.status, 201); assert.equal(c.body.applied[0].version, 1); assert.equal(c.body.pathways[0].version, 1);
+  const bad = await api().post('/api/cases').send({ applied: [{ setId: id, version: 0, addedAt: 'x' }] });
+  assert.equal(bad.status, 400);
+});
+
 test('rules: approval is stamped by the server; editing resets it; unapproved never enabled', async () => {
   const put = (b) => api().put('/api/rules/care.fever_chart/r1').send(b);
   const a = await put({ body: { op: '>=', threshold: 1 }, expectedVersion: 0 });
