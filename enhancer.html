@@ -139,6 +139,7 @@ body.compact label{margin:7px 0 2px}
 <div id="boot" role="status" aria-live="polite"><div class="bootbox"><b id="bootMsg">Loading…</b><div class="mu" id="bootWhy">Not for clinical use – synthetic data only.</div><button class="b" id="bootRetry" type="button" hidden>Retry</button><button class="b sm" id="bootDemo" type="button" hidden>Use Demo mode instead</button></div></div>
 <div class="ban">Not for clinical use – synthetic data only. Codes from an LLM are unverified until checked.</div>
 <div class="ban" id="demoBan" hidden>Demo mode: data stays in this browser, synthetic data only</div>
+<div class="ban" id="conflictBan" role="alert" hidden style="background:#fde2e0;color:#7a1c14"></div>
 <div class="ban" id="wireBan" hidden>Interim build (chunks 29c–29d pending): the app still saves cases and settings in this browser only, not on the server.</div>
 <header><b>EMR Enhancer</b><span class="mu">standalone clinical record</span><button class="b sm" id="patientsLink" type="button" title="Open the patient list (Alt+P)">Patients</button><button class="b sm" id="densityToggle" type="button" aria-pressed="false" title="Switch between comfortable and compact spacing">Compact view</button><span style="flex:1"></span><button class="b sm" id="modeToggle" type="button" aria-pressed="false" title="Demo mode keeps data in this browser only">Demo mode: off</button><span class="mu" id="saveState" aria-live="polite">Not loaded</span><button class="b sm" id="saveRetry" type="button" hidden>Retry</button></header>
 <div id="patientbar">
@@ -833,6 +834,7 @@ function applySet(c,id){const _s=getSet(id);if(!_s||_s.kind=='pathway')return nu
 function removeSet(c,id){const s=getSet(id);if(!s||!c.applied.some(a=>a.setId==id))return false;
 const pk=vk(id,'__protocol'),own=[...new Set(flS(s).map(f=>f.repeat?vk(id,'@'+(f.group||f.id)):vk(id,f.id)))].concat(pk),filled=own.filter(k=>k==pk?(c.values[k]&&((c.values[k].bands||[]).length||c.values[k].verifiedBy)):has(c,k));
 if(filled.length&&!confirm('Remove "'+(s.title||id)+'"? '+filled.length+' entered value(s) will be deleted.'))return false;
+if(Store.mode==='server')own.forEach(k=>{const v=c.values[k];if(Array.isArray(v))v.forEach(r=>{if(r&&r.__id)Store.reasons[r.__id]='Set "'+(s.title||id)+'" removed from the case'})});
 own.forEach(k=>delete c.values[k]);delete c.values[vk(id,'__ref')];c.applied=c.applied.filter(a=>a.setId!=id);c.updatedAt=new Date().toISOString();return true}
 /* Namespaced value keys: setId/fieldId (field ids repeat across sets) */
 const vk=(s,f)=>s+'/'+f;
@@ -840,7 +842,7 @@ const ns=(sid,v)=>{const o={};Object.keys(v).forEach(k=>o[vk(sid,k)]=v[k]);retur
 const has=(c,k)=>{const v=c.values[k];return v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length)};
 function val(c,fid,sid){for(const a of c.applied||[]){if(sid&&a.setId!=sid)continue;const v=c.values[vk(a.setId,fid)];if(v!==undefined&&v!=='')return v}return ''}
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-function migrateCases(){const raw=localStorage.getItem('cases');if(!raw)return;let c;try{c=JSON.parse(raw)}catch(e){return}
+function migrateCases(){if(Store.mode!=='local')return;/* legacy browser data only; the server import is chunk 31 */const raw=localStorage.getItem('cases');if(!raw)return;let c;try{c=JSON.parse(raw)}catch(e){return}
 if(!Array.isArray(c))return;let out=c;
 if(c.some(x=>x&&!Array.isArray(x.applied))){/* pass 1: schema+v cases -> applied sets */
 try{if(!localStorage.getItem('cases_backup_v1'))localStorage.setItem('cases_backup_v1',raw)}catch(e){toast('Migration skipped: could not write backup');return}
@@ -961,7 +963,7 @@ const nowStr=t=>{const d=new Date(),l=new Date(d-d.getTimezoneOffset()*6e4).toIS
 const grp=(s,g)=>flS(s).filter(f=>f.repeat&&(f.group||f.id)==g);
 const tcol=fs=>fs.find(f=>f.type=='datetime'||f.type=='date');
 const dflt=f=>f.type=='select'&&f.default!==undefined?f.default:'';
-const rowsOf=(c,sid,g)=>{const r=c.values[vk(sid,'@'+g)];return Array.isArray(r)?r.filter(x=>x&&typeof x=='object'&&!Array.isArray(x)):[]};
+const rowsOf=(c,sid,g)=>{const r=c.values[vk(sid,'@'+g)];return Array.isArray(r)?r.filter(x=>x&&typeof x=='object'&&!Array.isArray(x)&&x.__status!=='entered_in_error'):[]};
 const rowT=(r,tc)=>tc?new Date(r[tc.id]).getTime():NaN;
 function sortRows(rows,tc){if(tc)rows.sort((a,b)=>{const x=rowT(a,tc),y=rowT(b,tc);return(isNaN(x)?1e16:x)-(isNaN(y)?1e16:y)})}
 function cell(f,v,at){const o=f.options||[];
@@ -1086,10 +1088,14 @@ function picker(){const c=getC().filter(x=>!x.syn),lab=x=>(x.saved||x.updatedAt|
 $('cpick').innerHTML='<option value="">— current / new case —</option>'+c.map(x=>`<option value="${esc(x.id)}">${esc(lab(x))}</option>`).join('');$('cpick').value=c.some(x=>x.id==CUR.id)?CUR.id:''}
 function addSet(id){const had=CUR.applied.some(a=>a.setId==id);if(!applySet(CUR,id))return toast('Set not found: '+id);if(!had)bumpUsage(id);persist();renderCase();renderPatientBanner()}
 function rmSet(id){if(!getSet(id))CUR.applied=CUR.applied.filter(a=>a.setId!=id);else if(!removeSet(CUR,id))return;persist();renderCase();renderPatientBanner()}
+function ensureRowIds(c){Object.keys(c.values||{}).forEach(k=>{if(/\/@[^/]+$/.test(k)&&Array.isArray(c.values[k]))c.values[k].forEach(r=>{if(r&&typeof r=='object'&&!Array.isArray(r)&&!r.__id)r.__id=crypto.randomUUID()})})}
+/* Deleting a reading = mark it entered in error with a required reason. It leaves the chart; the server keeps it, hidden, with the reason. */
+function dropRow(rows,i){const r=rows[i];if(!r)return false;const why=prompt('Mark this reading as entered in error. Reason (required):');if(why===null)return false;if(!why.trim()){toast('A reason is required to mark a reading as entered in error.');return false}
+if(Store.mode==='server'&&r.__id)Store.reasons[r.__id]=why.trim();rows.splice(i,1);return true}
 function persist(msg){if(!CUR)return;clearTimeout(PT);const c=getC(),i=c.findIndex(x=>x.id==CUR.id),p=CUR.patient||{},hasPatient=!!(p.name||p.ageSex||p.bed||p.mrn),empty=!(CUR.narrative||'').trim()&&!CUR.applied.length&&!(CUR.pathways||[]).length&&!hasPatient;
 if(empty){if(i>=0){c.splice(i,1);setC(c)}picker();return}
-CUR.updatedAt=new Date().toISOString();patientOf(CUR);const cp=JSON.parse(JSON.stringify(CUR));if(i<0)c.push(cp);else c[i]=cp;if(!setC(c)){$('sv').textContent='NOT SAVED';return}
-$('sv').textContent='Saved '+new Date().toLocaleTimeString();if(msg)toast('Saved ('+c.length+' cases)');picker();pwRefresh();alertsRender();if($('ov')&&$('ov').classList.contains('on'))summaryWorkspace();renderPatientBanner();if(!CASE_OPEN)renderPatients()}
+CUR.updatedAt=new Date().toISOString();patientOf(CUR);ensureRowIds(CUR);const cp=JSON.parse(JSON.stringify(CUR));if(i<0)c.push(cp);else c[i]=cp;if(!setC(c)){$('sv').textContent='NOT SAVED';return}
+$('sv').textContent=Store.status().text;if(msg)toast('Saved ('+c.length+' cases)');picker();pwRefresh();alertsRender();if($('ov')&&$('ov').classList.contains('on'))summaryWorkspace();renderPatientBanner();if(!CASE_OPEN)renderPatients()}
 const persistSoon=()=>{clearTimeout(PT);PT=setTimeout(()=>persist(),400);today();alertsRender()};
 function save(){persist(true)}
 function openCase(){const id=$('cpick').value;if(!id)return;persist();const x=getC().find(y=>y.id==id);if(x)enterCase(JSON.parse(JSON.stringify(x)),'ov')}
@@ -1107,7 +1113,7 @@ if(t.id&&t.id.indexOf('f_')==0){CUR.values[t.id.slice(2)]=t.value;calc();drawAll
 $('cp').addEventListener('click',e=>{const fu=e.target.closest('[data-fu]');if(fu){FU[fu.dataset.fu]=fu.dataset.u;drawAll();return}const pw=e.target.closest('[data-pw]');if(pw)return pwOpen(pw.dataset.pw);const pg=e.target.closest('[data-pwgo]');if(pg)return pwGo(pg.dataset.pwgo);const pc=e.target.closest('[data-pwcl]');if(pc)return pwOpen('');const ps=e.target.closest('[data-pwsave]');if(ps)return savePathway();const px=e.target.closest('[data-pwx]');if(px)return rmPathway(px.dataset.pwx);const a=e.target.closest('[data-add]');if(a)return addSet(a.dataset.add);const r=e.target.closest('[data-rm]');if(r)return rmSet(r.dataset.rm);
 const ra=e.target.closest('[data-radd]'),rd=e.target.closest('[data-rdel]');
 if(ra||rd){const el=ra||rd,sid=el.dataset[ra?'radd':'rdel'],g=el.dataset.rg,s=getSet(sid);if(!s)return;const tc=tcol(grp(s,g)),k=vk(sid,'@'+g),rows=Array.isArray(CUR.values[k])?CUR.values[k]:[];
-if(ra){if(rows.length>=500)return toast('Row limit reached (500 readings per table).');const row={};grp(s,g).forEach(f=>{if(f!==tc&&dflt(f)!=='')row[f.id]=dflt(f)});if(tc)row[tc.id]=nowStr(tc.type);if(s.view&&s.view.type=='dailygrid'){const sl=s.view.slots||[],lr=[...rows].filter(r=>r[s.view.slotField]&&!isNaN(rowT(r,tc))).sort((a,b)=>rowT(a,tc)-rowT(b,tc)).pop(),i=lr?sl.indexOf(lr[s.view.slotField]):-1;if(lr&&i>=0)row[s.view.slotField]=sl[(i+1)%sl.length]}rows.push(row)}else{if(!confirm('Delete this reading?'))return;rows.splice(+rd.dataset.ri,1)}
+if(ra){if(rows.length>=500)return toast('Row limit reached (500 readings per table).');const row={};grp(s,g).forEach(f=>{if(f!==tc&&dflt(f)!=='')row[f.id]=dflt(f)});if(tc)row[tc.id]=nowStr(tc.type);if(s.view&&s.view.type=='dailygrid'){const sl=s.view.slots||[],lr=[...rows].filter(r=>r[s.view.slotField]&&!isNaN(rowT(r,tc))).sort((a,b)=>rowT(a,tc)-rowT(b,tc)).pop(),i=lr?sl.indexOf(lr[s.view.slotField]):-1;if(lr&&i>=0)row[s.view.slotField]=sl[(i+1)%sl.length]}rows.push(row)}else{if(!dropRow(rows,+rd.dataset.ri))return}
 sortRows(rows,tc);if(rows.length)CUR.values[k]=rows;else delete CUR.values[k];persist();refreshGroup(sid,g);protoShow();return}
 const pa=e.target.closest('[data-padd]'),pd=e.target.closest('[data-pdel]'),pl=e.target.closest('[data-pload]');
 if(pa||pd){const sid=(pa||pd).dataset[pa?'padd':'pdel'],p=protoOf(sid);if(pa)p.bands.push({min:'',max:'',instruction:''});else p.bands.splice(+pd.dataset.i,1);CUR.values[vk(sid,'__protocol')]=p;saveProto(sid,p);persist();return renderCase()}
@@ -1220,8 +1226,9 @@ const B={resourceType:'Bundle',type:'transaction',entry:E};$('bj').textContent=J
 const bad=E.filter(e=>{const r=e.resource,t=r.resourceType;return !t||(['Observation','Procedure'].includes(t)&&(!r.code||!r.subject))||(t=='MedicationAdministration'&&(!r.medicationCodeableConcept||!r.subject))||(t=='Provenance'&&!(r.target||[]).length)||(t=='CarePlan'&&(!r.subject||!r.status||!r.intent))}).length;
 $('bchk').innerHTML=`${E.length} entries · per set: ${sets.map(x=>esc(x.title||x.setId)+' '+(per[x.setId]||0)).join(' · ')} · ${noteRecords.length?'Notes '+noteRecords.length:(nar?'Composition 1':'no narrative, no Composition')} · CarePlans ${cps}${pwMiss?' ('+pwMiss+' pathway not in registry, listed without activities)':''} · ${sk} resources without verified coding (text only)${skipped?' · <b>'+skipped+' row value(s) skipped: no valid row timestamp (administrations need a time)</b>':''}${nots?' · '+nots+' resource(s) emitted without effectiveDateTime (no timestamp)':''} · structural problems: ${bad}. Run through a FHIR validator before real use.`}
 function dl(){const t=$('bj').textContent;if(!t)return toast('Build a bundle first');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='bundle.json';a.click()}
-const getC=()=>{const raw=localStorage.getItem('cases')||'[]';try{const a=JSON.parse(raw);if(!Array.isArray(a))throw 0;return a}catch(e){try{if(!localStorage.getItem('cases_corrupt'))localStorage.setItem('cases_corrupt',raw)}catch(x){}toast('Saved cases could not be read; a raw copy was kept under localStorage key cases_corrupt. Do not clear browser data until you have inspected it.');return[]}};
-const setC=c=>{try{localStorage.setItem('cases',JSON.stringify(c));return true}catch(e){toast('Storage full or blocked: changes are NOT saved. Use Settings > Export all data now.');return false}};
+/* chunk 29c: cases live in Store (memory cache + queued server writes, or Demo-mode localStorage). Same shapes as before. */
+const getC=()=>Store.getCases();
+const setC=c=>Store.setCases(c);
 function synth(){let x=42;const R=()=>(x=(x*1664525+1013904223)%4294967296)/4294967296;const base=new Date('2026-01-10T08:00');
 const out=getC().filter(c=>!c.syn);const loc=n=>new Date(n-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16);
 for(let i=0;i<12;i++){const gap=Math.round(25+Math.pow(R(),1.6)*560),bite=+base+i*864e5*2+R()*36e5*6,p=gap/600,r=R();
@@ -1345,7 +1352,7 @@ if(!setC(getC().concat(fresh)))throw Error('could not save');
 if(j.codes&&typeof j.codes=='object')try{localStorage.setItem('codes',JSON.stringify(Object.assign(codes(),j.codes)))}catch(e){}
 const nr=cdsImport(j.rules);mergeUsage(j.setUsage);mergePins(j.pinned);toast('Imported '+fresh.length+' case(s)'+(nr?', '+nr+' alert rule(s) (not approved: re-enter verified-by to activate)':'')+(skip?', skipped '+skip+' already present':'')+'. Imported protocols need "verified by" re-entered; imported codes count as verified, so check that list.');ana();picker();sidebar()}catch(e){toast('Import failed: '+e.message)}};r.readAsText(f)}
 function resetRank(){if(!confirm('Reset the sidebar ranking (set usage counts)? Cases are not affected.'))return;try{localStorage.removeItem('setUsage')}catch(e){}SUGG={id:'',items:[]};sidebar();toast('Sidebar ranking reset.')}
-function wipe(){if(confirm('Delete all saved cases, generated sets and codes in this browser?')){['cases','codes','sets','setUsage','cases_backup_v1','cases_backup_v2','cases_backup_v3','cases_backup_v4','pinned','rules'].forEach(k=>localStorage.removeItem(k));CUR=newCase();renderCase();toast('Deleted');ana()}}
+function wipe(){if(Store.mode==='server')return toast('Delete-all is only for Demo mode. Records on the server are never deleted from here.');if(confirm('Delete all saved cases, generated sets and codes in this browser?')){setC([]);['codes','sets','setUsage','cases_backup_v1','cases_backup_v2','cases_backup_v3','cases_backup_v4','pinned','rules'].forEach(k=>localStorage.removeItem(k));CUR=newCase();renderCase();toast('Deleted');ana()}}
 function norm(sc){if(!sc||!Array.isArray(sc.sections))throw Error('Model did not return a sections list');
 const T=['datetime','duration_min','number','integer','select','boolean','text'],seen=new Set(),map={};let n=0;
 sc.sections=sc.sections.filter(s=>s&&Array.isArray(s.fields)).map(s=>({title:String(s.title||'Fields'),fields:s.fields.filter(f=>f&&f.label&&n++<16).map(f=>{
@@ -1479,9 +1486,8 @@ $('flw').addEventListener('click',e=>{
   if(e.target.closest('[data-flw-cancel]')){FLW.newOpen=false;renderFlowsheets();return}
   if(e.target.closest('[data-flw-save]')){saveFlowsheetNew();return}
   const del=e.target.closest('[data-flw-delete]');if(del){
-    if(!confirm('Delete this reading?'))return;
     const k=vk(del.dataset.flwDelete,'@'+del.dataset.flwGroup),rows=CUR.values[k];
-    if(Array.isArray(rows)){rows.splice(+del.dataset.flwIndex,1);if(rows.length)CUR.values[k]=rows;else delete CUR.values[k];persist();renderFlowsheets()}
+    if(Array.isArray(rows)){if(!dropRow(rows,+del.dataset.flwIndex))return;if(rows.length)CUR.values[k]=rows;else delete CUR.values[k];persist();renderFlowsheets()}
   }
 });
 $('flw').addEventListener('change',e=>{
@@ -1792,7 +1798,7 @@ function ensureNotes(c){
   if(!Array.isArray(c.notes)){
     // One-time, lossless migration: preserve the original case before introducing notes.
     try{
-      if(!localStorage.getItem('cases_backup_v5'))localStorage.setItem('cases_backup_v5',JSON.stringify(getC()));
+      if(Store.mode==='local'&&!localStorage.getItem('cases_backup_v5'))localStorage.setItem('cases_backup_v5',JSON.stringify(getC()));
     }catch(e){toast('Could not create notes migration backup. Notes were not migrated.');return}
     c.notes=[];
     const now=noteNow();
@@ -1854,7 +1860,7 @@ function createNote(){
 }
 function signNote(id){
   const n=CUR?.notes?.find(x=>x.id===id);if(!n||n.status==='signed')return;
-  const signer=prompt('Enter the signer name (demo only):');if(!signer||!signer.trim())return toast('Signing cancelled: signer name is required.');
+  const signer=Store.mode==='server'&&Store.me&&Store.me.name?Store.me.name:prompt('Enter the signer name (demo only):');if(!signer||!signer.trim())return toast('Signing cancelled: signer name is required.');
   n.status='signed';n.signedBy=signer.trim();n.signedAt=noteNow();
   if(n.type==='narrative')CUR.narrative=n.text;
   persist();renderNotes();toast('Note signed and locked.');
@@ -1898,7 +1904,7 @@ $('notesList')?.addEventListener('click',e=>{
   const ra=t.dataset.radd!==undefined,rd=t.dataset.rdel!==undefined;
   if(ra||rd){const sid=t.dataset[ra?'radd':'rdel'],g=t.dataset.rg,set=getSet(sid);if(!set)return;const tc=tcol(grp(set,g)),k=vk(sid,'@'+g),rows=Array.isArray(CUR.values[k])?CUR.values[k]:[];
     if(ra){if(rows.length>=500)return toast('Row limit reached (500 readings per table).');const row={};grp(set,g).forEach(f=>{if(f!==tc&&dflt(f)!=='')row[f.id]=dflt(f)});if(tc)row[tc.id]=nowStr(tc.type);rows.push(row)}
-    else{if(!confirm('Delete this reading?'))return;rows.splice(+t.dataset.ri,1)}
+    else{if(!dropRow(rows,+t.dataset.ri))return}
     sortRows(rows,tc);if(rows.length)CUR.values[k]=rows;else delete CUR.values[k];persist();renderNotes();return;
   }
   if(t.dataset.padd||t.dataset.pdel){const sid=t.dataset.padd||t.dataset.pdel,p=protoOf(sid);if(t.dataset.padd)p.bands.push({min:'',max:'',instruction:''});else p.bands.splice(+t.dataset.i,1);CUR.values[vk(sid,'__protocol')]=p;saveProto(sid,p);persist();renderNotes();return}
@@ -1934,6 +1940,8 @@ const WIRING_DONE=false; /* set true in chunk 29d, when every data read and writ
 function showBoot(msg,why,retry){$('boot').hidden=false;$('bootMsg').textContent=msg;$('bootWhy').textContent=why||'';$('bootRetry').hidden=!retry;$('bootDemo').hidden=!retry||Store.mode==='local'}
 function paintSave(st){
   const el=$('saveState');if(!el)return;el.textContent=st.text;
+  const ids=Object.keys(st.conflicts||{}),cb=$('conflictBan');
+  if(cb){cb.hidden=!ids.length;cb.innerHTML=ids.length?'<b>NOT SAVED:</b> '+ids.map(id=>{const c=getC().find(x=>x.id===id),nm=c&&c.patient&&c.patient.name?c.patient.name:id.slice(0,8);return esc(nm)+' was changed by someone else. <button class="b sm" type="button" data-reload="'+esc(id)+'">Reload theirs</button>'}).join(' ')+' <span>Reloading discards your unsent edits to that patient.</span>':''}
   const bad=/^NOT SAVED/.test(st.text);el.classList.toggle('bad',bad);$('saveRetry').hidden=!(Store.mode==='server'&&bad);
 }
 function paintMode(){
@@ -1954,6 +1962,9 @@ async function boot(){
   }
 }
 Store.hooks.toast=toast;
+Store.hooks.rowTime=(sid,gid,row)=>{const set=getSet(sid);if(!set)return null;const tc=tcol(grp(set,gid));if(!tc)return null;const t=rowT(row,tc);return Number.isFinite(t)?t:null};
+Store.hooks.onCaseReloaded=(id,c)=>{if(CUR&&CUR.id===id&&CASE_OPEN)enterCase(JSON.parse(JSON.stringify(c)),'ov');else renderPatients()};
+$('conflictBan').addEventListener('click',e=>{const b=e.target.closest('[data-reload]');if(!b)return;if(!confirm('Reload the other version? Your unsent edits to this patient will be discarded.'))return;Store.reloadCase(b.dataset.reload).catch(err=>toast('Reload failed: '+err.message))});
 Store.hooks.onStatus=paintSave;
 $('bootRetry').addEventListener('click',()=>boot());
 $('bootDemo').addEventListener('click',()=>Store.setMode('local'));
