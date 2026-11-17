@@ -1,0 +1,22 @@
+{
+  "name": "emr-enhancer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EMR Enhancer: single-folder Express + PostgreSQL server (prototype UI served as static files)",
+  "main": "server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.js",
+    "migrate": "node server.js --migrate",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "test": "node --test server.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0"
+  }
+}
