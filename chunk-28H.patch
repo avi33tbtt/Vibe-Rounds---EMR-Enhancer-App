@@ -1,0 +1,155 @@
+From 89caf05aed8b050688a627af9530c97dbdd9e210 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 17 Nov 2026 21:33:15 +0000
+Subject: [PATCH] Chunk 28H: repo housekeeping (.env.example, lock file,
+ real-seed test, test-order fix)
+
+---
+ .env              | 11 -----------
+ .env.example      | 16 ++++++++++++++++
+ api.test.js       | 43 +++++++++++++++++++++++++++++++++++++++++++
+ package-lock.json | 12 +++++++++++-
+ server.test.js    |  5 ++++-
+ 5 files changed, 74 insertions(+), 13 deletions(-)
+ delete mode 100644 .env
+ create mode 100644 .env.example
+
+diff --git a/.env b/.env
+deleted file mode 100644
+index e5c20c6..0000000
+--- a/.env
++++ /dev/null
+@@ -1,11 +0,0 @@
+-# Copy to .env and edit. .env is git-ignored. Never commit real values.
+-# Used by docker-compose.yml (local dev database only):
+-POSTGRES_PASSWORD=change-me-local-dev-only
+-
+-# Required by server.js (it refuses to start without it).
+-# The user must be able to CREATE DATABASE (needed by the test run only).
+-DATABASE_URL=postgres://emr:change-me-local-dev-only@127.0.0.1:5432/emr
+-
+-# Optional
+-PORT=3000
+-NODE_ENV=development
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..d18e961
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,16 @@
++# Copy this file to .env and edit. .env is git-ignored. Never commit real values.
++# Every value below is a placeholder; replace all of them before any real use.
++# Used by docker-compose.yml (local dev database only):
++POSTGRES_PASSWORD=change-me-local-dev-only
++
++# Required by server.js (it refuses to start without it).
++# The user must be able to CREATE DATABASE (needed by the test run only).
++DATABASE_URL=postgres://emr:change-me-local-dev-only@127.0.0.1:5432/emr
++
++# Optional
++PORT=3000
++NODE_ENV=development
++
++# Used by login sessions from chunk 32 on. Placeholder: generate your own long random value,
++# for example: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
++SESSION_SECRET=replace-with-a-long-random-value
+diff --git a/api.test.js b/api.test.js
+index 0dcd1ee..7a1a135 100644
+--- a/api.test.js
++++ b/api.test.js
+@@ -218,3 +218,46 @@ test('auth placeholder refuses to run in production', async () => {
+   const old = process.env.NODE_ENV; process.env.NODE_ENV = 'production';
+   try { assert.equal((await api().get('/api/cases')).status, 503); } finally { process.env.NODE_ENV = old; }
+ });
++
++// Chunk 28H: the seed loader against the REAL element-sets.js (earlier tests used a stand-in file).
++test('seed: real element-sets.js loads, ids unique, zero rules, zero protocol bands, zero thresholds', async () => {
++  const sets = readSeedSets();                                   // default path = the real element-sets.js
++  assert.ok(sets.length > 0, 'element-sets.js defines no sets');
++  const ids = Array.from(sets, (s) => s.setId);                  // sets come from a vm realm: copy into this realm's Array
++  const dup = ids.filter((id, i) => ids.indexOf(id) !== i);
++  assert.deepEqual(dup, [], 'duplicate setIds: ' + dup.join(', '));
++
++  const problems = [];
++  const fieldsOf = (s) => (s.sections || []).flatMap((sec) => sec.fields || []);
++  for (const s of sets) {
++    if (Array.isArray(s.rules) ? s.rules.length : s.rules != null) problems.push(`${s.setId}: ships with rules`);
++    if (s.protocol && !(Array.isArray(s.protocol.bands) && s.protocol.bands.length === 0)) problems.push(`${s.setId}: protocol has bands`);
++    if (s.kind === 'pathway') {                                  // a pathway bundles sets only
++      if (!Array.isArray(s.members) || !s.members.length) problems.push(`${s.setId}: pathway has no members`);
++      if (s.protocol) problems.push(`${s.setId}: pathway carries a protocol`);
++    }
++    // Threshold, target and band fields exist for the clinician to type into; none may be pre-filled.
++    const thrIds = new Set([s.view && s.view.thresholdField, s.view && s.view.thresholdUnitField].filter(Boolean));
++    for (const f of fieldsOf(s)) {
++      const thresholdLike = thrIds.has(f.id) || /(thr|thresh|target|tgt)/i.test(f.id) || /entered by clinician/i.test(f.label || '');
++      if (thresholdLike) for (const k of ['default', 'value', 'min', 'max']) if (k in f) problems.push(`${s.setId}.${f.id}: pre-filled "${k}"`);
++    }
++  }
++  assert.deepEqual(problems, [], 'seed safety problems:\n' + problems.join('\n'));
++
++  // Load into a database of its own: earlier tests in this file already created user sets such as care.vitals v1.
++  const seedName = 'emr_seed_' + crypto.randomBytes(4).toString('hex');
++  const admin = new Client({ connectionString: withDb('postgres') });
++  await admin.connect(); await admin.query(`CREATE DATABASE ${seedName}`);
++  const sdb = createDb(withDb(seedName));
++  try {
++    await migrate(sdb, __dirname);
++    assert.deepEqual(await seedSets(sdb, sets), { inserted: sets.length, unchanged: 0 });
++    assert.deepEqual(await seedSets(sdb, sets), { inserted: 0, unchanged: sets.length });      // re-runnable
++    const r = await sdb.query(`SELECT count(*)::int AS n, bool_and(read_only) AS ro FROM element_sets WHERE source='seed'`);
++    assert.equal(r.rows[0].n, sets.length); assert.equal(r.rows[0].ro, true);
++  } finally {
++    await sdb.close();
++    await admin.query(`DROP DATABASE IF EXISTS ${seedName} WITH (FORCE)`); await admin.end();
++  }
++});
+diff --git a/package-lock.json b/package-lock.json
+index 1b3edc4..4529884 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -9,7 +9,8 @@
+       "version": "0.1.0",
+       "dependencies": {
+         "express": "^4.21.2",
+-        "pg": "^8.13.1"
++        "pg": "^8.13.1",
++        "zod": "^3.23.8"
+       },
+       "devDependencies": {
+         "supertest": "^7.0.0"
+@@ -1268,6 +1269,15 @@
+       "engines": {
+         "node": ">=0.4"
+       }
++    },
++    "node_modules/zod": {
++      "version": "3.25.76",
++      "resolved": "https://registry.npmjs.org/zod/-/zod-3.25.76.tgz",
++      "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==",
++      "license": "MIT",
++      "funding": {
++        "url": "https://github.com/sponsors/colinhacks"
++      }
+     }
+   }
+ }
+diff --git a/server.test.js b/server.test.js
+index 19f400b..c97bb26 100644
+--- a/server.test.js
++++ b/server.test.js
+@@ -92,7 +92,10 @@ test('static: app files served, server files and dotfiles are not', async () =>
+ });
+ 
+ test('unknown API route returns the standard error shape', async () => {
+-  const r = await request(app).get('/api/nope');
++  // The API resolves an actor (a users-table lookup) on every /api request, and the schema is only migrated
++  // in a later test, so this test supplies a stub actor and stays independent of the database schema.
++  const stubApp = createApp({ db, getActor: async () => ({ id: '00000000-0000-0000-0000-000000000000', role: 'admin' }) });
++  const r = await request(stubApp).get('/api/nope');
+   assert.equal(r.status, 404);
+   assert.equal(r.body.error.code, 'not_found');
+ });
+-- 
+2.43.0
+
