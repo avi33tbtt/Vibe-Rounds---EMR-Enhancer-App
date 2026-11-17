@@ -11,6 +11,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const express = require('express');
 const { Pool } = require('pg');
+const { mountApi } = require('./api.js');
 
 // ---------- config (environment only, fail fast) ----------
 function loadConfig(env = process.env) {
@@ -91,7 +92,7 @@ async function migrate(db, dir) {
 // Only these files are public. The folder also holds server.js, .env and SQL, which must never be served.
 const STATIC_FILES = ['enhancer.html', 'element-sets.js', 'cds-rules.js'];
 
-function createApp({ db }) {
+function createApp({ db, getActor }) {
   const app = express();
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -111,6 +112,8 @@ function createApp({ db }) {
     }
   });
 
+  mountApi(app, { db, getActor });
+
   const sendStatic = (name) => (req, res) => res.sendFile(name, { root: __dirname, dotfiles: 'deny' }, (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: { code: 'not_found', message: 'Not found' } });
   });
@@ -121,9 +124,10 @@ function createApp({ db }) {
   app.use((req, res) => res.status(404).json({ error: { code: 'not_found', message: 'Not found' } }));
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
-    const bad = err && (err.type === 'entity.parse.failed' || err.status === 400);
-    if (!bad) console.error(err);
-    res.status(bad ? 400 : 500).json({ error: { code: bad ? 'bad_request' : 'server_error', message: bad ? 'Invalid request body' : 'Internal error' } });
+    const st = err && Number.isInteger(err.status) && err.status >= 400 && err.status < 500 ? err.status : 500;
+    if (st === 500) console.error(err);
+    const msg = st === 413 ? 'Request body too large' : st === 500 ? 'Internal error' : 'Invalid request body';
+    res.status(st).json({ error: { code: st === 413 ? 'too_large' : st === 500 ? 'server_error' : 'bad_request', message: msg } });
   });
   return app;
 }

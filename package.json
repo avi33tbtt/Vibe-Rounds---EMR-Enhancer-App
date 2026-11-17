@@ -10,11 +10,13 @@
     "migrate": "node server.js --migrate",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
-    "test": "node --test server.test.js"
+    "seed": "node seed.js",
+    "test": "node --test server.test.js api.test.js"
   },
   "dependencies": {
     "express": "^4.21.2",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "supertest": "^7.0.0"

@@ -96,3 +96,45 @@ test('unknown API route returns the standard error shape', async () => {
   assert.equal(r.status, 404);
   assert.equal(r.body.error.code, 'not_found');
 });
+
+// ---------------- schema v1 (001_core.sql) ----------------
+const rejects = (p, re) => assert.rejects(p, re);
+test('001_core.sql applies once to a fresh database', async () => {
+  assert.deepEqual(await migrate(db, __dirname), ['001_core.sql']);
+  assert.deepEqual(await migrate(db, __dirname), []);
+});
+
+test('schema: concurrent row appends both succeed', async () => {
+  const c = (await db.query("INSERT INTO cases (narrative, demo_patient) VALUES ('', '{}') RETURNING id")).rows[0].id;
+  const add = (v) => db.query("INSERT INTO case_rows (case_id,set_id,group_id,row,row_time) VALUES ($1,'care.vitals','vit',$2,now())", [c, JSON.stringify({ hr: v })]);
+  await Promise.all([add(70), add(80)]);
+  assert.equal((await db.query('SELECT count(*)::int n FROM case_rows WHERE case_id=$1', [c])).rows[0].n, 2);
+});
+
+test('schema: entered_in_error needs a reason; invalid timestamps keep the row', async () => {
+  const c = (await db.query("INSERT INTO cases (demo_patient) VALUES ('{}') RETURNING id")).rows[0].id;
+  await db.query("INSERT INTO case_rows (case_id,set_id,group_id,row,row_time) VALUES ($1,'s','g','{}',NULL)", [c]);
+  await rejects(db.query("INSERT INTO case_rows (case_id,set_id,group_id,row,status) VALUES ($1,'s','g','{}','entered_in_error')", [c]), /check/);
+  await rejects(db.query("INSERT INTO case_rows (case_id,set_id,group_id,row,status) VALUES ($1,'s','g','{}','deleted')", [c]), /check/);
+});
+
+test('schema: a rule cannot be enabled without an approver (unapproved rules never run)', async () => {
+  await rejects(db.query("INSERT INTO cds_rules (owner_set_id,rule_id,body,enabled) VALUES ('s','r1','{}',true)"), /check/);
+  await db.query("INSERT INTO cds_rules (owner_set_id,rule_id,body) VALUES ('s','r2','{}')");
+});
+
+test('schema: audit_log is append-only', async () => {
+  const id = (await db.query("INSERT INTO audit_log (action,entity) VALUES ('t','t') RETURNING id")).rows[0].id;
+  await rejects(db.query('UPDATE audit_log SET action=$2 WHERE id=$1', [id, 'x']), /append-only/);
+  await rejects(db.query('DELETE FROM audit_log WHERE id=$1', [id]), /append-only/);
+});
+
+test('schema: roles, case_values keys, marketplace read-only, own-review ban', async () => {
+  await rejects(db.query("INSERT INTO users (username,name,role) VALUES ('a','A','root')"), /check/);
+  const c = (await db.query("INSERT INTO cases (demo_patient) VALUES ('{}') RETURNING id")).rows[0].id;
+  await rejects(db.query("INSERT INTO case_values (case_id,key,value) VALUES ($1,'nokey','1')", [c]), /check/);
+  await db.query("INSERT INTO case_values (case_id,key,value) VALUES ($1,'care.vitals/__ref','{}')", [c]);
+  await rejects(db.query("INSERT INTO element_sets (set_id,kind,body,source,read_only) VALUES ('m','care','{}','marketplace',false)"), /check/);
+  const u = (await db.query("INSERT INTO users (username,name,role) VALUES ('inf','I','informatician') RETURNING id")).rows[0].id;
+  await rejects(db.query("INSERT INTO review_requests (set_id,set_version,author_id,reviewer_id) VALUES ('s',1,$1,$1)", [u]), /check/);
+});
