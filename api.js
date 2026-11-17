@@ -32,6 +32,12 @@ const patientObj = z.object({ name: z.string().max(200), ageSex: z.string().max(
 const alertLogArr = z.array(z.object({ ruleId: ident, ackedAt: z.string().max(40) }).passthrough()).max(2000);
 const pinnedArr = z.array(ident).max(50).nullable();
 
+// Format checks only (does the string look like a SNOMED CT concept id or a LOINC code). They say nothing about whether the code is the RIGHT concept.
+const sysEnum = z.enum(['snomed', 'loinc']);
+const CODE_RE = { snomed: /^[1-9]\d{5,17}$/, loinc: /^\d{1,7}-\d$/ };
+function codeShape(o, ctx) {
+  if (!CODE_RE[o.system].test(o.code)) ctx.addIssue({ code: 'custom', path: ['code'], message: o.system === 'snomed' ? 'not a SNOMED CT concept id (6 to 18 digits)' : 'not a LOINC code (digits, a hyphen, one check digit)' });
+}
 const S = {
   caseCreate: z.object({ id: uuid.optional(), patient: patientObj.optional(), narrative: z.string().max(200000).optional(),
     applied: appliedArr.optional(), pathways: pathwaysArr.optional(), pinned: pinnedArr.optional() }).strict(),
@@ -50,8 +56,9 @@ const S = {
   setPost: z.object({ setId: ident, kind: z.enum(['care', 'template', 'disease', 'custom', 'pathway']), body: z.record(z.string(), z.any()).refine(jsonSize(500000), 'set too large'),
     expectedVersion: ver.optional() }).strict(),
   usagePost: z.object({ dx: z.string().max(100).optional() }).strict(),
-  codePut: z.object({ system: z.string().min(1).max(200), code: z.string().min(1).max(100), display: z.string().min(1).max(500), verifiedLive: z.any().optional() }).strict(),
-  bindPut: z.object({ setId: ident, fieldId: ident, system: z.string().min(1).max(200), code: z.string().min(1).max(100), display: z.string().min(1).max(500) }).strict(),
+  codePost: z.object({ system: sysEnum, code: z.string().trim().min(1).max(20), display: z.string().trim().min(1).max(300) }).strict().superRefine(codeShape),
+  codeLive: z.object({ ok: z.boolean(), display: z.string().trim().max(300).optional() }).strict(),
+  bindPut: z.object({ setId: ident, fieldId: ident, system: sysEnum, code: z.string().trim().min(1).max(20), display: z.string().trim().min(1).max(300) }).strict().superRefine(codeShape),
   rulePut: z.object({ body: z.record(z.string(), z.any()).refine(jsonSize(20000), 'rule too large'), expectedVersion: z.number().int().min(0) }).strict(),
   ruleAct: z.object({ expectedVersion: ver }).strict(),
   protoPut: z.object({ body: z.record(z.string(), z.any()).refine(jsonSize(50000), 'protocol too large'), expectedVersion: z.number().int().min(0) }).strict(),
@@ -320,15 +327,32 @@ function mountApi(app, { db, getActor }) {
   r.delete('/usage', wrap(async (req, res) => { await db.query('DELETE FROM set_usage WHERE user_id=$1', [req.actor.id]); res.status(204).end(); }));
 
   // ================= codes and bindings (reference data) =================
+  const codeOut = (c) => ({ system: c.system, code: c.code, display: c.display, verifiedLive: c.verified_live, addedBy: c.added_by, addedAt: iso(c.added_at) });
+  const codeKey = (req) => {
+    const system = sysEnum.safeParse(req.params.system);
+    if (!system.success || !CODE_RE[system.data].test(req.params.code)) throw new ApiError(400, 'validation', 'Invalid code reference');
+    return [system.data, req.params.code];
+  };
   r.get('/codes', wrap(async (req, res) => {
-    res.json((await db.query('SELECT * FROM verified_codes ORDER BY system,code')).rows.map((c) => ({ system: c.system, code: c.code, display: c.display, verifiedLive: c.verified_live, addedBy: c.added_by, addedAt: iso(c.added_at) })));
+    res.json((await db.query('SELECT * FROM verified_codes ORDER BY system,code')).rows.map(codeOut));
   }));
-  r.put('/codes', wrap(async (req, res) => {
-    const b = parse(S.codePut, req.body);
-    const u = await db.query(`INSERT INTO verified_codes (system,code,display,verified_live,added_by) VALUES ($1,$2,$3,$4,$5)
-      ON CONFLICT (system,code) DO UPDATE SET display=EXCLUDED.display, verified_live=EXCLUDED.verified_live RETURNING system,code,display,verified_live,added_by,added_at`,
-      [b.system, b.code, b.display, b.verifiedLive === undefined ? null : JSON.stringify(b.verifiedLive), req.actor.id]);
-    res.json(u.rows[0]);
+  // Adding never overwrites: a code already in the table returns 409 with the existing row (display and who added it stay as they were).
+  r.post('/codes', wrap(async (req, res) => {
+    const b = parse(S.codePost, req.body);
+    const u = await db.query('INSERT INTO verified_codes (system,code,display,added_by) VALUES ($1,$2,$3,$4) ON CONFLICT (system,code) DO NOTHING RETURNING *', [b.system, b.code, b.display, req.actor.id]);
+    if (!u.rows.length) {
+      const cur = (await db.query('SELECT * FROM verified_codes WHERE system=$1 AND code=$2', [b.system, b.code])).rows[0];
+      throw new ApiError(409, 'conflict', 'This code is already in the verified table', { current: cur && codeOut(cur) });
+    }
+    res.status(201).json(codeOut(u.rows[0]));
+  }));
+  // Result of the live lookup. The client sends only ok (and the display it saw); the server stamps who and when.
+  r.post('/codes/:system/:code/live', wrap(async (req, res) => {
+    const [system, code] = codeKey(req), b = parse(S.codeLive, req.body);
+    const live = { ok: b.ok, checkedAt: new Date().toISOString(), checkedBy: req.actor.id }; if (b.display) live.display = b.display;
+    const u = await db.query('UPDATE verified_codes SET verified_live=$3::jsonb WHERE system=$1 AND code=$2 RETURNING *', [system, code, JSON.stringify(live)]);
+    if (!u.rows.length) throw new ApiError(404, 'not_found', 'This code is not in the verified table');
+    res.json(codeOut(u.rows[0]));
   }));
   r.get('/bindings', wrap(async (req, res) => {
     res.json((await db.query('SELECT set_id,field_id,system,code,display FROM code_bindings ORDER BY set_id,field_id')).rows

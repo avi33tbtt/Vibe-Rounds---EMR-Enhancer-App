@@ -1128,12 +1128,13 @@ const SYSU={snomed:'http://snomed.info/sct',loinc:'http://loinc.org'};
 const codes=()=>Store.codes();
 const ck=c=>c.system+'|'+c.code;
 function st(f){const c=f.coding;if(!c||!c.code)return'missing';const d=codes()[ck(c)];return d?'verified':'unverified'}
+function codeNote(f){const c=f.coding;if(!c||!c.code)return'';const m=Store.codeMeta()[ck(c)];if(!m)return'';const dt=x=>x?String(x).slice(0,10):'',lv=m.verifiedLive;return`<div class="mu" style="font-size:11px">${m.addedAt?'added '+esc(dt(m.addedAt)):''}${lv&&lv.ok?' · checked live '+esc(dt(lv.checkedAt)):''}</div>`}
 const COL={verified:'--g',unverified:'--a',missing:'--r'};
 function allF(){return(CUR&&CUR.applied||[]).flatMap(a=>{const s=getSet(a.setId);return flS(s).map(f=>({s,f,k:vk(a.setId,f.id)}))})}
 function codesUI(){const L=allF();if(!L.length){$('sum').textContent='Add an element set in the Case tab first.';$('ctab').innerHTML='';return}
 const n={verified:0,unverified:0,missing:0};let rows='';
 L.forEach(({s,f,k})=>{const t=st(f);n[t]++;const bd=`<span class="bd" style="background:var(${COL[t]})">${t}</span>`,e=$('cb_'+k);if(e)e.innerHTML=bd;
-rows+=`<tr><td>${esc(f.label)} <span class="mu">(${esc(s.title||s.setId)})</span></td><td>${esc(f.coding&&f.coding.system||'')} ${esc(f.coding&&f.coding.code||'')}</td><td>${esc(f.coding&&f.coding.display||'')}</td><td>${bd}${binds()[s.setId+'|'+f.id]?` <button class="b sm" onclick="unbind('${esc(s.setId+'|'+f.id)}')">Detach</button>`:''}</td></tr>`});
+rows+=`<tr><td>${esc(f.label)} <span class="mu">(${esc(s.title||s.setId)})</span></td><td>${esc(f.coding&&f.coding.system||'')} ${esc(f.coding&&f.coding.code||'')}</td><td>${esc(f.coding&&f.coding.display||'')}</td><td>${bd}${codeNote(f)}${binds()[s.setId+'|'+f.id]?` <button class="b sm" onclick="unbind('${esc(s.setId+'|'+f.id)}')">Detach</button>`:''}</td></tr>`});
 const fs=$('afld'),cv=fs.value;fs.innerHTML='<option value="">Field to attach to (optional)</option>'+L.map(({s,f})=>`<option value="${esc(s.setId+'|'+f.id)}">${esc(f.label)} (${esc(s.title||s.setId)})</option>`).join('');fs.value=cv;
 const tot=L.length;$('sum').innerHTML=`Ontology binding rate: <b>${Math.round(100*n.verified/tot)}%</b> verified (${n.verified}/${tot}) · ${n.unverified} unverified · ${n.missing} missing`;
 $('ctab').innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse"><tr><th>Field</th><th>Code</th><th>Display</th><th>Status</th></tr>${rows}</table>`}
@@ -1141,17 +1142,18 @@ const binds=()=>Store.binds();
 function applyBinds(){const b=binds();registry().forEach(s=>flS(s).forEach(f=>{const x=b[s.setId+'|'+f.id];if(x&&x.code&&SYSU[x.system])f.coding={system:x.system,code:x.code,display:x.display}}))}
 function unbind(k){const b=binds();delete b[k];Store.saveBinds(b);const[sid,fid]=k.split('|'),s=getSet(sid),f=s&&flS(s).find(y=>y.id==fid);if(f)delete f.coding;codesUI()}
 function addCode(){const c={system:$('asys').value,code:$('acode').value.trim()},d=$('adisp').value.trim();if(!c.code||!d)return toast('Code and display needed');
+const CRE={snomed:/^[1-9]\d{5,17}$/,loinc:/^\d{1,7}-\d$/};if(!CRE[c.system]||!CRE[c.system].test(c.code))return toast(c.system==='snomed'?'That does not look like a SNOMED CT concept id (6 to 18 digits).':'That does not look like a LOINC code (for example 1234-5).');if(d.length>300)return toast('Display text is limited to 300 characters.');
 const t=codes();t[ck(c)]=d;Store.saveCodes(t);
 const k=$('afld').value;if(k){const b=binds();b[k]={system:c.system,code:c.code,display:d};Store.saveBinds(b);applyBinds();toast('Code saved and attached to the field.')}else toast('Code saved to your verified list. Choose a field above to attach it.');
 $('acode').value='';$('adisp').value='';codesUI()}
-async function liveCheck(){const L=allF();if(!L.length)return toast('Add an element set in the Case tab first');const t=codes();let ok=0,bad=0,net=0;
+async function liveCheck(){const L=allF();if(!L.length)return toast('Add an element set in the Case tab first');const t=codes();let ok=0,bad=0,net=0;const confirmed=[];
 const todo=L.filter(({f})=>f.coding&&f.coding.code&&!t[ck(f.coding)]);
 if(!todo.length)return toast('Nothing to check: no field has an unverified code. Attach a code to a field first (form below the table). Codes you add yourself count as verified already.');
 for(const{f}of todo){const c=f.coding;
 try{const r=await fetch(`https://tx.fhir.org/r4/CodeSystem/$lookup?system=${encodeURIComponent(SYSU[c.system])}&code=${encodeURIComponent(c.code)}&_format=json`);
 const j=await r.json();const d=(j.parameter||[]).find(p=>p.name=='display')?.valueString;
-if(r.ok&&d){t[ck(c)]=d;ok++;f.coding.live_display=d}else bad++}catch(e){net++}}
-Store.saveCodes(t);toast(`Live check: ${ok} confirmed, ${bad} not found, ${net} could not reach tx.fhir.org (network or browser block). Still compare displays: a valid code can be the wrong concept.`);codesUI()}
+if(r.ok&&d){t[ck(c)]=d;confirmed.push([c.system,c.code,d]);ok++;f.coding.live_display=d}else bad++}catch(e){net++}}
+Store.saveCodes(t);confirmed.forEach(([sy,cd,d])=>Store.saveLiveResult(sy,cd,true,d));toast(`Live check: ${ok} confirmed, ${bad} not found, ${net} could not reach tx.fhir.org (network or browser block). Still compare displays: a valid code can be the wrong concept.`);codesUI()}
 /* FHIR bundle: Patient, optional Composition (narrative), Condition per disease set, one resource per value / per repeat row, Provenance.
    Protocol data (setId/__protocol bands) is never read here, so sliding-scale bands cannot reach the bundle. Doses are copied exactly as typed. */
 const isoOf=(f,x)=>{if(f.type=='date')return String(x);const d=new Date(x);return isNaN(d)?null:d.toISOString()};

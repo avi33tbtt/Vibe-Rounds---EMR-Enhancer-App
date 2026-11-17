@@ -52,8 +52,12 @@ Seed sets (loaded by `node seed.js`) and any set with `readOnly: true` (marketpl
 | Route | Notes |
 |---|---|
 | `GET /usage`, `POST /usage/:setId {dx?}`, `DELETE /usage` | per user; DELETE resets only the caller's ranking |
-| `GET /codes`, `PUT /codes {system,code,display,verifiedLive?}` | adder recorded by the server |
-| `GET /bindings`, `PUT /bindings {setId,fieldId,system,code,display}`, `DELETE /bindings/:setId/:fieldId` | |
+| `GET /codes` | verified-code table: `{system,code,display,verifiedLive,addedBy,addedAt}` |
+| `POST /codes {system,code,display}` | `201`. The server stamps `addedBy` and `addedAt`. A code already in the table returns `409` with `current` and is **never overwritten**. There is no PUT. |
+| `POST /codes/:system/:code/live {ok,display?}` | result of "Verify live". The server stamps `checkedAt` and `checkedBy` into `verifiedLive`; the table display is not replaced. `404` if the code is not in the table. |
+| `GET /bindings`, `PUT /bindings {setId,fieldId,system,code,display}`, `DELETE /bindings/:setId/:fieldId` | one binding per (set, field): PUT replaces it; DELETE is idempotent (`204`) |
+
+**Code validation (codes and bindings):** `system` is `snomed` or `loinc`. SNOMED CT code: 6 to 18 digits, no leading zero. LOINC code: 1 to 7 digits, a hyphen, one check digit. `display` 1 to 300 characters. These are format checks only. They cannot tell whether a code is the right concept, so compare the display with a SNOMED or LOINC browser.
 | `GET /rules`, `PUT /rules/:owner/:ruleId {body,expectedVersion}` | saving or editing leaves the rule **unapproved and disabled** |
 | `POST /rules/:owner/:ruleId/approve {expectedVersion}` | server stamps approver and time; only then `enabled: true` |
 | `POST /rules/:owner/:ruleId/disable {expectedVersion}`, `DELETE ...?expectedVersion=n` | |

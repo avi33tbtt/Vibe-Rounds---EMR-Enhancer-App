@@ -204,10 +204,10 @@ test('usage, codes, bindings, prefs', async () => {
   assert.equal((await api().get('/api/usage')).body['care.vitals'].count, 2);
   assert.equal((await api().delete('/api/usage')).status, 204);
   assert.deepEqual((await api().get('/api/usage')).body, {});
-  assert.equal((await api().put('/api/codes').send({ system: 'snomed', code: '1', display: 'x' })).status, 200);
-  assert.equal((await api().put('/api/codes').send({ system: 'snomed', code: '1', display: 'y', addedBy: 'me' })).status, 400);
+  assert.equal((await api().post('/api/codes').send({ system: 'snomed', code: '123456', display: 'x' })).status, 201);
+  assert.equal((await api().post('/api/codes').send({ system: 'snomed', code: '123457', display: 'y', addedBy: 'me' })).status, 400);
   assert.equal((await api().get('/api/codes')).body[0].display, 'x');
-  await api().put('/api/bindings').send({ setId: 's', fieldId: 'f', system: 'loinc', code: '2', display: 'z' });
+  await api().put('/api/bindings').send({ setId: 's', fieldId: 'f', system: 'loinc', code: '2345-7', display: 'z' });
   assert.equal((await api().get('/api/bindings')).body.length, 1);
   assert.equal((await api().delete('/api/bindings/s/f')).status, 204);
   await api().put('/api/prefs/pinned').send({ value: ['care.vitals'] });
@@ -267,4 +267,51 @@ test('seed: real element-sets.js loads, ids unique, zero rules, zero protocol ba
     await sdb.close();
     await admin.query(`DROP DATABASE IF EXISTS ${seedName} WITH (FORCE)`); await admin.end();
   }
+});
+
+test('codes: add stamps adder and time, duplicate is 409 and never overwrites', async () => {
+  const a = await api().post('/api/codes').send({ system: 'loinc', code: '8310-5', display: 'Body temperature' });
+  assert.equal(a.status, 201); assert.ok(a.body.addedAt); assert.ok(a.body.addedBy); assert.equal(a.body.verifiedLive, null);
+  const d = await api().post('/api/codes').send({ system: 'loinc', code: '8310-5', display: 'Something else' });
+  assert.equal(d.status, 409); assert.equal(d.body.error.code, 'conflict'); assert.equal(d.body.current.display, 'Body temperature');
+  const l = (await api().get('/api/codes')).body.filter((c) => c.code === '8310-5');
+  assert.equal(l.length, 1); assert.equal(l[0].display, 'Body temperature');
+  assert.ok([404, 405].includes((await api().put('/api/codes').send({ system: 'loinc', code: '8310-5', display: 'x' })).status));   // no upsert route
+});
+
+test('codes: validation (system, code shape, display length, unknown fields)', async () => {
+  const post = (b) => api().post('/api/codes').send(b);
+  assert.equal((await post({ system: 'icd10', code: 'A00', display: 'x' })).status, 400);
+  assert.equal((await post({ system: 'snomed', code: '12', display: 'x' })).status, 400);
+  assert.equal((await post({ system: 'snomed', code: '12345a', display: 'x' })).status, 400);
+  assert.equal((await post({ system: 'loinc', code: '83105', display: 'x' })).status, 400);
+  assert.equal((await post({ system: 'loinc', code: '8310-5', display: '' })).status, 400);
+  assert.equal((await post({ system: 'loinc', code: '8310-5', display: 'x'.repeat(301) })).status, 400);
+  const r = await post({ system: 'snomed', code: '12345a', display: 'x' });
+  assert.equal(r.body.error.code, 'validation'); assert.match(r.body.error.message, /code/);
+});
+
+test('codes: live result is stamped by the server and needs an existing row', async () => {
+  await api().post('/api/codes').send({ system: 'snomed', code: '386661006', display: 'Fever' });
+  const ok = await api().post('/api/codes/snomed/386661006/live').send({ ok: true, display: 'Fever (finding)' });
+  assert.equal(ok.status, 200); assert.equal(ok.body.verifiedLive.ok, true); assert.ok(ok.body.verifiedLive.checkedAt); assert.ok(ok.body.verifiedLive.checkedBy);
+  assert.equal((await api().post('/api/codes/snomed/386661006/live').send({ ok: true, checkedAt: '2000-01-01' })).status, 400);   // client cannot set the time
+  assert.equal((await api().post('/api/codes/snomed/999999999/live').send({ ok: true })).status, 404);
+  assert.equal((await api().post('/api/codes/snomed/12/live').send({ ok: true })).status, 400);
+  const g = (await api().get('/api/codes')).body.find((c) => c.code === '386661006');
+  assert.equal(g.verifiedLive.ok, true); assert.equal(g.display, 'Fever');   // live display is recorded, the table display is not replaced
+});
+
+test('bindings: bind, rebind, list, unbind, validation', async () => {
+  const put = (b) => api().put('/api/bindings').send(b);
+  assert.equal((await put({ setId: 'care.vitals', fieldId: 'temp', system: 'loinc', code: '8310-5', display: 'Body temperature' })).status, 200);
+  assert.equal((await put({ setId: 'care.vitals', fieldId: 'temp', system: 'loinc', code: '8310-5', display: 'Body temp' })).status, 200);   // rebind replaces, no duplicate
+  const l = (await api().get('/api/bindings')).body.filter((b) => b.setId === 'care.vitals');
+  assert.equal(l.length, 1); assert.equal(l[0].display, 'Body temp');
+  assert.equal((await put({ setId: 'care.vitals', fieldId: 'temp', system: 'icd10', code: '8310-5', display: 'x' })).status, 400);
+  assert.equal((await put({ setId: 'care.vitals', fieldId: 'temp', system: 'loinc', code: 'abc', display: 'x' })).status, 400);
+  assert.equal((await put({ setId: 'bad id!', fieldId: 'temp', system: 'loinc', code: '8310-5', display: 'x' })).status, 400);
+  assert.equal((await api().delete('/api/bindings/care.vitals/temp')).status, 204);
+  assert.equal((await api().get('/api/bindings')).body.filter((b) => b.setId === 'care.vitals').length, 0);
+  assert.equal((await api().delete('/api/bindings/care.vitals/temp')).status, 204);   // unbinding twice is harmless
 });

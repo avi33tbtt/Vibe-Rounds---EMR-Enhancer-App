@@ -12,7 +12,7 @@
   const uid = () => (g.crypto && g.crypto.randomUUID ? g.crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
   const IDENT = /^[A-Za-z0-9_.-]{1,100}$/, VALKEY = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.@-]{1,100}$/;
   const META = ['patient', 'narrative', 'applied', 'pathways', 'pinned', 'alertLog'];
-  const LS = { cases: 'cases', sets: 'sets', usage: 'setUsage', codes: 'codes', binds: 'binds', rules: 'rules', protocols: 'protocols' };
+  const LS = { cases: 'cases', sets: 'sets', usage: 'setUsage', codes: 'codes', codeMeta: 'codeMeta', binds: 'binds', rules: 'rules', protocols: 'protocols' };
   const PREF_LS = { pinned: 'pinned', mypts: 'mypts' };
 
   const Store = {
@@ -21,7 +21,7 @@
     reasons: {},                                   // rowId -> reason typed when a reading is removed ("entered in error")
     hooks: { onStatus() {}, onConflict() {}, onUnauthorized() {}, onCaseReloaded() {}, toast() {}, rowTime() { return null; } },
   };
-  const S = { cases: [], sets: [], usage: {}, codes: {}, binds: {}, rules: {}, protocols: {}, prefs: {} };
+  const S = { cases: [], sets: [], usage: {}, codes: {}, codeMeta: {}, binds: {}, rules: {}, protocols: {}, prefs: {} };
   const snap = {};                                  // entity key -> what the server last confirmed
   const Q = []; let running = false, timer = null, delay = 2000, savedAt = null, retrying = false;
   const failed = {}, conflicts = {};
@@ -311,14 +311,33 @@
   };
 
   Store.codes = () => clone(S.codes);                   // {'system|code': display}
+  Store.codeMeta = () => clone(S.codeMeta);             // {'system|code': {addedBy, addedAt, verifiedLive:{ok,checkedAt,display?}|null}} (server mode; Demo mode keeps live results only)
+  const splitKey = (k) => { const i = k.indexOf('|'); return i < 1 ? null : [k.slice(0, i), k.slice(i + 1)]; };
+  // A new key is POSTed. If the server already has that code (409) the server's entry wins: nothing is overwritten, the person is told.
   Store.saveCodes = function (t) {
     S.codes = clone(t);
     if (Store.mode === 'local') return lsSet(LS.codes, S.codes);
     Object.keys(t).forEach((k) => {
-      const i = k.indexOf('|'), system = k.slice(0, i), code = k.slice(i + 1), sn = snap['code:' + k];
-      if (i < 1 || !code || sn === t[k]) return;
-      enqueue('code:' + k, async () => { const d = S.codes[k]; if (d === undefined) return; await api('PUT', '/codes', { system, code, display: String(d) }); snap['code:' + k] = d; });
+      const sp = splitKey(k); if (!sp || !sp[1] || snap['code:' + k] !== undefined) return;   // already on the server
+      enqueue('code:' + k, async () => {
+        const d = S.codes[k]; if (d === undefined) return;
+        try { const c = (await api('POST', '/codes', { system: sp[0], code: sp[1], display: String(d) })) || {}; snap['code:' + k] = c.display || String(d); S.codeMeta[k] = { addedBy: c.addedBy, addedAt: c.addedAt, verifiedLive: c.verifiedLive || null }; }
+        catch (e) {
+          if (e.status !== 409 || !e.current) throw e;
+          snap['code:' + k] = e.current.display; S.codes[k] = e.current.display; S.codeMeta[k] = { addedBy: e.current.addedBy, addedAt: e.current.addedAt, verifiedLive: e.current.verifiedLive || null };
+          Store.hooks.toast('That code was already in the verified table: the existing entry was kept' + (e.current.display !== d ? ' (its display differs from what you typed).' : '.'));
+        }
+      });
     });
+    return true;
+  };
+  // Result of "Verify live" for a code that is in the table. Server mode: the server stamps who and when. Demo mode: kept in this browser.
+  Store.saveLiveResult = function (system, code, ok, display) {
+    const k = system + '|' + code, live = { ok: !!ok, checkedAt: new Date().toISOString() }; if (display) live.display = String(display);
+    S.codeMeta[k] = Object.assign({}, S.codeMeta[k], { verifiedLive: live });
+    if (Store.mode === 'local') return lsSet(LS.codeMeta, S.codeMeta);
+    enqueue('codelive:' + k, async () => { const c = await api('POST', '/codes/' + encodeURIComponent(system) + '/' + encodeURIComponent(code) + '/live', { ok: !!ok, display: display ? String(display) : undefined });
+      S.codeMeta[k] = { addedBy: c.addedBy, addedAt: c.addedAt, verifiedLive: c.verifiedLive || null }; });
     return true;
   };
   Store.binds = () => clone(S.binds);                   // {'setId|fieldId': {system,code,display}}
@@ -395,7 +414,7 @@
         Store.hooks.toast('Saved cases could not be read; a raw copy was kept under localStorage key cases_corrupt. Do not clear browser data until you have inspected it.'); cs = [];
       }
       S.cases = cs; const a = lsGet(LS.sets, []); S.sets = Array.isArray(a) ? a : [];
-      S.usage = isObj(lsGet(LS.usage, {})) ? lsGet(LS.usage, {}) : {}; S.codes = isObj(lsGet(LS.codes, {})) ? lsGet(LS.codes, {}) : {};
+      S.usage = isObj(lsGet(LS.usage, {})) ? lsGet(LS.usage, {}) : {}; S.codes = isObj(lsGet(LS.codes, {})) ? lsGet(LS.codes, {}) : {}; S.codeMeta = isObj(lsGet(LS.codeMeta, {})) ? lsGet(LS.codeMeta, {}) : {};
       S.binds = isObj(lsGet(LS.binds, {})) ? lsGet(LS.binds, {}) : {}; S.rules = isObj(lsGet(LS.rules, {})) ? lsGet(LS.rules, {}) : {};
       S.protocols = isObj(lsGet(LS.protocols, {})) ? lsGet(LS.protocols, {}) : {};
       S.prefs = {}; Object.keys(PREF_LS).forEach((k) => { const v = lsGet(PREF_LS[k], undefined); if (v !== undefined) S.prefs[k] = v; });
@@ -409,7 +428,7 @@
     S.cases = full.map(fromServerCase);
     S.sets = sets.filter((s) => s.source === 'user').map((s) => { snap['set:' + s.setId] = { ver: s.version }; return Object.assign({}, s.body, { version: s.version }); });
     S.usage = usage;
-    S.codes = {}; codes.forEach((c) => { S.codes[c.system + '|' + c.code] = c.display; snap['code:' + c.system + '|' + c.code] = c.display; });
+    S.codes = {}; S.codeMeta = {}; codes.forEach((c) => { const k = c.system + '|' + c.code; S.codes[k] = c.display; snap['code:' + k] = c.display; S.codeMeta[k] = { addedBy: c.addedBy, addedAt: c.addedAt, verifiedLive: c.verifiedLive || null }; });
     S.binds = {}; binds.forEach((b) => { S.binds[b.setId + '|' + b.fieldId] = { system: b.system, code: b.code, display: b.display }; });
     S.rules = {};
     Object.keys(rules).forEach((ow) => { S.rules[ow] = rules[ow].map((r) => {

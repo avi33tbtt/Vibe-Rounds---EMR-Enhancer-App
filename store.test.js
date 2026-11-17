@@ -158,3 +158,31 @@ test('Demo mode never calls fetch and keeps data in localStorage', async () => {
   assert.equal(JSON.parse(ls.get('cases'))[0].id, id); assert.equal(JSON.parse(ls.get('codes'))['snomed|1'], 'x'); assert.deepEqual(JSON.parse(ls.get('pinned')), ['a']);
   assert.match(Store.status().text, /^Demo mode/);
 });
+
+test('codes: a new code is POSTed once; a duplicate (409) keeps the server entry and tells the person', async () => {
+  const t = await readyServerStore(); const toasts = []; t.Store.hooks.toast = (m) => toasts.push(m);
+  t.Store.saveCodes({ 'snomed|386661006': 'Fever' }); await t.Store.flush();
+  const w = t.writes(); assert.equal(w.length, 1); assert.equal(w[0].method, 'POST'); assert.equal(w[0].path, '/codes');
+  assert.deepEqual(w[0].body, { system: 'snomed', code: '386661006', display: 'Fever' });
+  t.Store.saveCodes({ 'snomed|386661006': 'Fever' }); await t.Store.flush();
+  assert.equal(t.writes().length, 1, 'already confirmed: not sent again');
+
+  t.custom = async (m, p) => (m === 'POST' && p === '/codes' ? [409, { error: { code: 'conflict', message: 'dup' }, current: { system: 'loinc', code: '8310-5', display: 'Body temperature', addedBy: 'u9', addedAt: '2026-11-01T00:00:00Z', verifiedLive: null } }] : undefined);
+  t.Store.saveCodes({ 'snomed|386661006': 'Fever', 'loinc|8310-5': 'My own wording' }); await t.Store.flush();
+  assert.equal(t.Store.codes()['loinc|8310-5'], 'Body temperature');
+  assert.equal(t.Store.codeMeta()['loinc|8310-5'].addedBy, 'u9');
+  assert.equal(t.Store.status().state, 'saved', 'a duplicate is not a save failure or a conflict screen');
+  assert.ok(toasts.some((m) => /already in the verified table/.test(m)));
+});
+
+test('codes: live result goes to the server route; Demo mode keeps it in the browser', async () => {
+  const t = await readyServerStore();
+  t.Store.saveCodes({ 'snomed|386661006': 'Fever' }); await t.Store.flush();
+  t.custom = async (m, p) => (m === 'POST' && /\/live$/.test(p) ? [200, { system: 'snomed', code: '386661006', display: 'Fever', addedBy: 'u1', addedAt: '2026-11-18T00:00:00Z', verifiedLive: { ok: true, checkedAt: '2026-11-18T01:00:00Z', checkedBy: 'u1' } }] : undefined);
+  t.Store.saveLiveResult('snomed', '386661006', true, 'Fever (finding)'); await t.Store.flush();
+  const w = t.writes().pop(); assert.equal(w.path, '/codes/snomed/386661006/live'); assert.deepEqual(w.body, { ok: true, display: 'Fever (finding)' });
+  assert.equal(t.Store.codeMeta()['snomed|386661006'].verifiedLive.checkedBy, 'u1');
+  const d = boot(happy(), { mode: 'local' }); await d.Store.init();
+  d.Store.saveLiveResult('loinc', '8310-5', true); assert.equal(d.writes().length, 0);
+  assert.equal(JSON.parse(d.ls.get('codeMeta'))['loinc|8310-5'].verifiedLive.ok, true);
+});
