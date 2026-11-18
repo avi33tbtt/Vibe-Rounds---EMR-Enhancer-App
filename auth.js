@@ -14,6 +14,7 @@ const { promisify } = require('node:util');
 const { z } = require('zod');
 const express = require('express');
 const { allowedActions } = require('./permissions.js');
+const { auditAuth } = require('./audit.js');
 
 const scrypt = promisify(crypto.scrypt);
 const COOKIE = 'emr_sid';
@@ -61,11 +62,12 @@ function createAuth({ db, idleMinutes, absoluteHours, lockoutFailures, lockoutMi
     const e = ipFails.get(ip); if (e && e.reset >= Date.now()) e.n++; else ipFails.set(ip, { n: 1, reset: Date.now() + IP_WINDOW });
   };
 
-  async function startSession(res, userId) {
+  /** Creates the session row on `c` (the caller's transaction client) and returns the token; the caller sets the cookie after commit. */
+  async function createSession(c, userId) {
     const token = crypto.randomBytes(32).toString('hex');
-    await db.query('DELETE FROM sessions WHERE expires_at < now() OR last_seen < now() - make_interval(mins => $1)', [IDLE_MIN]);   // housekeeping
-    await db.query('INSERT INTO sessions (id,user_id,expires_at) VALUES ($1,$2, now() + make_interval(hours => $3))', [sha(token), userId, ABS_H]);
-    res.cookie(COOKIE, token, Object.assign({ maxAge: ABS_H * 3600 * 1000 }, cookieOpts));
+    await c.query('DELETE FROM sessions WHERE expires_at < now() OR last_seen < now() - make_interval(mins => $1)', [IDLE_MIN]);   // housekeeping
+    await c.query('INSERT INTO sessions (id,user_id,expires_at) VALUES ($1,$2, now() + make_interval(hours => $3))', [sha(token), userId, ABS_H]);
+    return token;
   }
 
   /** Sets req.user = {id,name,role,sessionId} or answers 401. The only thing that decides who is logged in. */
@@ -112,19 +114,34 @@ function createAuth({ db, idleMinutes, absoluteHours, lockoutFailures, lockoutMi
       const ok = u && u.active && u.password_hash ? await verifyPassword(password, u.password_hash) : (await verifyPassword(password, await dummyHash()), false);
       if (!ok) {
         ipFail(ip);
-        if (u && u.active) await db.query(`UPDATE users SET failed_logins = failed_logins + 1,
-            locked_until = CASE WHEN failed_logins + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END WHERE id=$1`, [u.id, LOCK_N, LOCK_MIN]);
+        await db.withTx(async (c) => {                                            // chunk 33e: the counter change and its audit rows commit together
+          let locked = false;
+          if (u && u.active) locked = (await c.query(`UPDATE users SET failed_logins = failed_logins + 1,
+              locked_until = CASE WHEN failed_logins + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END WHERE id=$1
+              RETURNING failed_logins >= $2 AS locked`, [u.id, LOCK_N, LOCK_MIN])).rows[0].locked;
+          const who = { userId: u ? u.id : null, role: u ? u.role : null, ip, username };
+          await auditAuth(c, Object.assign({ action: 'auth.login_failed', detail: { reason: !u ? 'unknown_user' : !u.active ? 'inactive' : 'bad_password' } }, who));
+          if (locked) await auditAuth(c, Object.assign({ action: 'auth.account_locked', detail: { minutes: LOCK_MIN } }, who));
+        });
         return fail(res, 401, 'invalid_credentials', 'Invalid username or password');
       }
-      await db.query('UPDATE users SET failed_logins=0, locked_until=NULL, last_login_at=now() WHERE id=$1', [u.id]);
-      await startSession(res, u.id);
+      const token = await db.withTx(async (c) => {
+        await c.query('UPDATE users SET failed_logins=0, locked_until=NULL, last_login_at=now() WHERE id=$1', [u.id]);
+        const t = await createSession(c, u.id);
+        await auditAuth(c, { action: 'auth.login', userId: u.id, role: u.role, ip });
+        return t;
+      });
+      res.cookie(COOKIE, token, Object.assign({ maxAge: ABS_H * 3600 * 1000 }, cookieOpts));
       res.json({ id: u.id, name: u.name, role: u.role, mustChangePassword: u.must_change_password, allowed: allowedActions(u) });
     } catch (e) { next(e); }
   });
   router.post('/logout', async (req, res, next) => {
     try {
       const tok = parseCookies(req.headers.cookie)[COOKIE];
-      if (tok && /^[0-9a-f]{64}$/.test(tok)) await db.query('DELETE FROM sessions WHERE id=$1', [sha(tok)]);
+      if (tok && /^[0-9a-f]{64}$/.test(tok)) await db.withTx(async (c) => {
+        const gone = (await c.query('DELETE FROM sessions s USING users u WHERE s.id=$1 AND u.id=s.user_id RETURNING u.id, u.role', [sha(tok)])).rows[0];
+        if (gone) await auditAuth(c, { action: 'auth.logout', userId: gone.id, role: gone.role, ip: req.ip || null });   // only a real session is a logout
+      });
       res.clearCookie(COOKIE, cookieOpts); res.status(204).end();
     } catch (e) { next(e); }
   });

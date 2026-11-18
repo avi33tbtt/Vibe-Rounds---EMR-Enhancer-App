@@ -33,7 +33,7 @@ async function signIn(username, pw = PW) {
   return Object.assign(agent, { loginStatus: 200 });
 }
 const maxId = async () => Number((await owner.query('SELECT coalesce(max(id),0) m FROM audit_log')).rows[0].m);
-const since = async (id) => (await owner.query('SELECT * FROM audit_log WHERE id > $1 ORDER BY id', [id])).rows;
+const since = async (id) => (await owner.query("SELECT * FROM audit_log WHERE id > $1 AND action NOT LIKE 'auth.%' ORDER BY id", [id])).rows;   // sign-in events (33e) have their own tests in audit-auth.test.js
 const sessionsOf = async (id) => (await owner.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1', [id])).rows[0].n;
 
 test.before(async () => {
@@ -200,7 +200,7 @@ test('audit rows for user changes never contain a password, a hash or a temporar
   const lt = await signIn('leaktest', secret); await lt.post('/api/password').send({ currentPassword: secret, newPassword: 'yet another passphrase 7' });
   const all = JSON.stringify((await owner.query("SELECT * FROM audit_log WHERE action LIKE 'user.%' OR action = 'password.change'")).rows);
   for (const s of [gen, secret, 'yet another passphrase 7', 'scrypt$', 'password_hash']) assert.ok(!all.includes(s), 'audit must not contain: ' + s);
-  const actions = (await owner.query("SELECT action FROM audit_log WHERE entity_id=$1 ORDER BY id", [id])).rows.map((x) => x.action);
+  const actions = (await owner.query("SELECT action FROM audit_log WHERE entity_id=$1 AND action NOT LIKE 'auth.%' ORDER BY id", [id])).rows.map((x) => x.action);
   assert.deepEqual(actions, ['user.create', 'user.reset_password', 'password.change']);
   // and the answer to a list or role change never carries one either
   const list = JSON.stringify((await a.get('/api/users')).body); assert.ok(!list.includes('scrypt') && !list.includes(secret));

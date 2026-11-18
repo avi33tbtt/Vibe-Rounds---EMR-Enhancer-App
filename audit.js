@@ -54,6 +54,21 @@ async function auditOnce(client, e, minutes) {
   return r.rowCount === 1;
 }
 
+/**
+ * Chunk 33e: sign-in events. Unlike audit(), there is no authenticated request yet, so the caller passes the actor it found itself
+ * (userId from the users table, role from the users table, ip from the request; never from the body). `username` is stored only
+ * when it passes the safe-character check, and no password or hash is ever passed in. Throws if the insert fails.
+ */
+const SAFE_USERNAME = /^[A-Za-z0-9._@-]{1,100}$/;
+async function auditAuth(client, e) {
+  if (!e || !/^auth\.[a-z_]+$/.test(e.action || '')) throw new Error('auditAuth(): an auth.* action is required');
+  const after = Object.assign({}, e.detail || {});
+  if (e.username !== undefined) { if (SAFE_USERNAME.test(String(e.username))) after.username = String(e.username); else after.username_rejected = true; }
+  await client.query(
+    `INSERT INTO audit_log (user_id, role, action, entity, entity_id, after, ip) VALUES ($1, $2, $3, 'user', $4, $5, $6)`,
+    [e.userId || null, e.role || null, e.action, e.userId ? String(e.userId) : null, Object.keys(after).length ? JSON.stringify(after) : null, e.ip || null]);
+}
+
 // ---------- reading the log (chunk 33d, admin only) ----------
 const AUDIT_MAX_PAGE = 200, AUDIT_CSV_MAX = 50000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -102,4 +117,4 @@ const csvLine = (row) => CSV_COLUMNS.map((c) => csvCell(row[c])).join(',');
 const auditOut = (r) => ({ id: String(r.id), at: r.at.toISOString(), userId: r.user_id, username: r.username || null, role: r.role, action: r.action, entity: r.entity,
   entityId: r.entity_id, patientId: r.patient_id, before: r.before, after: r.after, reason: r.reason, ip: r.ip });
 
-module.exports = { audit, auditOnce, auditContext, auditWhere, auditPage, auditOut, csvCell, csvLine, CSV_COLUMNS, AUDIT_MAX_PAGE, AUDIT_CSV_MAX };
+module.exports = { auditAuth, SAFE_USERNAME, audit, auditOnce, auditContext, auditWhere, auditPage, auditOut, csvCell, csvLine, CSV_COLUMNS, AUDIT_MAX_PAGE, AUDIT_CSV_MAX };
