@@ -106,9 +106,22 @@ Every route that changes data writes **one** `audit_log` row on the same databas
 
 ## Versions and entered in error (chunk 33b)
 Nothing a clinician saved is overwritten or removed.
-- **Edits keep the old version.** `PATCH …/rows/:rowId` and `PUT …/values` (with `expectedVersion` above 0) copy the version they replace into `row_versions` / `value_versions` in the same transaction as the change, with the old content, who wrote it and when (`written_by`, `written_at`), and who replaced it, when and why (`replaced_by`, `replaced_at`, `reason`). If saving the old version fails the edit fails. Creating a row or a value keeps nothing because nothing was replaced. Both tables are append-only (no UPDATE, DELETE or TRUNCATE for anyone). Reading them through the API arrives with the History drawer in chunk 33c.
+- **Edits keep the old version.** `PATCH …/rows/:rowId` and `PUT …/values` (with `expectedVersion` above 0) copy the version they replace into `row_versions` / `value_versions` in the same transaction as the change, with the old content, who wrote it and when (`written_by`, `written_at`), and who replaced it, when and why (`replaced_by`, `replaced_at`, `reason`). If saving the old version fails the edit fails. Creating a row or a value keeps nothing because nothing was replaced. Both tables are append-only (no UPDATE, DELETE or TRUNCATE for anyone). Reading them is `GET /cases/:id/history` (chunk 33c1, below); the History drawer in the browser is chunk 33c2.
 - **Entered in error needs a reason** (`POST …/rows/:rowId/error`, 3 to 1000 characters; also enforced by a database CHECK). The row is hidden from `GET /cases/:id`, kept in `case_rows` with its reason, its last active content is kept in `row_versions`, and it cannot be edited or marked again. Doctors and admins can see hidden rows with `include_errors=true` (permission `case.read_errors`); every other role gets 403 for that parameter.
 - **Never DELETE.** There is no route that deletes a case, row, value or note. The database refuses DELETE and TRUNCATE on `cases`, `case_rows`, `case_values`, `case_notes`, `row_versions` and `value_versions` by trigger (even for the owner), and `emr_app` is not granted them. Migration `004_versions.sql` also adds `case_rows.updated_by` and `updated_at` (who wrote the current version).
+
+## Record views and case history (chunk 33c1)
+**Opening a case is logged.** `GET /cases/:id` writes one audit row: `action` `view`, `entity` `case`, the user, role, case id, patient id and IP; `before`, `after` and `reason` are empty, so **no clinical content** is in it. At most one row per user per case per 10 minutes, decided with the database clock; simultaneous requests by one user write one row (an advisory lock held for the transaction). A request that is refused (403), for a missing or malformed case (404), or otherwise fails writes nothing. It is the only clinical read that writes (the admin export in 33d writes its own `audit_export` row).
+**Decision: a view row that cannot be written fails the read.** The answer is `500 server_error` and no case data is sent. For a medical record an unlogged read is treated as worse than an unavailable one. To reverse that, catch the error around `auditOnce` in `api.js` and log it instead.
+
+| Route | Action | Roles | Answer |
+|---|---|---|---|
+| `GET /cases/:id/history` | `case.history` | all | `{caseId, rows, values}`. Reading it writes no audit row. 404 for an unknown or malformed id. |
+
+- `rows`: one entry per row that was ever changed (version above 1): `{rowId, setId, groupId, status, versions}`. `values`: `{key, versions}` for each saved value changed at least once. A row or value nobody changed is not listed (its author and time are already on it).
+- `versions`, **newest first**: `{version, current, row | value, status (rows), writtenBy, writtenByName, writtenAt, replacedBy, replacedByName, replacedAt, reason}`. The first entry is the current version (`current: true`, nothing replaced it yet; for a row entered in error its `reason` is the error reason). Older entries come from `row_versions` / `value_versions`: who wrote that version and when, who replaced it, when, and why.
+- **Entered in error:** a row marked entered in error, every version of it and its reason are returned only to roles with `case.read_errors` (doctor, admin). Other roles get no trace of that row.
+- Only the requested case's rows and values are ever read.
 
 ## Login, logout and session (chunk 32a)
 Mounted before the data routes. The data routes still use the development user until chunk 32b, so they do not require a login yet.
@@ -137,6 +150,7 @@ One table, `permissions.js`: action -> roles. Each route maps to exactly one act
 | `GET /me` | `session.read` | all |
 | `GET /cases` | `case.read` | all |
 | `GET /cases/:id` | `case.read` | all |
+| `GET /cases/:id/history` | `case.history` | all (rows entered in error: doctor, admin only) |
 | `POST /cases` | `case.create` | admin, doctor, nurse |
 | `PATCH /cases/:id` | `case.patch` | admin, doctor, nurse |
 | `POST /cases/:id/rows` | `row.add` | admin, doctor, nurse |
@@ -220,6 +234,6 @@ A user in answers: `{id, username, name, role, active, lastLoginAt, mustChangePa
 
 **Last-admin rule.** `deactivate` and a `role` change away from admin are refused with `409 last_admin` when the target is the only *active admin with a password*, including an admin acting on themselves. The check runs inside the transaction under an advisory lock, so two admins removing each other at the same moment cannot both succeed.
 
-**Audit actions:** `user.create`, `user.deactivate` (with `sessionsEnded`), `user.reactivate`, `user.reset_password` (with `generated: true|false`, `sessionsEnded`), `user.role` (before and after role), `password.change` (with `otherSessionsEnded`). Only username, name, role and active are recorded about the user.
+**Audit actions:** `view` (opening a case, chunk 33c1: no content, throttled), `user.create`, `user.deactivate` (with `sessionsEnded`), `user.reactivate`, `user.reset_password` (with `generated: true|false`, `sessionsEnded`), `user.role` (before and after role), `password.change` (with `otherSessionsEnded`). Only username, name, role and active are recorded about the user.
 
 **Decisions to confirm:** (1) a server-generated temporary password is returned once in the response, because the admin has to hand it over; it is the only place a password leaves the server; (2) resetting a password signs that user out everywhere and clears a lock; (3) the temporary password lets the user sign in, and `mustChangePassword` is reported by login, `GET /me`, `GET /session` (both read it from the database on every call, since chunk 32e2) and the users list, but **the server does not yet block other routes until the password is changed**: the screen enforces it (32e2), a server-side block is chunk 32e3.

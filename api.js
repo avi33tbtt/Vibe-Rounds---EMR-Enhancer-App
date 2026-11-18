@@ -12,7 +12,7 @@ const { z } = require('zod');
 const crypto = require('node:crypto');
 const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied, allowedActions, ACTION_LABELS } = require('./permissions.js');
 const { hashPassword, verifyPassword, passwordProblem } = require('./auth.js');   // chunk 32e1: admin users routes and own-password change
-const { audit, auditContext, auditPage, auditOut, csvLine, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
+const { audit, auditOnce, auditContext, auditPage, auditOut, csvLine, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
 
 class ApiError extends Error {
   constructor(status, code, message, extra) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -21,6 +21,7 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res)).catch(nex
 
 // ---------- shared validators ----------
 const MAX_ROWS_PER_GROUP = 500;
+const VIEW_THROTTLE_MIN = 10;                                                      // chunk 33c1: one 'view' audit row per user per case per this many minutes
 const uuid = z.string().uuid();
 const ident = z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/);                  // set, field, group, rule ids
 const keyRe = /^[A-Za-z0-9_.-]{1,100}\/(@?[A-Za-z0-9_.-]{1,100})$/;        // setId/fieldId, setId/@group, setId/__ref
@@ -414,7 +415,43 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
     if (wantErrors && !can(req.actor, 'case.read_errors')) return denied(res, req.actor, 'see rows entered in error', 'case.read_errors');   // doctors and admins only
     const c = await loadCase(db, idParam(req.params.id), { includeErrors: wantErrors });
     if (!c) throw new ApiError(404, 'not_found', 'Case not found');
+    // Chunk 33c1: opening a case is logged (who, which patient, which case; never any content), at most once per user per case per VIEW_THROTTLE_MIN minutes
+    // on the database clock. A refused or missing case never reaches this line. DECISION: if the view row cannot be written the read FAILS (500, no case data
+    // sent): for a medical record, an unlogged read is worse than an unavailable one.
+    await db.withTx((cl) => auditOnce(cl, { action: 'view', entity: 'case', entity_id: c.id, case_id: c.id }, VIEW_THROTTLE_MIN));
     res.json(c);
+  }));
+  // Chunk 33c1: the old versions of rows and values (row_versions, value_versions) plus the current one, newest first. Only rows and values that were ever changed
+  // (version above 1) are listed. Rows entered in error, and every version of them, are for case.read_errors holders (doctor, admin) only. Reading this writes no audit row.
+  r.get('/cases/:id/history', wrap(async (req, res) => {
+    const id = idParam(req.params.id), seeErrors = can(req.actor, 'case.read_errors');
+    if (!(await db.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
+    const hide = seeErrors ? '' : " AND cr.status='active'";
+    const [cur, rv, cv, vv] = await Promise.all([
+      db.query(`SELECT cr.*, COALESCE(cr.updated_by, cr.entered_by) AS w_by, COALESCE(cr.updated_at, cr.entered_at) AS w_at, u.name AS w_name
+                  FROM case_rows cr LEFT JOIN users u ON u.id = COALESCE(cr.updated_by, cr.entered_by)
+                 WHERE cr.case_id=$1 AND cr.version > 1${hide} ORDER BY cr.entered_at, cr.id`, [id]),
+      db.query(`SELECT v.*, w.name AS w_name, p.name AS r_name FROM row_versions v LEFT JOIN users w ON w.id=v.written_by LEFT JOIN users p ON p.id=v.replaced_by
+                 WHERE v.case_id=$1 AND v.row_id IN (SELECT cr.id FROM case_rows cr WHERE cr.case_id=$1${hide})${seeErrors ? '' : " AND v.status='active'"}
+                 ORDER BY v.version DESC`, [id]),
+      db.query(`SELECT c.*, u.name AS w_name FROM case_values c LEFT JOIN users u ON u.id=c.updated_by WHERE c.case_id=$1 AND c.version > 1 ORDER BY c.key`, [id]),
+      db.query(`SELECT v.*, w.name AS w_name, p.name AS r_name FROM value_versions v LEFT JOIN users w ON w.id=v.written_by LEFT JOIN users p ON p.id=v.replaced_by
+                 WHERE v.case_id=$1 ORDER BY v.version DESC`, [id]),
+    ]);
+    const old = (v, extra) => ({ version: v.version, current: false, ...extra, writtenBy: v.written_by, writtenByName: v.w_name, writtenAt: iso(v.written_at),
+      replacedBy: v.replaced_by, replacedByName: v.r_name, replacedAt: iso(v.replaced_at), reason: v.reason });
+    const byRow = new Map(), byKey = new Map();
+    for (const v of rv.rows) (byRow.get(v.row_id) || byRow.set(v.row_id, []).get(v.row_id)).push(old(v, { row: v.row, status: v.status }));
+    for (const v of vv.rows) (byKey.get(v.key) || byKey.set(v.key, []).get(v.key)).push(old(v, { value: v.value }));
+    res.json({
+      caseId: id,
+      rows: cur.rows.map((r) => ({ rowId: r.id, setId: r.set_id, groupId: r.group_id, status: r.status,
+        versions: [{ version: r.version, current: true, row: r.row, status: r.status, writtenBy: r.w_by, writtenByName: r.w_name, writtenAt: iso(r.w_at),
+          replacedBy: null, replacedByName: null, replacedAt: null, reason: r.status === 'entered_in_error' ? r.error_reason : null }, ...(byRow.get(r.id) || [])] })),
+      values: cv.rows.map((v) => ({ key: v.key,
+        versions: [{ version: v.version, current: true, value: v.value, writtenBy: v.updated_by, writtenByName: v.w_name, writtenAt: iso(v.updated_at),
+          replacedBy: null, replacedByName: null, replacedAt: null, reason: null }, ...(byKey.get(v.key) || [])] })),
+    });
   }));
   r.post('/cases', wrap(async (req, res) => {
     const b = parse(S.caseCreate, req.body);

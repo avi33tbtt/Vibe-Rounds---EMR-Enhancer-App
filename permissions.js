@@ -18,6 +18,7 @@ const CLIN = ['admin', 'doctor'];
 const ACTIONS = {
   // reading
   'session.read': ALL, 'case.read': ALL, 'ref.read': ALL,
+  'case.history': ALL,                               // GET /cases/:id/history: old versions per row and value (chunk 33c1); rows entered in error need case.read_errors too
   // charting
   'case.create': ['admin', 'doctor', 'nurse'],
   'case.patient': ['admin', 'doctor', 'nurse'],      // patient banner details (demo fields until chunk 34)
@@ -52,7 +53,7 @@ ACTIONS['case.patch'] = ROLES.filter((r) => Object.values(CASE_FIELD_ACTION).som
 // Plain-words label for each action, used in the 403 sentence the screen shows (chunk 32d2). A missing label falls back to the action code.
 const ACTION_LABELS = {
   'case.create': 'create cases', 'case.patient': 'edit patient banner details', 'case.pin': 'change the quick bar', 'alert.ack': 'acknowledge alerts',
-  'case.read_errors': 'see rows entered in error', 'case.narrative': 'edit the narrative', 'case.apply': 'apply sets or pathways', 'case.patch': 'change this case',
+  'case.read_errors': 'see rows entered in error', 'case.history': 'see case history', 'case.narrative': 'edit the narrative', 'case.apply': 'apply sets or pathways', 'case.patch': 'change this case',
   'row.add': 'add readings', 'row.amend_own': 'amend readings', 'row.amend_any': 'amend other people\'s readings', 'value.write': 'save these values',
   'note.write': 'write notes', 'note.sign': 'sign notes', 'set.write': 'edit element sets and pathways', 'code.write': 'edit verified codes', 'binding.write': 'edit code bindings',
   'rule.write': 'edit alert rules', 'rule.approve': 'approve alert rules', 'protocol.write': 'edit protocols', 'protocol.approve': 'verify protocols',
@@ -67,7 +68,7 @@ const CARE_ONLY_ROLES = ['nurse'];
 /** Every route, keyed 'METHOD /path' exactly as registered in api.js. */
 const ROUTE_ACTIONS = {
   'GET /me': 'session.read',
-  'GET /cases': 'case.read', 'GET /cases/:id': 'case.read', 'POST /cases': 'case.create', 'PATCH /cases/:id': 'case.patch',
+  'GET /cases': 'case.read', 'GET /cases/:id': 'case.read', 'GET /cases/:id/history': 'case.history', 'POST /cases': 'case.create', 'PATCH /cases/:id': 'case.patch',
   'POST /cases/:id/rows': 'row.add', 'PATCH /cases/:id/rows/:rowId': 'row.amend_own', 'POST /cases/:id/rows/:rowId/error': 'row.amend_own',
   'PUT /cases/:id/values': 'value.write',
   'POST /cases/:id/notes': 'note.write', 'PATCH /cases/:id/notes/:nid': 'note.write', 'POST /cases/:id/notes/:nid/sign': 'note.sign', 'POST /cases/:id/notes/:nid/amend': 'note.write',

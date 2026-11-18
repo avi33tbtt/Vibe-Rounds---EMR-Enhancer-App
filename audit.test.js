@@ -111,15 +111,17 @@ test('every write route writes exactly one audit row, attributed to the logged-i
   assert.equal((await since(m))[0].patient_id, pid);
 });
 
-test('reads, refused and conflicting requests write no audit row and no data', async () => {
+test('reads (except opening a case, chunk 33c1), refused and conflicting requests write no audit row and no data', async () => {
   const c = (await api().post('/api/cases').send({ narrative: 'keep' })).body, m = await maxId();
-  await api().get('/api/cases'); await api().get('/api/cases/' + c.id); await api().get('/api/rules');
+  await api().get('/api/cases'); await api().get(`/api/cases/${c.id}/history`); await api().get('/api/rules');
   assert.equal((await api().post('/api/import/dry-run').send({ cases: [mkCase('dry-' + c.id)] })).status, 200);
   assert.equal((await api().patch('/api/element-sets/user.t').send({})).status, 405);
   assert.equal((await api().patch('/api/cases/' + c.id).send({ expectedVersion: 99, narrative: 'lost' })).status, 409);       // stale version
   assert.equal((await api().post('/api/element-sets').set('x-test-role', 'nurse').send({ setId: 'n.t', kind: 'custom', body: {} })).status, 403);   // not allowed
   assert.equal((await api().post('/api/cases').send({ user_id: crypto.randomUUID(), narrative: 'forged' })).status, 400);       // actor cannot come from the body
   assert.deepEqual(await since(m), []);
+  assert.equal((await api().get('/api/cases/' + c.id)).status, 200);                                                           // the one read that writes: a 'view' row (see versions.test.js)
+  assert.deepEqual((await since(m)).map((x) => x.action), ['view']);
   assert.equal((await owner.query('SELECT narrative FROM cases WHERE id=$1', [c.id])).rows[0].narrative, 'keep');
 });
 

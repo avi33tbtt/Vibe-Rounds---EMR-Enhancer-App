@@ -155,3 +155,102 @@ test('the old version is saved in the same transaction: if saving it fails the e
   }
   assert.equal((await as('admin').patch(`${url}/rows/${r.id}`, { expectedVersion: 1, row: { a: 2 } })).status, 200);   // the trigger was the cause
 });
+
+// ---------- chunk 33c1: record-view logging and the history route ----------
+const viewRows = (cid, uid) => db.query(`SELECT * FROM audit_log WHERE action='view' AND entity='case' AND entity_id=$1 ${uid ? 'AND user_id=$2' : ''} ORDER BY id`, uid ? [cid, uid] : [cid]).then((r) => r.rows);
+const noisy = async (fn) => { const log = console.error; console.error = () => {}; try { return await fn(); } finally { console.error = log; } };
+
+test('33c1: opening a case writes ONE view row (user, role, case, patient, no content); the same user again within 10 minutes writes none; another user writes their own', async () => {
+  const c = (await as('admin').post('/api/cases', { narrative: 'SECRET-NARRATIVE-33c1' })).body;
+  assert.deepEqual(await viewRows(c.id), []);                                                  // creating a case is case.create, not a view
+  assert.equal((await as('nurse').get('/api/cases/' + c.id)).status, 200);
+  assert.equal((await as('nurse').get('/api/cases/' + c.id)).status, 200);
+  const n = await viewRows(c.id, actors.nurse.id);
+  assert.equal(n.length, 1); assert.equal(n[0].role, 'nurse'); assert.equal(n[0].entity_id, c.id); assert.equal(n[0].patient_id, (await db.query('SELECT patient_id FROM cases WHERE id=$1', [c.id])).rows[0].patient_id);
+  assert.equal(n[0].before, null); assert.equal(n[0].after, null); assert.equal(n[0].reason, null);
+  assert.ok(!JSON.stringify(n[0]).includes('SECRET-NARRATIVE-33c1'), 'no clinical content in the row');
+  assert.equal((await as('doctor').get('/api/cases/' + c.id)).status, 200);
+  assert.equal((await viewRows(c.id, actors.doctor.id)).length, 1); assert.equal((await viewRows(c.id)).length, 2);
+});
+
+test('33c1: the throttle uses the database clock: a view 9 minutes ago still suppresses, one 11 minutes ago does not', async () => {
+  const c = await newCase(), ins = (mins) => db.query(`INSERT INTO audit_log (user_id, role, action, entity, entity_id, at) VALUES ($1,'viewer','view','case',$2, now() - make_interval(mins => $3))`, [actors.admin.id, c.id, mins]);
+  await ins(9); await as('admin').get('/api/cases/' + c.id); assert.equal((await viewRows(c.id, actors.admin.id)).length, 1, 'inside the window: nothing new');
+  const d = await newCase(); await db.query(`INSERT INTO audit_log (user_id, role, action, entity, entity_id, at) VALUES ($1,'admin','view','case',$2, now() - interval '11 minutes')`, [actors.admin.id, d.id]);
+  await as('admin').get('/api/cases/' + d.id); assert.equal((await viewRows(d.id, actors.admin.id)).length, 2, 'outside the window: a new row');
+});
+
+test('33c1: simultaneous opens by one user write exactly one row', async () => {
+  const c = await newCase();
+  const rs = await Promise.all(Array.from({ length: 6 }, () => as('doctor').get('/api/cases/' + c.id)));
+  assert.ok(rs.every((r) => r.status === 200)); assert.equal((await viewRows(c.id, actors.doctor.id)).length, 1);
+});
+
+test('33c1: a refused, missing or malformed read writes nothing', async () => {
+  const c = await newCase(), before = Number((await db.query('SELECT coalesce(max(id),0) m FROM audit_log')).rows[0].m);
+  assert.equal((await as('nurse').get(`/api/cases/${c.id}?include_errors=true`)).status, 403);        // refused: a nurse may not ask for error rows
+  assert.equal((await as('admin').get('/api/cases/' + crypto.randomUUID())).status, 404);
+  assert.equal((await as('admin').get('/api/cases/not-a-uuid')).status, 404);
+  assert.equal((await request(app).get('/api/cases/' + c.id).set('x-test-role', 'admin')).status, 200);   // control: this one is allowed and does write
+  const rows = (await db.query('SELECT action FROM audit_log WHERE id > $1 ORDER BY id', [before])).rows.map((r) => r.action);
+  assert.deepEqual(rows, ['view']);
+});
+
+test('33c1: if the view row cannot be written the read FAILS and no case data is sent', async () => {
+  const c = (await as('admin').post('/api/cases', { narrative: 'SECRET-FAIL-33c1' })).body;
+  await db.query(`CREATE FUNCTION fail_view() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='view' THEN RAISE EXCEPTION 'audit down'; END IF; RETURN NEW; END $$`);
+  await db.query('CREATE TRIGGER fail_view_t BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION fail_view()');
+  try {
+    const r = await noisy(() => as('nurse').get('/api/cases/' + c.id));
+    assert.equal(r.status, 500); assert.ok(!JSON.stringify(r.body).includes('SECRET-FAIL-33c1')); assert.deepEqual(await viewRows(c.id), []);
+    assert.equal((await as('nurse').get(`/api/cases/${c.id}/history`)).status, 200, 'history is not a view and does not depend on the view row');
+  } finally { await db.query('DROP TRIGGER fail_view_t ON audit_log'); await db.query('DROP FUNCTION fail_view()'); }
+  assert.equal((await as('nurse').get('/api/cases/' + c.id)).status, 200);
+});
+
+async function historyCase() {
+  const c = await newCase(), url = `/api/cases/${c.id}`;
+  const r1 = (await as('nurse').post(url + '/rows', { setId: 'care.t', groupId: 'vitals', row: { hr: '80' } })).body;
+  assert.equal((await as('doctor').patch(`${url}/rows/${r1.id}`, { expectedVersion: 1, row: { hr: '90' }, reason: 'transcription error' })).status, 200);
+  const r2 = (await as('nurse').post(url + '/rows', { setId: 'care.t', groupId: 'vitals', row: { hr: '300' } })).body;
+  assert.equal((await as('doctor').post(`${url}/rows/${r2.id}/error`, { expectedVersion: 1, reason: 'wrong patient 33c1' })).status, 200);
+  const r3 = (await as('nurse').post(url + '/rows', { setId: 'care.t', groupId: 'vitals', row: { hr: '70' } })).body;     // never changed: not in the history
+  assert.equal((await as('doctor').put(url + '/values', { key: 'care.t/f', value: 1, expectedVersion: 0 })).status, 200);
+  assert.equal((await as('admin').put(url + '/values', { key: 'care.t/f', value: 2, expectedVersion: 1 })).status, 200);
+  return { c, r1, r2, r3 };
+}
+
+test('33c1: history lists each changed row and value, newest first, with who, when and why', async () => {
+  const { c, r1, r2, r3 } = await historyCase(), h = (await as('doctor').get(`/api/cases/${c.id}/history`)); assert.equal(h.status, 200);
+  assert.equal(h.body.caseId, c.id);
+  assert.deepEqual(h.body.rows.map((r) => r.rowId).sort(), [r1.id, r2.id].sort(), 'a row nobody changed is not listed');
+  const a = h.body.rows.find((r) => r.rowId === r1.id);
+  assert.deepEqual(a.versions.map((v) => [v.version, v.current, v.row.hr]), [[2, true, '90'], [1, false, '80']]);
+  assert.equal(a.versions[0].writtenBy, actors.doctor.id); assert.equal(a.versions[0].writtenByName, 'Ver doctor'); assert.ok(!Number.isNaN(Date.parse(a.versions[0].writtenAt)));
+  assert.equal(a.versions[1].writtenBy, actors.nurse.id); assert.equal(a.versions[1].replacedBy, actors.doctor.id); assert.equal(a.versions[1].reason, 'transcription error'); assert.ok(a.versions[1].replacedAt);
+  const e = h.body.rows.find((r) => r.rowId === r2.id);
+  assert.equal(e.status, 'entered_in_error'); assert.equal(e.versions[0].reason, 'wrong patient 33c1'); assert.equal(e.versions[0].writtenBy, actors.doctor.id); assert.equal(e.versions[1].row.hr, '300');
+  assert.equal(h.body.values.length, 1); assert.equal(h.body.values[0].key, 'care.t/f');
+  assert.deepEqual(h.body.values[0].versions.map((v) => [v.version, v.current, v.value, v.writtenBy]), [[2, true, 2, actors.admin.id], [1, false, 1, actors.doctor.id]]);
+  assert.equal((await as('admin').get(`/api/cases/${c.id}/history`)).body.rows.length, 2, 'admin sees entered-in-error rows too');
+});
+
+test('33c1: rows entered in error, their versions and their reasons are for doctor and admin only', async () => {
+  const { c, r1, r2 } = await historyCase();
+  for (const role of ['nurse', 'viewer', 'informatician']) {
+    const g = await as(role).get(`/api/cases/${c.id}/history`); assert.equal(g.status, 200, role);
+    assert.deepEqual(g.body.rows.map((r) => r.rowId), [r1.id], role);
+    const txt = JSON.stringify(g.body); assert.ok(!txt.includes(r2.id) && !txt.includes('wrong patient 33c1') && !txt.includes('300'), role + ': nothing of the hidden row');
+    assert.equal(g.body.values.length, 1, role);
+  }
+});
+
+test('33c1: history never returns another case; unknown or malformed ids are 404; reading it writes no audit row', async () => {
+  const A = await historyCase(), B = await historyCase(), m = Number((await db.query('SELECT coalesce(max(id),0) m FROM audit_log')).rows[0].m);
+  const ha = (await as('admin').get(`/api/cases/${A.c.id}/history`)).body, hb = (await as('admin').get(`/api/cases/${B.c.id}/history`)).body;
+  const idsA = ha.rows.map((r) => r.rowId), idsB = hb.rows.map((r) => r.rowId);
+  assert.ok(idsA.every((i) => !idsB.includes(i)) && idsA.length === 2 && idsB.length === 2); assert.ok(!JSON.stringify(ha).includes(B.r1.id) && !JSON.stringify(hb).includes(A.r1.id));
+  assert.equal((await as('admin').get(`/api/cases/${crypto.randomUUID()}/history`)).status, 404);
+  assert.equal((await as('admin').get('/api/cases/not-a-uuid/history')).status, 404);
+  assert.equal(Number((await db.query('SELECT coalesce(max(id),0) m FROM audit_log')).rows[0].m), m, 'no audit row from reading history');
+});

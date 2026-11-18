@@ -35,6 +35,25 @@ async function audit(client, e) {
       json(e.before), json(e.after), e.reason || null, ctx.ip]);
 }
 
+/**
+ * Chunk 33c1: like audit(), but writes nothing if the same user already has the same action on the same entity within `minutes` (database clock).
+ * Used for record views. A per-(user, action, entity) advisory lock, held to the end of the transaction, makes two simultaneous requests write ONE row.
+ * Returns true when a row was written. Throws (so the caller's read fails) if the insert cannot be done.
+ */
+async function auditOnce(client, e, minutes) {
+  const ctx = als.getStore();
+  if (!ctx || !ctx.userId) throw new Error('auditOnce(): no authenticated request context');
+  if (!e || !e.action || !e.entity || e.entity_id == null || !(minutes > 0)) throw new Error('auditOnce(): action, entity, entity_id and minutes are required');
+  const eid = String(e.entity_id);
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [[ctx.userId, e.action, e.entity, eid].join('|')]);
+  const r = await client.query(
+    `INSERT INTO audit_log (user_id, role, action, entity, entity_id, patient_id, ip)
+     SELECT $1, $2, $3, $4, $5, COALESCE($6::uuid, (SELECT patient_id FROM cases WHERE id = $7::uuid)), $8
+      WHERE NOT EXISTS (SELECT 1 FROM audit_log WHERE user_id = $1 AND action = $3 AND entity = $4 AND entity_id = $5 AND at > now() - make_interval(mins => $9))`,
+    [ctx.userId, ctx.role, e.action, e.entity, eid, e.patient_id || null, e.case_id || null, ctx.ip, minutes]);
+  return r.rowCount === 1;
+}
+
 // ---------- reading the log (chunk 33d, admin only) ----------
 const AUDIT_MAX_PAGE = 200, AUDIT_CSV_MAX = 50000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -83,4 +102,4 @@ const csvLine = (row) => CSV_COLUMNS.map((c) => csvCell(row[c])).join(',');
 const auditOut = (r) => ({ id: String(r.id), at: r.at.toISOString(), userId: r.user_id, username: r.username || null, role: r.role, action: r.action, entity: r.entity,
   entityId: r.entity_id, patientId: r.patient_id, before: r.before, after: r.after, reason: r.reason, ip: r.ip });
 
-module.exports = { audit, auditContext, auditWhere, auditPage, auditOut, csvCell, csvLine, CSV_COLUMNS, AUDIT_MAX_PAGE, AUDIT_CSV_MAX };
+module.exports = { audit, auditOnce, auditContext, auditWhere, auditPage, auditOut, csvCell, csvLine, CSV_COLUMNS, AUDIT_MAX_PAGE, AUDIT_CSV_MAX };
