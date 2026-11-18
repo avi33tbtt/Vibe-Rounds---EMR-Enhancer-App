@@ -13,6 +13,7 @@ const crypto = require('node:crypto');
 const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied, allowedActions, ACTION_LABELS } = require('./permissions.js');
 const { hashPassword, verifyPassword, passwordProblem } = require('./auth.js');   // chunk 32e1: admin users routes and own-password change
 const { audit, auditOnce, auditContext, auditPage, auditOut, csvLine, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
+const { mountPatients } = require('./patients.js');                        // chunk 34a: patients, encounters, link a case to them
 
 class ApiError extends Error {
   constructor(status, code, message, extra) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -1019,6 +1020,9 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
       'X-Audit-Rows': String(out.rows.length), 'X-Audit-Truncated': out.truncated ? 'true' : 'false' });
     res.send(CSV_COLUMNS.join(',') + '\r\n' + out.rows.map(csvLine).join('\r\n') + (out.rows.length ? '\r\n' : ''));
   }));
+
+  // ================= patients, encounters, case link (chunk 34a; routes live in patients.js) =================
+  mountPatients(r, { db, ApiError, wrap, parse, idParam, iso, audit, auditOnce, can, loadCase });
 
   // consistent errors (server.js also has a final handler for non-API paths)
   // eslint-disable-next-line no-unused-vars

@@ -78,6 +78,18 @@ test('every write route writes exactly one audit row, attributed to the logged-i
     ['PUT /protocols/:setId', 'protocol.save', 200, () => api().put('/api/protocols/care.t').send({ body: {}, expectedVersion: 0 })],
     ['POST /protocols/:setId/approve', 'protocol.approve', 200, () => P('/api/protocols/care.t/approve', { expectedVersion: 1 })],
     ['PUT /prefs/:key', 'pref.set', 200, () => api().put('/api/prefs/theme').send({ value: 'dark' })],
+    ['POST /patients', 'patient.create', 201, async () => { const r = await P('/api/patients', { name: 'Aud Patient', sex: 'female', dateOfBirth: '1990-01-01' }); st.p = r.body; return r; }],
+    ['PATCH /patients/:id', 'patient.update', 200, () => api().patch(`/api/patients/${st.p.id}`).send({ expectedVersion: 1, reason: 'phone added', phone: '+91 98200 11111' })],
+    ['POST /patients/:id/encounters', 'encounter.create', 201, async () => { const r = await P(`/api/patients/${st.p.id}/encounters`, { type: 'admission' }); st.enc = r.body; return r; }],
+    ['PATCH /encounters/:id', 'encounter.update', 200, () => api().patch(`/api/encounters/${st.enc.id}`).send({ expectedVersion: 1, ward: 'W1', bed: 'B1' })],
+    ['POST /cases/:id/link', 'case.link', 200, async () => P(c() + '/link', { expectedVersion: (await owner.query('SELECT version FROM cases WHERE id=$1', [st.c.id])).rows[0].version, patientId: st.p.id, encounterId: st.enc.id })],
+    ['POST /encounters/:id/close', 'encounter.close', 200, () => P(`/api/encounters/${st.enc.id}/close`, { expectedVersion: 2 })],
+    ['POST /encounters/:id/cancel', 'encounter.cancel', 200, async () => {                    // a second, unlinked encounter made straight in the database (not audited), then cancelled through the route
+      const e = (await owner.query("INSERT INTO encounters (patient_id, type) VALUES ($1, 'OPD') RETURNING id", [st.p.id])).rows[0];
+      return P(`/api/encounters/${e.id}/cancel`, { expectedVersion: 1, reason: 'opened by mistake' });
+    }],
+    ['POST /patients/:id/merge', 'patient.merge', 200, async () => { st.keep = (await owner.query("INSERT INTO patients (mrn, name) VALUES ('M-aud-keep', 'Keep') RETURNING id")).rows[0].id; return P(`/api/patients/${st.p.id}/merge`, { intoPatientId: st.keep, reason: 'duplicate record' }); }],
+    ['POST /patients/:id/unmerge', 'patient.unmerge', 200, () => P(`/api/patients/${st.p.id}/unmerge`, { reason: 'merged by mistake' })],
     ['POST /users', 'user.create', 201, async () => { const r = await P('/api/users', { username: 'aud-new-' + imp, name: 'Aud New', role: 'nurse' }); st.u = r.body.user; return r; }],
     ['POST /users/:id/role', 'user.role', 200, () => P(`/api/users/${st.u.id}/role`, { role: 'viewer' })],
     ['POST /users/:id/reset-password', 'user.reset_password', 200, () => P(`/api/users/${st.u.id}/reset-password`, {})],

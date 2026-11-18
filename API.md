@@ -1,4 +1,4 @@
-# EMR Enhancer API (chunks 28 to 32c)
+# EMR Enhancer API (chunks 28 to 34a)
 
 Base path `/api`. JSON in, JSON out. Synthetic data only; not for clinical use.
 
@@ -237,3 +237,31 @@ A user in answers: `{id, username, name, role, active, lastLoginAt, mustChangePa
 **Audit actions:** `view` (opening a case, chunk 33c1: no content, throttled), `user.create`, `user.deactivate` (with `sessionsEnded`), `user.reactivate`, `user.reset_password` (with `generated: true|false`, `sessionsEnded`), `user.role` (before and after role), `password.change` (with `otherSessionsEnded`). Only username, name, role and active are recorded about the user.
 
 **Decisions to confirm:** (1) a server-generated temporary password is returned once in the response, because the admin has to hand it over; it is the only place a password leaves the server; (2) resetting a password signs that user out everywhere and clears a lock; (3) the temporary password lets the user sign in, and `mustChangePassword` is reported by login, `GET /me`, `GET /session` (both read it from the database on every call, since chunk 32e2) and the users list, but **the server does not yet block other routes until the password is changed**: the screen enforces it (32e2), a server-side block is chunk 32e3.
+
+## Patients, encounters and linking a case (chunk 34a)
+Routes live in `patients.js` and are mounted by `api.js`. Migration `005_patients.sql`. All need a session and, for writes, the CSRF header. Domain errors are `409` or `422`, never `403` (a `403` always means the role is not allowed).
+
+**Permissions.** `patient.read` (admin, doctor, nurse, viewer; an informatician does not see identities), `patient.write` (admin, doctor, nurse), `patient.merge` (admin), `encounter.write` (admin, doctor, nurse), `case.link` (admin, doctor, nurse).
+
+A patient in answers: `{id, mrn, name, sex, dateOfBirth, ageEstimated, active, mergedInto, hasNationalId, version}`. The detail route adds `phone`, `createdAt`, `updatedAt`, and `nationalId` only for roles with `patient.write`. Lists never carry phone or national id.
+
+| Route | Body or query | What it does |
+|---|---|---|
+| `GET /patients?q=&limit=` | `q` 2 to 100 characters, `limit` up to 50 (default 20) | Search by name (part of it), MRN prefix (3+ digits) or phone digits (4+ digits). Merged records are not listed. `%` and `_` are plain text. |
+| `GET /patients/:id` | | One patient. Writes a throttled `view` audit row (one per user per patient per 10 minutes); if the row cannot be written the read fails. A merged record answers with `mergedInto`. |
+| `POST /patients` | `{name, sex, dateOfBirth \| ageYears, phone?, nationalId?, confirmDifferent?}` | `201`. The MRN is made by the server: 7 digits from a sequence plus a Luhn check digit (never from the client; a sent `mrn` is a 400). `ageYears` is an estimate: stored as a date of birth with `ageEstimated: true`. Duplicate check: same name (ignoring case and extra spaces) and birth date (an estimated age matches a birth year within 2), or the same phone (digits only, 6+). A match answers `409 possible_duplicate` with `candidates: [{..., matchedOn: ['name_and_birth'\|'phone']}]`; send the same body with `confirmDifferent: true` to register anyway. Simultaneous registrations of the same name or phone are serialised, so exactly one gets through without confirming. |
+| `PATCH /patients/:id` | `{expectedVersion, reason, name?, sex?, dateOfBirth \| ageYears?, phone? (null clears), nationalId? (null clears)}` | A correction. A reason is always required. `409 conflict` with `current` on a stale version; `409 patient_merged` / `patient_inactive`. |
+| `POST /patients/:id/merge` | `{intoPatientId, reason}` | Admin. The record in the URL (the duplicate) is pointed at `intoPatientId` (the one kept): `merged_into` set, `active=false`. **Nothing is deleted or moved**: cases and encounters stay on the duplicate, and `GET /patients/:id/encounters` of the kept record also lists the duplicate's (`fromMergedPatient: true`). Both rows are locked in id order, so A into B and B into A at once cannot both win. `400` into itself, `409 already_merged`, `409 target_unusable`, `422 target_not_found`. |
+| `POST /patients/:id/unmerge` | `{reason}` | Admin. Undoes a merge (`409 not_merged` otherwise). |
+| `GET /patients/:id/encounters` | | Newest first, up to 200. |
+| `POST /patients/:id/encounters` | `{type: admission\|OPD\|emergency, startAt?, ward?, bed?, attendingId?}` | `201`. A bed needs a ward. `startAt` cannot be more than 5 minutes ahead. The attending must be an active doctor or admin (`422 attending_invalid`). `409 bed_occupied`: one open encounter per ward and bed (ignoring case and end spaces). `409 patient_merged` / `patient_inactive`. |
+| `PATCH /encounters/:id` | `{expectedVersion, ward?, bed?, attendingId?}` (null clears) | Move or reassign an **open** encounter (`409 encounter_not_open` otherwise). `409 conflict` with `current`; `409 bed_occupied`. |
+| `POST /encounters/:id/close` | `{expectedVersion, endAt?}` | Sets `closed` and the end time (default now; not before the start, not in the future). Frees the bed. |
+| `POST /encounters/:id/cancel` | `{expectedVersion, reason}` | For an encounter opened by mistake. `409 encounter_in_use` when a case is linked (close it instead). Frees the bed. |
+| `POST /cases/:id/link` | `{expectedVersion, patientId, encounterId?}` | Attach a case to a patient and, optionally, one of that patient's **open** encounters (`422 encounter_mismatch`, `409 encounter_not_open`). Answers `{id, patientId, encounterId, version}`; the case version moves by one. A case already linked to a patient cannot be moved to another (`409 patient_locked`): a duplicate is fixed by a merge. `409 conflict` with `current` (the case) on a stale version. `GET /cases/:id` already returns `patientId` and `encounterId`. |
+
+**Audit actions** (each in the same transaction as the change): `patient.create` (with `confirmedDifferentFrom` when confirmed), `patient.update` (before and after, reason), `patient.merge` and `patient.unmerge` (reason; the merge row records how many cases and encounters were left on the duplicate), `encounter.create`, `encounter.update`, `encounter.close`, `encounter.cancel`, `case.link`, and `view` on entity `patient`. The audit log is append-only and cannot be erased, so it holds name, sex, date of birth and phone of a patient but **never the national id** (only `nationalIdSet` or `nationalIdChanged`).
+
+**Never deleted:** patients and encounters have no DELETE route, a trigger refuses DELETE and TRUNCATE for everyone, and the app database role has no such right.
+
+**Decisions to confirm:** (1) an informatician cannot search or open patients (content review does not need identities); (2) a nurse may register and correct patients (a correction needs a reason); (3) merging moves nothing and reads follow the pointer, which is reversible but means chunks 34b to 37 must follow `mergedInto`; (4) an estimated age is stored as a date of birth with `ageEstimated: true`; (5) the attending must be a doctor or admin; (6) searches are not written to the audit log (opening a record is); (7) one open encounter per bed is enforced for every encounter type that has a ward and bed.

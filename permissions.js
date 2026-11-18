@@ -18,12 +18,17 @@ const CLIN = ['admin', 'doctor'];
 const ACTIONS = {
   // reading
   'session.read': ALL, 'case.read': ALL, 'ref.read': ALL,
+  'patient.read': ['admin', 'doctor', 'nurse', 'viewer'],   // search and open patient records (chunk 34a); an informatician reviews content and does not need identities
   'case.history': ALL,                               // GET /cases/:id/history: old versions per row and value (chunk 33c1); rows entered in error need case.read_errors too
   // charting
   'case.create': ['admin', 'doctor', 'nurse'],
   'case.patient': ['admin', 'doctor', 'nurse'],      // patient banner details (demo fields until chunk 34)
   'case.pin': ['admin', 'doctor', 'nurse'],          // quick bar
   'alert.ack': ['admin', 'doctor', 'nurse'],         // acknowledge an alert (alertLog)
+  'patient.write': ['admin', 'doctor', 'nurse'],     // register and correct patients (a correction needs a reason)
+  'patient.merge': ['admin'],                        // merge and unmerge duplicate records
+  'encounter.write': ['admin', 'doctor', 'nurse'],   // start, move, close or cancel an encounter
+  'case.link': ['admin', 'doctor', 'nurse'],         // attach a case to a patient and an encounter
   'case.read_errors': CLIN,                          // GET /cases/:id?include_errors=true: see rows marked entered in error (chunk 33b)
   'case.narrative': CLIN,
   'case.apply': CLIN,                                // applied sets and pathways
@@ -59,6 +64,7 @@ const ACTION_LABELS = {
   'rule.write': 'edit alert rules', 'rule.approve': 'approve alert rules', 'protocol.write': 'edit protocols', 'protocol.approve': 'verify protocols',
   'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'audit.read': 'read the audit log', 'user.manage': 'manage users', 'password.change': 'change this password',
   'content.review': 'review content', 'package.install': 'install packages',
+  'patient.read': 'see patient records', 'patient.write': 'register or correct patients', 'patient.merge': 'merge patients', 'encounter.write': 'change encounters', 'case.link': 'link a case to a patient',
 };
 /** The actions a user may take, in the order of ACTIONS. Sent with GET /me so the screen can hide controls; the server stays the control. */
 const allowedActions = (user) => Object.keys(ACTIONS).filter((a) => can(user, a));
@@ -86,6 +92,10 @@ const ROUTE_ACTIONS = {
   'GET /users': 'user.manage', 'POST /users': 'user.manage', 'POST /users/:id/deactivate': 'user.manage', 'POST /users/:id/reactivate': 'user.manage',
   'POST /users/:id/reset-password': 'user.manage', 'POST /users/:id/role': 'user.manage',
   'POST /password': 'password.change',
+  'GET /patients': 'patient.read', 'GET /patients/:id': 'patient.read', 'GET /patients/:id/encounters': 'patient.read',
+  'POST /patients': 'patient.write', 'PATCH /patients/:id': 'patient.write', 'POST /patients/:id/merge': 'patient.merge', 'POST /patients/:id/unmerge': 'patient.merge',
+  'POST /patients/:id/encounters': 'encounter.write', 'PATCH /encounters/:id': 'encounter.write', 'POST /encounters/:id/close': 'encounter.write', 'POST /encounters/:id/cancel': 'encounter.write',
+  'POST /cases/:id/link': 'case.link',
 };
 
 function can(user, action) {
