@@ -386,9 +386,9 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
 
   // ================= who am I (the session user) =================
   r.get('/me', wrap(async (req, res) => {
-    const u = (await db.query('SELECT id,name,role FROM users WHERE id=$1', [req.actor.id])).rows[0];
+    const u = (await db.query('SELECT id,name,role,must_change_password FROM users WHERE id=$1', [req.actor.id])).rows[0];
     if (!u) throw new ApiError(401, 'unauthorized', 'No such user');
-    res.json({ id: u.id, name: u.name, role: u.role, mode: 'session', allowed: allowedActions(u) });   // allowed: for hiding controls only (chunk 32d2); the server still checks every request
+    res.json({ id: u.id, name: u.name, role: u.role, mode: 'session', mustChangePassword: !!u.must_change_password, allowed: allowedActions(u) });   // allowed: for hiding controls only (chunk 32d2); the server still checks every request
   }));
 
   // ================= cases =================

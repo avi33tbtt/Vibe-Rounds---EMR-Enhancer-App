@@ -136,11 +136,13 @@ body.compact label{margin:7px 0 2px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 #cfm{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}#cfm[hidden]{display:none}.cfmbox{background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:10px;max-width:760px;width:100%;padding:16px 18px}.cfmbox h2{margin:0 0 6px;font-size:17px}.cfmit{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:8px 0}.cfmit b{display:block;margin-bottom:4px}.cfmit label{display:flex;gap:8px;align-items:flex-start;margin:4px 0;font-weight:400;cursor:pointer}.cfmit pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;font-size:13px}.cfmbox ul{margin:4px 0 8px 18px;padding:0}.cfmbox .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.cfmbox .acts .b{margin:0}.cfmbox button[disabled]{opacity:.5;cursor:not-allowed}
-#login{position:fixed;inset:0;z-index:110;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}#login[hidden]{display:none}#login form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:8px}#login label{font-size:13px;font-weight:600}#login input{width:100%}#loginMsg{min-height:1.3em;color:#7a1c14;font-size:13px}#who[hidden],#logoutBtn[hidden]{display:none}
+#login,#pwChange,#tmpPw{position:fixed;inset:0;z-index:110;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}#login[hidden],#pwChange[hidden],#tmpPw[hidden]{display:none}#login form,#pwChange form,#tmpPw .tmpbox{width:100%;max-width:340px;display:flex;flex-direction:column;gap:8px}#login label,#pwChange label{font-size:13px;font-weight:600}#login input,#pwChange input,#tmpPw input{width:100%}#loginMsg,#pwMsg{min-height:1.3em;color:#7a1c14;font-size:13px}#tmpPw input{font:600 17px ui-monospace,monospace;letter-spacing:.04em}#tmpPw{z-index:120}.us-tbl{width:100%;border-collapse:collapse;font-size:13px}.us-tbl th,.us-tbl td{border-bottom:1px solid var(--bd);padding:6px;text-align:left;vertical-align:middle}.us-tbl .off{opacity:.6}.us-add{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:10px 0}.us-add label{margin:0}.us-wrap{overflow-x:auto}#who[hidden],#logoutBtn[hidden]{display:none}
 #boot{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}#boot[hidden]{display:none}.bootbox{max-width:460px;text-align:center}.bootbox .b{margin:8px 4px 0}#saveRetry[hidden],#demoBan[hidden],#wireBan[hidden]{display:none}#saveState.bad{color:var(--r);font-weight:600}
 </style></head><body>
 <div id="boot" role="status" aria-live="polite"><div class="bootbox"><b id="bootMsg">Loading…</b><div class="mu" id="bootWhy">Not for clinical use – synthetic data only.</div><button class="b" id="bootRetry" type="button" hidden>Retry</button><button class="b sm" id="bootDemo" type="button" hidden>Use Demo mode instead</button></div></div>
 <div id="login" role="dialog" aria-modal="true" aria-labelledby="loginT" hidden><form id="loginForm" autocomplete="off" novalidate><b id="loginT" style="font-size:18px">Sign in to EMR Enhancer</b><div class="mu">Not for clinical use – synthetic data only.</div><div id="loginMsg" role="alert"></div><label for="loginUser">Username</label><input id="loginUser" name="emr-user" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="100"><label for="loginPw">Password</label><input id="loginPw" name="emr-pass" type="password" autocomplete="off" maxlength="200"><button class="b" id="loginGo" type="submit">Sign in</button><button class="b sm" id="loginDemo" type="button">Use Demo mode instead</button></form></div>
+<div id="pwChange" role="dialog" aria-modal="true" aria-labelledby="pwT" hidden><form id="pwForm" autocomplete="off" novalidate><b id="pwT" style="font-size:18px">Change your password</b><div class="mu" id="pwWhy"></div><div id="pwMsg" role="alert"></div><label for="pwCur">Current password</label><input id="pwCur" name="emr-cur" type="password" autocomplete="off" maxlength="200"><label for="pwNew">New password (12 characters or more)</label><input id="pwNew" name="emr-new" type="password" autocomplete="off" maxlength="200"><label for="pwNew2">New password again</label><input id="pwNew2" name="emr-new2" type="password" autocomplete="off" maxlength="200"><button class="b" id="pwGo" type="submit">Change password</button><button class="b sm" id="pwCancel" type="button">Cancel</button><button class="b sm" id="pwOut" type="button">Sign out</button></form></div>
+<div id="tmpPw" role="dialog" aria-modal="true" aria-labelledby="tmpT" hidden><div class="tmpbox"><b id="tmpT" style="font-size:18px">Temporary password</b><div class="mu" id="tmpFor"></div><input id="tmpVal" type="text" readonly autocomplete="off" aria-label="Temporary password"><div class="mu">Shown this one time only. Give it to the person privately; they must change it when they sign in. After you close this box it cannot be shown again (reset the password to make a new one).</div><button class="b" id="tmpCopy" type="button">Copy</button><span class="mu" id="tmpMsg" role="status"></span><button class="b sm" id="tmpClose" type="button">Close</button></div></div>
 <div id="cfm" role="dialog" aria-modal="true" aria-labelledby="cfmT" hidden><div class="cfmbox" id="cfmBox" tabindex="-1"></div></div>
 <div class="ban">Not for clinical use – synthetic data only. Codes from an LLM are unverified until checked.</div>
 <div class="ban" id="demoBan" hidden>Demo mode: data stays in this browser, synthetic data only</div>
@@ -176,7 +178,7 @@ body.compact label{margin:7px 0 2px}
   <details id="tools"><summary>Tools ▾</summary><div class="toolitems">
     <button data-shell-t="in">Set builder</button><button data-shell-t="fh">Codes</button>
     <button data-shell-t="an">Analytics</button><button data-shell-t="ab">About</button>
-    <button type="button" id="auditTool" hidden>Audit log</button>
+    <button type="button" id="auditTool" hidden>Audit log</button><button type="button" id="usersTool" hidden>Users</button><button type="button" id="pwTool" hidden>Change my password</button>
     <button type="button" id="settingsTool">Settings</button>
   </div></details>
 </div>
@@ -193,6 +195,14 @@ body.compact label{margin:7px 0 2px}
   <div id="patientsRows" class="patients-table-wrap"></div>
 </div>
 <main><div id="toast"></div>
+<div class="pane" id="us"><div class="cd patients-screen" style="text-align:left;max-width:none;margin:10px 0">
+  <div class="patients-head"><div><h2>Users</h2><div class="mu">Administrators only. People are deactivated, never deleted, so the record of who did what stays complete. Not for clinical use.</div></div><button class="b" id="usBack" type="button">Back to patients</button></div>
+  <div id="usMsg" class="mu" role="status" aria-live="polite"></div>
+  <div class="us-wrap"><table class="us-tbl"><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last sign-in</th><th>Actions</th></tr></thead><tbody id="usRows"></tbody></table></div>
+  <h3 style="margin:14px 0 0">Add a user</h3>
+  <div class="us-add"><label>Username<input id="usNewUser" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="100"></label><label>Name<input id="usNewName" autocomplete="off" maxlength="200"></label><label>Role<select id="usNewRole"><option value="nurse">nurse</option><option value="doctor">doctor</option><option value="informatician">informatician</option><option value="viewer">viewer</option><option value="admin">admin</option></select></label><label>Temporary password (optional)<input id="usNewPw" type="password" autocomplete="off" maxlength="200" placeholder="blank = the server makes one"></label></div>
+  <button class="b" id="usAdd" type="button">Add user</button> <span class="mu">The new person must change the password when they first sign in.</span>
+</div></div>
 <div class="pane" id="au"><div class="cd patients-screen" style="text-align:left;max-width:none;margin:10px 0">
   <div class="patients-head"><div><h2>Audit log</h2><div class="mu">Administrators only. Who opened or changed what, and when. Entries cannot be edited or deleted. Not for clinical use.</div></div><button class="b" id="auBack" type="button">Back to patients</button></div>
   <div class="au-filters">
@@ -2006,10 +2016,11 @@ async function boot(){
   try{
     await Store.init();
     if(!BOOTED){startApp();BOOTED=true}
-    paintMode();paintSave(Store.status());auTool();paintWho();
+    paintMode();paintSave(Store.status());auTool();usTool();pwTool();paintWho();
     $('boot').hidden=true;$('login').hidden=true;
   }catch(e){
     if(e&&e.status===401){showLogin('');return}   /* not signed in: the login screen (chunk 32d1) */
+    if(e&&e.code==='must_change'){showPwChange(true);return}   /* temporary password: only the change screen (chunk 32e2) */
     showBoot('Could not load the record','Reason: '+((e&&e.message)||String(e))+'. Nothing was opened, so nothing can be overwritten.',true);
   }
 }
@@ -2040,6 +2051,7 @@ $('loginForm').addEventListener('submit',async ev=>{
   try{
     await Store.login(u,p);
     $('login').hidden=true;$('loginMsg').textContent='';$('loginUser').value='';
+    if(Store.mustChange()){showPwChange(true);return}   /* chunk 32e2: nothing else opens until the temporary password is changed */
     if(BOOTED){Store.resume();paintWho();paintSave(Store.status())}else boot();
   }catch(e){$('loginMsg').textContent=loginProblem(e);$('loginPw').focus()}
   finally{$('loginGo').disabled=false}
@@ -2055,6 +2067,108 @@ $('logoutBtn').onclick=async()=>{
   location.reload();   /* clean page state: nothing of the last patient stays in memory */
 };
 Store.hooks.onUnauthorized=()=>{if(Store.mode==='server')showLogin('')};
+/* chunk 32e2: forced first-login password change, voluntary password change, and the admin Users screen (server mode).
+   Passwords are read once from their fields, the fields are emptied at once, and nothing is kept in the page. A temporary password made by the server is
+   shown once in its own box; closing the box removes it from the page. The server checks every request; hiding here is for convenience only. */
+const PW={forced:false};
+function pwProblem(e){
+  if(e&&e.network)return 'Cannot reach the server. Check the connection and try again.';
+  if(e&&e.code==='wrong_password')return 'The current password is not correct.';
+  if(e&&e.status===401)return 'Your session ended. Sign in again.';
+  return (e&&e.message)||'Could not change the password.'}
+function showPwChange(forced){
+  PW.forced=!!forced;$('boot').hidden=true;$('login').hidden=true;$('pwChange').hidden=false;
+  ['pwCur','pwNew','pwNew2'].forEach(i=>$(i).value='');$('pwMsg').textContent='';
+  $('pwWhy').textContent=forced?'You are using a temporary password. Choose your own before continuing. Nothing else opens until you do.':'Choose a new password. Your other sessions on other devices will be signed out.';
+  $('pwCancel').hidden=forced;$('pwOut').hidden=!forced;
+  setTimeout(()=>$('pwCur').focus(),0)}
+function closePwChange(){['pwCur','pwNew','pwNew2'].forEach(i=>$(i).value='');$('pwChange').hidden=true;$('pwMsg').textContent=''}
+$('pwForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const cur=$('pwCur').value,n1=$('pwNew').value,n2=$('pwNew2').value;
+  ['pwCur','pwNew','pwNew2'].forEach(i=>$(i).value='');
+  if(!cur||!n1){$('pwMsg').textContent='Enter your current password and a new one.';return}
+  if(n1!==n2){$('pwMsg').textContent='The two new passwords are not the same.';return}
+  if(n1.length<12){$('pwMsg').textContent='Use at least 12 characters.';return}
+  if(n1===cur){$('pwMsg').textContent='Choose a password different from the current one.';return}
+  $('pwGo').disabled=true;$('pwMsg').textContent='Changing…';
+  try{
+    await Store.changePassword(cur,n1);
+    const wasForced=PW.forced;closePwChange();PW.forced=false;
+    if(wasForced){if(BOOTED){Store.resume();paintWho();paintSave(Store.status())}else boot()}else toast('Password changed.')
+  }catch(e){$('pwMsg').textContent=pwProblem(e);$('pwCur').focus()}
+  finally{$('pwGo').disabled=false}
+});
+$('pwCancel').onclick=()=>{if(!PW.forced)closePwChange()};
+$('pwOut').onclick=async()=>{try{await Store.logout(true)}catch(e){toast('Could not sign out: '+((e&&e.message)||e));return}location.reload()};
+function pwTool(){$('pwTool').hidden=!(Store.mode==='server'&&!!Store.me&&Store.ready)}
+$('pwTool').addEventListener('click',()=>{if($('tools'))$('tools').open=false;showPwChange(false)});
+/* the temporary password box: the value lives only in this input while the box is open */
+function showTmp(name,pw){$('tmpFor').textContent='For '+name+'.';$('tmpVal').value=pw;$('tmpMsg').textContent='';$('tmpPw').hidden=false;$('tmpVal').focus();$('tmpVal').select()}
+function closeTmp(){$('tmpVal').value='';$('tmpFor').textContent='';$('tmpMsg').textContent='';$('tmpPw').hidden=true}
+$('tmpClose').onclick=closeTmp;
+$('tmpCopy').onclick=async()=>{
+  try{await navigator.clipboard.writeText($('tmpVal').value);$('tmpMsg').textContent=' Copied.'}
+  catch(e){$('tmpVal').select();$('tmpMsg').textContent=' Select the text and copy it by hand.'}};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('tmpPw').hidden)closeTmp()});
+/* Users screen */
+const usIsAdmin=()=>Store.mode==='server'&&!!Store.me&&Store.can('user.manage')&&Store.me.role==='admin';
+function usTool(){$('usersTool').hidden=!usIsAdmin()}
+const US={list:[],seq:0};
+function usProblem(e){
+  if(e&&e.network)return 'Cannot reach the server. Check the connection and try again. Nothing was changed.';
+  if(e&&e.status===403)return (e.message||'Your role may not manage users.');
+  if(e&&e.status===401)return 'Your session ended. Sign in again.';
+  return (e&&e.message)||'Something went wrong. Nothing was changed.'}
+function usRow(u){
+  const me=Store.me&&u.id===Store.me.id,off=!u.active;
+  const roles=['admin','doctor','nurse','informatician','viewer'].map(r=>'<option value="'+r+'"'+(r===u.role?' selected':'')+'>'+r+'</option>').join('');
+  const stat=off?'deactivated':(u.locked?'locked':'active')+(u.mustChangePassword?' · must change password':'');
+  const acts=(me?'<span class="mu">(you)</span>':(u.active?'<button class="b sm" data-us="deact" data-id="'+esc(u.id)+'">Deactivate</button>':'<button class="b sm" data-us="react" data-id="'+esc(u.id)+'">Reactivate</button>')
+    +'<button class="b sm" data-us="reset" data-id="'+esc(u.id)+'">Reset password</button>');
+  return '<tr class="'+(off?'off':'')+'"><td>'+esc(u.name)+'</td><td>'+esc(u.username)+'</td><td><select data-us="role" data-id="'+esc(u.id)+'" data-was="'+esc(u.role)+'" aria-label="Role of '+esc(u.name)+'"'+(me?' disabled title="Ask another administrator to change your own role"':'')+'>'+roles+'</select></td><td>'+esc(stat)+'</td><td>'+(u.lastLoginAt?esc(new Date(u.lastLoginAt).toLocaleString()):'<span class="mu">never</span>')+'</td><td>'+acts+'</td></tr>'}
+async function usLoad(){
+  if(!usIsAdmin())return;const my=++US.seq,msg=$('usMsg');msg.textContent='Loading…';
+  let l;try{l=await Store.users.list()}catch(e){if(my===US.seq)msg.textContent=usProblem(e);return}
+  if(my!==US.seq)return;US.list=l;$('usRows').innerHTML=l.map(usRow).join('');
+  msg.textContent=l.length+' user'+(l.length===1?'':'s')+(l.filter(u=>u.active).length!==l.length?' ('+l.filter(u=>u.active).length+' active)':'')+'.'}
+function showUsers(){
+  if(!usIsAdmin())return toast('The Users screen is for administrators in server mode.');
+  if($('tools'))$('tools').open=false;persist();showNoCase();$('noCase').classList.remove('show');$('au').classList.remove('on');$('us').classList.add('on');usLoad()}
+$('usersTool').addEventListener('click',showUsers);
+$('usBack').addEventListener('click',()=>{$('us').classList.remove('on');showNoCase()});
+async function usDo(fn,okMsg){
+  const msg=$('usMsg');msg.textContent='Working…';
+  try{const r=await fn();msg.textContent=okMsg;await usLoad();msg.textContent=okMsg;return r}
+  catch(e){msg.textContent=usProblem(e);await usLoad();msg.textContent=usProblem(e)}}
+$('usRows').addEventListener('click',async ev=>{
+  const b=ev.target.closest('button[data-us]');if(!b||!usIsAdmin())return;
+  const u=US.list.find(x=>x.id===b.dataset.id);if(!u)return;
+  if(b.dataset.us==='deact'){
+    if(!window.confirm('Deactivate '+u.name+' ('+u.username+')?\n\nThey will be signed out everywhere at once and cannot sign in again until you reactivate them. Their records and history are kept.'))return;
+    await usDo(()=>Store.users.deactivate(u.id),u.name+' was deactivated and signed out.')}
+  else if(b.dataset.us==='react'){await usDo(()=>Store.users.reactivate(u.id),u.name+' can sign in again.')}
+  else if(b.dataset.us==='reset'){
+    if(!window.confirm('Reset the password for '+u.name+' ('+u.username+')?\n\nThey will be signed out everywhere and must choose a new password at their next sign-in. A temporary password is shown once.'))return;
+    const r=await usDo(()=>Store.users.resetPassword(u.id),'Password reset for '+u.name+'. Give them the temporary password; it is not shown again.');
+    if(r&&r.temporaryPassword)showTmp(u.name+' ('+u.username+')',r.temporaryPassword)}});
+$('usRows').addEventListener('change',async ev=>{
+  const s=ev.target.closest('select[data-us="role"]');if(!s||!usIsAdmin())return;
+  const u=US.list.find(x=>x.id===s.dataset.id);if(!u){return}
+  const to=s.value,was=s.dataset.was;
+  if(to===was)return;
+  if(!window.confirm('Change the role of '+u.name+' ('+u.username+') from '+was+' to '+to+'?\n\nWhat they can do changes on their very next action, without signing in again.')){s.value=was;return}
+  await usDo(()=>Store.users.setRole(u.id,to),u.name+' is now '+to+'.')});
+$('usAdd').addEventListener('click',async()=>{
+  if(!usIsAdmin())return;
+  const un=$('usNewUser').value.trim(),nm=$('usNewName').value.trim(),role=$('usNewRole').value,pw=$('usNewPw').value;$('usNewPw').value='';
+  if(!un||!nm){$('usMsg').textContent='Enter a username and a name.';return}
+  if(!/^[A-Za-z0-9._@-]{1,100}$/.test(un)){$('usMsg').textContent='Username: letters, digits and . _ @ - only.';return}
+  if(pw&&pw.length<12){$('usMsg').textContent='A typed temporary password needs at least 12 characters (or leave it blank).';return}
+  $('usAdd').disabled=true;
+  const r=await usDo(()=>Store.users.create(pw?{username:un,name:nm,role,password:pw}:{username:un,name:nm,role}),'User '+un+' was added. They must change the password at first sign-in.');
+  $('usAdd').disabled=false;
+  if(r&&r.user){$('usNewUser').value='';$('usNewName').value='';if(r.temporaryPassword)showTmp(nm+' ('+un+')',r.temporaryPassword)}});
 /* chunk 33d: admin Audit screen (server mode, admin only; the server refuses everyone else). Read-only: filters, paging by "older entries", and a CSV export
    that the server records in the log itself. The CSV has no record contents. */
 const AU={next:null,seq:0,seen:false};

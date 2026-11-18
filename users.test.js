@@ -206,6 +206,15 @@ test('audit rows for user changes never contain a password, a hash or a temporar
   const list = JSON.stringify((await a.get('/api/users')).body); assert.ok(!list.includes('scrypt') && !list.includes(secret));
 });
 
+test('/me and /session report mustChangePassword from the database on every call, so a reset or a change shows at once', async () => {
+  const u = await mk('flagger', 'nurse', { mustChange: true });
+  assert.equal((await u.agent.get('/api/session')).body.mustChangePassword, true); assert.equal((await u.agent.get('/api/me')).body.mustChangePassword, true);
+  assert.equal((await u.agent.post('/api/password').send({ currentPassword: PW, newPassword: 'flag cleared passphrase' })).status, 204);
+  assert.equal((await u.agent.get('/api/session')).body.mustChangePassword, false); assert.equal((await u.agent.get('/api/me')).body.mustChangePassword, false);
+  await who.admin.agent.post(`/api/users/${u.id}/reset-password`).send({});
+  assert.equal((await who.admin.agent.get('/api/users')).body.find((x) => x.id === u.id).mustChangePassword, true);
+});
+
 test('last-admin rule: the only active admin cannot be deactivated or demoted, not even by themselves; a second admin lifts it; two at once cannot both win', async () => {
   const only = who.admin;
   const cnt = async () => (await owner.query("SELECT count(*)::int n FROM users WHERE role='admin' AND active AND password_hash IS NOT NULL")).rows[0].n;

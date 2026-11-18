@@ -552,8 +552,11 @@
       S.prefs = {}; Object.keys(PREF_LS).forEach((k) => { const v = lsGet(PREF_LS[k], undefined); if (v !== undefined) S.prefs[k] = v; });
       Store.me = { id: 'demo', name: 'Demo user', role: 'admin' }; Store.ready = true; notify(); return;
     }
-    await api('GET', '/session');                     // 401 = not signed in: the login hook runs and init stops here
+    const sess = await api('GET', '/session');        // 401 = not signed in: the login hook runs and init stops here
     needLogin = false;
+    if (sess && sess.mustChangePassword) {            // chunk 32e2: a temporary password must be changed first; nothing else is loaded until then
+      Store.me = Object.assign({}, sess); const er = new Error('You must change your temporary password before continuing.'); er.code = 'must_change'; throw er;
+    }
     const [me, list, sets, usage, codes, binds, rules, protos, prefs] = await Promise.all([api('GET', '/me'), api('GET', '/cases'), api('GET', '/element-sets'), api('GET', '/usage'),
       api('GET', '/codes'), api('GET', '/bindings'), api('GET', '/rules'), api('GET', '/protocols'), api('GET', '/prefs')]);
     Store.me = me;
@@ -598,6 +601,22 @@
     Object.keys(snap).forEach((k) => delete snap[k]);
     Object.assign(S, { cases: [], sets: [], usage: {}, codes: {}, codeMeta: {}, binds: {}, rules: {}, protocols: {}, prefs: {}, setHist: {} });
     Store.me = null; Store.ready = false; notify();
+  };
+
+  // ---------------------------------------------------------------- users and own password (chunk 32e2)
+  // Passwords pass through here and are never stored. A temporary password the server generated is returned to the caller once; Store keeps no copy.
+  Store.mustChange = () => Store.mode === 'server' && !!Store.me && Store.me.mustChangePassword === true;
+  Store.changePassword = async function (currentPassword, newPassword) {
+    await api('POST', '/password', { currentPassword, newPassword });
+    if (Store.me) Store.me.mustChangePassword = false; notify();
+  };
+  Store.users = {
+    list: () => api('GET', '/users'),
+    create: (b) => api('POST', '/users', b),
+    deactivate: (id) => api('POST', '/users/' + encodeURIComponent(id) + '/deactivate', {}),
+    reactivate: (id) => api('POST', '/users/' + encodeURIComponent(id) + '/reactivate', {}),
+    resetPassword: (id, password) => api('POST', '/users/' + encodeURIComponent(id) + '/reset-password', password ? { password } : {}),
+    setRole: (id, role) => api('POST', '/users/' + encodeURIComponent(id) + '/role', { role }),
   };
 
   Store.setMode = function (m) { try { g.localStorage.setItem('storeMode', m === 'local' ? 'local' : 'server'); } catch (e) { /* ignore */ } g.location && g.location.reload(); };

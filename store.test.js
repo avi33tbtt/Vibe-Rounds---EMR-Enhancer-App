@@ -536,3 +536,48 @@ test('32d2: a 403 forbidden shows one plain sentence, is not retried, and the sa
   assert.deepEqual(toasts, [msg]); assert.equal(t.writes().length, 1, 'not retried');
   assert.equal(t.Store.status().state, 'failed'); assert.match(t.Store.status().text, /may not approve alert rules/);
 });
+
+// ---------------------------------------------------------------- chunk 32e2: forced password change, users calls
+test('32e2: a temporary password stops init after /session: nothing else is loaded, Store.mustChange() is true, no data in the cache', async () => {
+  const h = happy();
+  const t = boot(async (m, p, b) => (m === 'GET' && p === '/session') ? [200, { id: 'u9', name: 'New Nurse', role: 'nurse', mustChangePassword: true }] : h(m, p, b));
+  await assert.rejects(t.Store.init(), (e) => e.code === 'must_change' && /temporary password/.test(e.message));
+  assert.deepEqual(t.calls.map((c) => c.path), ['/session'], 'only /session was called: no cases, sets, codes or rules were requested');
+  assert.equal(t.Store.mustChange(), true); assert.equal(t.Store.ready, false); assert.equal(t.Store.getCases().length, 0);
+});
+
+test('32e2: changePassword sends both passwords once with the CSRF token, clears the flag, and keeps no copy; init then loads normally', async () => {
+  const h = happy(); let must = true;
+  const t = boot(async (m, p, b) => {
+    if (m === 'GET' && p === '/session') return [200, { id: 'u9', name: 'N', role: 'nurse', mustChangePassword: must }];
+    if (m === 'GET' && p === '/me') return [200, { id: 'u9', name: 'N', role: 'nurse', mustChangePassword: must, allowed: [] }];
+    if (m === 'POST' && p === '/password') { must = false; return [204, null]; }
+    return h(m, p, b);
+  });
+  await assert.rejects(t.Store.init(), (e) => e.code === 'must_change');
+  await t.Store.changePassword('temp-pass-123456', 'my brand new passphrase');
+  const w = t.writes(); assert.equal(w.length, 1); assert.equal(w[0].path, '/password'); assert.deepEqual(w[0].body, { currentPassword: 'temp-pass-123456', newPassword: 'my brand new passphrase' });
+  assert.equal(t.Store.mustChange(), false);
+  await t.Store.init(); assert.equal(t.Store.ready, true, 'after the change the data loads');
+  const dump = JSON.stringify([t.Store._test.S, [...t.ls.entries()]]);
+  assert.ok(!dump.includes('temp-pass-123456') && !dump.includes('my brand new passphrase'), 'passwords are not cached or written to localStorage');
+});
+
+test('32e2: a wrong current password is a 422 the caller can show; it is not treated as a sign-out', async () => {
+  const t = await readyServerStore(); let hook = 0; t.Store.hooks.onUnauthorized = () => { hook++; };
+  t.custom = async (m, p) => (m === 'POST' && p === '/password') ? [422, { error: { code: 'wrong_password', message: 'The current password is not correct' } }] : null;
+  await assert.rejects(t.Store.changePassword('x', 'y'), (e) => e.status === 422 && e.code === 'wrong_password');
+  assert.equal(hook, 0); assert.equal(t.Store.needsLogin(), false);
+});
+
+test('32e2: Store.users calls the right routes with the right bodies; a typed password is sent only when given', async () => {
+  const t = await readyServerStore(); const U = t.Store.users;
+  t.custom = async (m, p) => (p === '/users' && m === 'GET') ? [200, [{ id: 'a' }]] : (p === '/users' && m === 'POST') ? [201, { user: { id: 'n' }, temporaryPassword: 'AbCdEfGhJkLmNpQr' }] : null;
+  assert.deepEqual(await U.list(), [{ id: 'a' }]);
+  const made = await U.create({ username: 'x', name: 'X', role: 'nurse' }); assert.equal(made.temporaryPassword, 'AbCdEfGhJkLmNpQr');
+  await U.deactivate('id 1'); await U.reactivate('id1'); await U.resetPassword('id1'); await U.resetPassword('id1', 'typed password 12'); await U.setRole('id1', 'doctor');
+  const w = t.writes().map((c) => c.method + ' ' + c.path + ' ' + JSON.stringify(c.body));
+  assert.deepEqual(w.slice(-6), ['POST /users {"username":"x","name":"X","role":"nurse"}', 'POST /users/id%201/deactivate {}', 'POST /users/id1/reactivate {}',
+    'POST /users/id1/reset-password {}', 'POST /users/id1/reset-password {"password":"typed password 12"}', 'POST /users/id1/role {"role":"doctor"}']);
+  assert.ok(!JSON.stringify(t.Store._test.S).includes('AbCdEfGhJkLmNpQr'), 'a temporary password is not kept by Store');
+});

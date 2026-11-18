@@ -129,7 +129,12 @@ function createAuth({ db, idleMinutes, absoluteHours, lockoutFailures, lockoutMi
     } catch (e) { next(e); }
   });
   router.get('/csrf', requireAuth, (req, res) => res.json({ token: csrfToken(req.user.sessionId) }));
-  router.get('/session', requireAuth, (req, res) => res.json({ id: req.user.id, name: req.user.name, role: req.user.role, allowed: allowedActions(req.user) }));
+  router.get('/session', requireAuth, async (req, res, next) => {
+    try {
+      const m = (await db.query('SELECT must_change_password FROM users WHERE id=$1', [req.user.id])).rows[0];     // read each time: a reset takes effect at once (chunk 32e2)
+      res.json({ id: req.user.id, name: req.user.name, role: req.user.role, mustChangePassword: !!(m && m.must_change_password), allowed: allowedActions(req.user) });
+    } catch (e) { next(e); }
+  });
 
   return { router, requireAuth, requireCsrf, settings: { idleMinutes: IDLE_MIN, absoluteHours: ABS_H, lockoutFailures: LOCK_N, lockoutMinutes: LOCK_MIN } };
 }
