@@ -136,15 +136,17 @@ body.compact label{margin:7px 0 2px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 #cfm{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}#cfm[hidden]{display:none}.cfmbox{background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:10px;max-width:760px;width:100%;padding:16px 18px}.cfmbox h2{margin:0 0 6px;font-size:17px}.cfmit{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:8px 0}.cfmit b{display:block;margin-bottom:4px}.cfmit label{display:flex;gap:8px;align-items:flex-start;margin:4px 0;font-weight:400;cursor:pointer}.cfmit pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;font-size:13px}.cfmbox ul{margin:4px 0 8px 18px;padding:0}.cfmbox .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.cfmbox .acts .b{margin:0}.cfmbox button[disabled]{opacity:.5;cursor:not-allowed}
+#login{position:fixed;inset:0;z-index:110;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}#login[hidden]{display:none}#login form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:8px}#login label{font-size:13px;font-weight:600}#login input{width:100%}#loginMsg{min-height:1.3em;color:#7a1c14;font-size:13px}#who[hidden],#logoutBtn[hidden]{display:none}
 #boot{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}#boot[hidden]{display:none}.bootbox{max-width:460px;text-align:center}.bootbox .b{margin:8px 4px 0}#saveRetry[hidden],#demoBan[hidden],#wireBan[hidden]{display:none}#saveState.bad{color:var(--r);font-weight:600}
 </style></head><body>
 <div id="boot" role="status" aria-live="polite"><div class="bootbox"><b id="bootMsg">Loading…</b><div class="mu" id="bootWhy">Not for clinical use – synthetic data only.</div><button class="b" id="bootRetry" type="button" hidden>Retry</button><button class="b sm" id="bootDemo" type="button" hidden>Use Demo mode instead</button></div></div>
+<div id="login" role="dialog" aria-modal="true" aria-labelledby="loginT" hidden><form id="loginForm" autocomplete="off" novalidate><b id="loginT" style="font-size:18px">Sign in to EMR Enhancer</b><div class="mu">Not for clinical use – synthetic data only.</div><div id="loginMsg" role="alert"></div><label for="loginUser">Username</label><input id="loginUser" name="emr-user" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="100"><label for="loginPw">Password</label><input id="loginPw" name="emr-pass" type="password" autocomplete="off" maxlength="200"><button class="b" id="loginGo" type="submit">Sign in</button><button class="b sm" id="loginDemo" type="button">Use Demo mode instead</button></form></div>
 <div id="cfm" role="dialog" aria-modal="true" aria-labelledby="cfmT" hidden><div class="cfmbox" id="cfmBox" tabindex="-1"></div></div>
 <div class="ban">Not for clinical use – synthetic data only. Codes from an LLM are unverified until checked.</div>
 <div class="ban" id="demoBan" hidden>Demo mode: data stays in this browser, synthetic data only</div>
 <div class="ban" id="conflictBan" role="alert" hidden style="background:#fde2e0;color:#7a1c14"></div>
 <div class="ban" id="wireBan" hidden>Interim build (chunks 29c–29d pending): the app still saves cases and settings in this browser only, not on the server.</div>
-<header><b>EMR Enhancer</b><span class="mu">standalone clinical record</span><button class="b sm" id="patientsLink" type="button" title="Open the patient list (Alt+P)">Patients</button><button class="b sm" id="densityToggle" type="button" aria-pressed="false" title="Switch between comfortable and compact spacing">Compact view</button><span style="flex:1"></span><button class="b sm" id="modeToggle" type="button" aria-pressed="false" title="Demo mode keeps data in this browser only">Demo mode: off</button><span class="mu" id="saveState" aria-live="polite">Not loaded</span><button class="b sm" id="saveRetry" type="button" hidden>Retry</button></header>
+<header><b>EMR Enhancer</b><span class="mu">standalone clinical record</span><button class="b sm" id="patientsLink" type="button" title="Open the patient list (Alt+P)">Patients</button><button class="b sm" id="densityToggle" type="button" aria-pressed="false" title="Switch between comfortable and compact spacing">Compact view</button><span style="flex:1"></span><button class="b sm" id="modeToggle" type="button" aria-pressed="false" title="Demo mode keeps data in this browser only">Demo mode: off</button><span class="mu" id="who" hidden></span><button class="b sm" id="logoutBtn" type="button" hidden>Sign out</button><span class="mu" id="saveState" aria-live="polite">Not loaded</span><button class="b sm" id="saveRetry" type="button" hidden>Retry</button></header>
 <div id="patientbar">
   <div class="ptmain"><b id="ptName">No patient</b><div class="ptmeta" id="ptMeta"></div></div>
   <div class="ptchips" id="ptDiagnosis"></div><div class="ptchips" id="ptPathways"></div>
@@ -1989,12 +1991,55 @@ async function boot(){
   try{
     await Store.init();
     if(!BOOTED){startApp();BOOTED=true}
-    paintMode();paintSave(Store.status());auTool();
-    $('boot').hidden=true;
+    paintMode();paintSave(Store.status());auTool();paintWho();
+    $('boot').hidden=true;$('login').hidden=true;
   }catch(e){
+    if(e&&e.status===401){showLogin('');return}   /* not signed in: the login screen (chunk 32d1) */
     showBoot('Could not load the record','Reason: '+((e&&e.message)||String(e))+'. Nothing was opened, so nothing can be overwritten.',true);
   }
 }
+/* chunk 32d1: login screen, name and role in the header, sign out. The password is read once, the field is emptied at once, and it is never stored.
+   A 401 during use opens the same screen; unsent changes stay queued and are sent after the same user signs in again. */
+function paintWho(){
+  const on=Store.mode==='server'&&!!Store.me&&Store.ready;
+  $('who').hidden=!on;$('logoutBtn').hidden=!on;
+  if(on)$('who').textContent=(Store.me.name||'User')+' · '+(Store.me.role||'');
+}
+function showLogin(msg){
+  if(Store.mode!=='server')return;
+  $('boot').hidden=true;const was=!$('login').hidden;$('login').hidden=false;
+  if(!was){$('loginMsg').textContent=msg||(BOOTED?'Your session ended. Changes you made are kept and will be sent after you sign in.':'');$('loginPw').value='';setTimeout(()=>{const u=$('loginUser');if(u)u.focus()},0)}
+}
+function loginProblem(e){
+  if(e&&e.network)return 'Cannot reach the server. Check the connection and try again.';
+  if(e&&e.status===401)return 'Wrong username or password.';
+  if(e&&e.status===429)return e.code==='account_locked'?'This account is locked after repeated wrong passwords. Wait about 15 minutes or ask an administrator.':'Too many failed attempts from this device. Wait a few minutes and try again.';
+  if(e&&e.code==='other_user')return e.message;
+  return (e&&e.message)||'Sign-in failed.';
+}
+$('loginForm').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const u=$('loginUser').value.trim(),p=$('loginPw').value;$('loginPw').value='';
+  if(!u||!p){$('loginMsg').textContent='Enter your username and password.';return}
+  $('loginGo').disabled=true;$('loginMsg').textContent='Signing in…';
+  try{
+    await Store.login(u,p);
+    $('login').hidden=true;$('loginMsg').textContent='';$('loginUser').value='';
+    if(BOOTED){Store.resume();paintWho();paintSave(Store.status())}else boot();
+  }catch(e){$('loginMsg').textContent=loginProblem(e);$('loginPw').focus()}
+  finally{$('loginGo').disabled=false}
+});
+$('loginDemo').onclick=()=>Store.setMode('local');
+$('logoutBtn').onclick=async()=>{
+  let force=false;
+  if(Store.pending()){
+    if(!window.confirm('Some changes have not been saved yet. If you sign out now they will be lost. Sign out anyway?'))return;
+    force=true;
+  }
+  try{await Store.logout(force)}catch(e){toast('Could not sign out: '+((e&&e.message)||e));return}
+  location.reload();   /* clean page state: nothing of the last patient stays in memory */
+};
+Store.hooks.onUnauthorized=()=>{if(Store.mode==='server')showLogin('')};
 /* chunk 33d: admin Audit screen (server mode, admin only; the server refuses everyone else). Read-only: filters, paging by "older entries", and a CSV export
    that the server records in the log itself. The CSV has no record contents. */
 const AU={next:null,seq:0,seen:false};

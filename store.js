@@ -28,33 +28,52 @@
   const warned = {};
   const grpOf = (key) => key.slice(key.indexOf(':') + 1).split('|')[0];
 
-  // ---------------------------------------------------------------- API client
-  async function api(method, path, body) {
-    let res;
+  // ---------------------------------------------------------------- API client (chunk 32d1: session, CSRF, 401)
+  // One CSRF token per login session (GET /api/csrf), sent as X-CSRF-Token on POST, PUT, PATCH and DELETE except login and logout.
+  // A 403 "csrf" fetches a fresh token and retries that request once. A 401 (not from the login call itself) calls the login hook.
+  const WRITES = { POST: 1, PUT: 1, PATCH: 1, DELETE: 1 }, NO_CSRF = { '/login': 1, '/logout': 1 };
+  let csrf = null, csrfBusy = null, needLogin = false, wrongUser = false;
+  async function send(method, path, body, token) {
+    let res; const headers = {};
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (token) headers['X-CSRF-Token'] = token;
     try {
-      res = await fetch(Store.base + '/api' + path, { method, credentials: 'same-origin',
-        headers: body !== undefined ? { 'Content-Type': 'application/json' } : {}, body: body !== undefined ? JSON.stringify(body) : undefined });
+      res = await fetch(Store.base + '/api' + path, { method, credentials: 'same-origin', headers, body: body !== undefined ? JSON.stringify(body) : undefined });
     } catch (e) { const er = new Error('Cannot reach the server'); er.network = true; throw er; }
     let data = null;
     if (res.status !== 204) { try { data = await res.json(); } catch (e) { /* not JSON */ } }
     if (!res.ok) {
       const er = new Error((data && data.error && data.error.message) || 'HTTP ' + res.status);
       er.status = res.status; er.code = data && data.error && data.error.code; er.current = data && data.current; er.body = data;
-      if (res.status === 401) Store.hooks.onUnauthorized();
       throw er;
     }
     return data;
+  }
+  function getCsrf(force) {
+    if (csrf && !force) return Promise.resolve(csrf);
+    if (!csrfBusy) csrfBusy = send('GET', '/csrf').then((r) => { csrf = r && r.token; return csrf; }).finally(() => { csrfBusy = null; });
+    return csrfBusy;
+  }
+  async function api(method, path, body, retried) {
+    const needs = !!WRITES[method] && !NO_CSRF[path];
+    try {
+      return await send(method, path, body, needs ? await getCsrf(false) : null);
+    } catch (er) {
+      if (er.status === 403 && er.code === 'csrf' && needs && !retried) { csrf = null; return api(method, path, body, true); }
+      if (er.status === 401 && path !== '/login') { csrf = null; needLogin = true; try { Store.hooks.onUnauthorized(er); } catch (x) { /* UI */ } }
+      throw er;
+    }
   }
   Store.api = api;
 
   // ---------------------------------------------------------------- status
   function status() {
     const nc = Object.keys(conflicts).length, nf = Object.keys(failed).length;
-    const state = nc ? 'conflict' : retrying ? 'retry' : nf ? 'failed' : (Q.length || running) ? 'saving' : 'saved';
+    const state = needLogin && Store.mode === 'server' ? 'login' : nc ? 'conflict' : retrying ? 'retry' : nf ? 'failed' : (Q.length || running) ? 'saving' : 'saved';
     return { state, pending: Q.length, savedAt, conflicts: Object.assign({}, conflicts), failed: Object.assign({}, failed),
       text: Store.mode === 'local' ? 'Demo mode: saved in this browser' :
         state === 'saving' ? 'Saving…' : state === 'saved' ? (savedAt ? 'Saved ' + savedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Saved') :
-        state === 'retry' ? 'NOT SAVED: will retry' : state === 'conflict' ? 'NOT SAVED: changed by someone else' : 'NOT SAVED: ' + Object.values(failed)[0] };
+        state === 'login' ? (Q.length || Object.keys(failed).length ? 'NOT SAVED: sign in to send your changes' : 'Signed out') : state === 'retry' ? 'NOT SAVED: will retry' : state === 'conflict' ? 'NOT SAVED: changed by someone else' : 'NOT SAVED: ' + Object.values(failed)[0] };
   }
   const notify = () => { try { Store.hooks.onStatus(status()); } catch (e) { /* UI problem must not stop saving */ } };
   Store.status = status;
@@ -70,12 +89,13 @@
     notify(); pump();
   }
   async function pump() {
-    if (running || retrying) return;
+    if (running || retrying || needLogin) return;
     running = true; notify();
     while (Q.length) {
       const op = Q[0]; op.started = true;
       try { await op.run(); Q.shift(); delay = 2000; savedAt = new Date(); }
       catch (e) {
+        if (e.status === 401) { op.started = false; running = false; needLogin = true; notify(); return; }   // signed out: keep every unsent change, resume after login
         if (e.status === 409) {
           Q.shift(); const grp = grpOf(op.key);
           conflicts[grp] = { entity: op.key, current: e.current, message: e.message, code: e.code };
@@ -91,7 +111,7 @@
     }
     running = false; notify();
   }
-  Store.retry = () => { clearTimeout(timer); retrying = false; delay = 2000; pump(); };
+  Store.retry = () => { if (needLogin) { try { Store.hooks.onUnauthorized(); } catch (x) { /* UI */ } return; } clearTimeout(timer); retrying = false; delay = 2000; pump(); };
   Store.flush = () => new Promise((res) => { const t = setInterval(() => { if (!Q.length && !running) { clearInterval(t); res(); } }, 25); });
   if (g.addEventListener) g.addEventListener('beforeunload', (e) => { if (Store.mode === 'server' && Store.pending()) { e.preventDefault(); e.returnValue = ''; } });
 
@@ -521,6 +541,8 @@
       S.prefs = {}; Object.keys(PREF_LS).forEach((k) => { const v = lsGet(PREF_LS[k], undefined); if (v !== undefined) S.prefs[k] = v; });
       Store.me = { id: 'demo', name: 'Demo user', role: 'admin' }; Store.ready = true; notify(); return;
     }
+    await api('GET', '/session');                     // 401 = not signed in: the login hook runs and init stops here
+    needLogin = false;
     const [me, list, sets, usage, codes, binds, rules, protos, prefs] = await Promise.all([api('GET', '/me'), api('GET', '/cases'), api('GET', '/element-sets'), api('GET', '/usage'),
       api('GET', '/codes'), api('GET', '/bindings'), api('GET', '/rules'), api('GET', '/protocols'), api('GET', '/prefs')]);
     Store.me = me;
@@ -538,7 +560,35 @@
     S.prefs = prefs; Store.ready = true; notify();
   };
 
+  // ---------------------------------------------------------------- session (chunk 32d1)
+  /** Sign in. The password is only passed through here, never stored. Unsent changes made by another user are never sent as this one. */
+  Store.login = async function (username, password) {
+    const me = await api('POST', '/login', { username, password });
+    csrf = null;
+    if (Store.me && Store.ready && Q.length && Store.me.id !== me.id) {
+      try { await api('POST', '/logout'); } catch (e) { /* ignore */ }
+      csrf = null; wrongUser = true;
+      const er = new Error('There are unsent changes made by ' + (Store.me.name || 'another user') + '. Sign in as that user to send them.'); er.code = 'other_user'; throw er;
+    }
+    try { await getCsrf(true); } catch (e) { /* fetched again on the first write */ }
+    Store.me = Object.assign({}, Store.me || {}, me); needLogin = false; wrongUser = false; notify();
+    return me;
+  };
+  /** Continue sending the kept queue after a successful login. */
+  Store.resume = function () { if (wrongUser || needLogin) return; notify(); pump(); };
+  Store.needsLogin = () => needLogin;
+  /** Sign out. Refuses while changes are unsent unless force is true. Clears every cached record. */
+  Store.logout = async function (force) {
+    if (!force && Store.pending()) { const er = new Error('Some changes have not been saved yet.'); er.code = 'unsent'; throw er; }
+    try { await api('POST', '/logout'); } catch (e) { if (!e.network && e.status !== 401) throw e; }
+    csrf = null; needLogin = true; Q.length = 0; clearTimeout(timer); retrying = false; running = false;
+    for (const k of Object.keys(failed)) delete failed[k]; for (const k of Object.keys(conflicts)) delete conflicts[k];
+    Object.keys(snap).forEach((k) => delete snap[k]);
+    Object.assign(S, { cases: [], sets: [], usage: {}, codes: {}, codeMeta: {}, binds: {}, rules: {}, protocols: {}, prefs: {}, setHist: {} });
+    Store.me = null; Store.ready = false; notify();
+  };
+
   Store.setMode = function (m) { try { g.localStorage.setItem('storeMode', m === 'local' ? 'local' : 'server'); } catch (e) { /* ignore */ } g.location && g.location.reload(); };
-  Store._test = { S, snap, Q, conflicts, failed, metaOf, fromServerCase };
+  Store._test = { S, snap, Q, conflicts, failed, metaOf, fromServerCase, csrf: () => csrf };
   g.Store = Store;
 })(typeof window !== 'undefined' ? window : globalThis);

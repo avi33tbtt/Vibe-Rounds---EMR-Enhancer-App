@@ -16,7 +16,7 @@ function happy() {
   let caseVer = 1;
   return async (m, p, b) => {
     if (m === 'GET') {
-      const lists = { '/me': { id: 'u1', name: 'Dev', role: 'admin', mode: 'dev' }, '/cases': [], '/element-sets': [], '/usage': {}, '/codes': [], '/bindings': [], '/rules': {}, '/protocols': {}, '/prefs': {} };
+      const lists = { '/session': { id: 'u1', name: 'Dev', role: 'admin' }, '/csrf': { token: 'tok1' }, '/me': { id: 'u1', name: 'Dev', role: 'admin', mode: 'dev' }, '/cases': [], '/element-sets': [], '/usage': {}, '/codes': [], '/bindings': [], '/rules': {}, '/protocols': {}, '/prefs': {} };
       if (p in lists) return [200, lists[p]];
       return [404, { error: { code: 'not_found', message: 'Not found' } }];
     }
@@ -58,16 +58,16 @@ async function readyServerStore(handler = happy()) {
 test('init (server mode) loads /api/me and the reference data, then is ready', async () => {
   const t = await readyServerStore();
   assert.equal(t.Store.ready, true); assert.equal(t.Store.me.name, 'Dev');
-  assert.deepEqual(t.calls.map((c) => c.path).sort(), ['/bindings', '/cases', '/codes', '/element-sets', '/me', '/prefs', '/protocols', '/rules', '/usage']);
+  assert.deepEqual(t.calls.map((c) => c.path).sort(), ['/bindings', '/cases', '/codes', '/element-sets', '/me', '/prefs', '/protocols', '/rules', '/session', '/usage']);
 });
 
-test('init fails (never half-loaded) when /api/me is missing; 401 calls onUnauthorized', async () => {
+test('init fails (never half-loaded) when /api/me is missing; 401 on the session check calls onUnauthorized', async () => {
   const t = boot(async (m, p) => (p === '/me' ? [404, { error: { code: 'not_found', message: 'Unknown API route' } }] : happy()(m, p)));
   await assert.rejects(t.Store.init(), (e) => e.status === 404);
   assert.equal(t.Store.ready, false);
-  const u = boot(async (m, p) => (p === '/me' ? [401, { error: { code: 'unauthorized', message: 'Login required' } }] : happy()(m, p)));
+  const u = boot(async (m, p) => (p === '/session' ? [401, { error: { code: 'unauthorized', message: 'Login required' } }] : happy()(m, p)));
   let hit = 0; u.Store.hooks.onUnauthorized = () => { hit++; };
-  await assert.rejects(u.Store.init(), (e) => e.status === 401); assert.equal(hit, 1);
+  await assert.rejects(u.Store.init(), (e) => e.status === 401); assert.equal(hit, 1); assert.deepEqual(u.calls.map((c) => c.path), ['/session']);   // nothing else is loaded while signed out
 });
 
 test('writes are queued in order: case first, then its rows, with expectedVersion on every patch', async () => {
@@ -369,4 +369,123 @@ test('31c: reference-data conflicts are not patient conflicts and cannot be revi
   t.Store.saveSet({ setId: 'x.y', kind: 'custom', version: 1, title: 'T' }); await until(() => t.Store.status().state === 'conflict', 'conflict');
   assert.equal(t.Store.conflictInfo('x.y').isCase, false); await assert.rejects(t.Store.conflictReview('x.y'), /no patient conflict/);
   assert.equal(t.Store.conflictInfo('nope'), null);
+});
+
+// ---------------------------------------------------------------- chunk 32d1: session, CSRF, 401
+// The boot() helper records only method/path/body, so these tests read headers through a second recorder.
+// A direct harness that exposes the request headers as well.
+function bootWithHeaders(handler, { mode = 'server' } = {}) {
+  const ls = new Map(); if (mode === 'local') ls.set('storeMode', 'local');
+  const calls = [];
+  const sandbox = {
+    localStorage: { getItem: (k) => (ls.has(k) ? ls.get(k) : null), setItem: (k, v) => ls.set(k, String(v)), removeItem: (k) => ls.delete(k) },
+    crypto: { randomUUID: () => crypto.randomUUID() }, setTimeout, clearTimeout, setInterval, clearInterval,
+    fetch: async (url, opts = {}) => {
+      const p = String(url).replace(/^\/api/, ''), body = opts.body ? JSON.parse(opts.body) : undefined, h = opts.headers || {};
+      calls.push({ method: opts.method, path: p, body, csrf: h['X-CSRF-Token'] });
+      const [status, data] = await handler(opts.method, p, body, h);
+      return { ok: status >= 200 && status < 300, status, json: async () => data };
+    },
+  };
+  sandbox.window = sandbox; vm.createContext(sandbox); vm.runInContext(SRC, sandbox);
+  return { Store: sandbox.Store, calls, writes: () => calls.filter((c) => c.method !== 'GET') };
+}
+const OK = happy();
+
+test('32d1: the CSRF token is fetched once and sent on writes only, never on GET, login or logout', async () => {
+  const t = bootWithHeaders(async (m, p, b) => OK(m, p, b));
+  await t.Store.init(); const id = crypto.randomUUID();
+  t.Store.setCases([mkCase(id)]); await t.Store.flush();
+  edit(t.Store, id, (c) => { c.narrative = 'v2'; }); await t.Store.flush();
+  const w = t.writes(); assert.ok(w.length >= 2);
+  assert.ok(w.every((c) => c.csrf === 'tok1'), 'every write carries the token');
+  assert.ok(t.calls.filter((c) => c.method === 'GET').every((c) => c.csrf === undefined), 'GET never carries it');
+  assert.equal(t.calls.filter((c) => c.path === '/csrf').length, 1, 'fetched once per session');
+  await t.Store.login('a', 'b').catch(() => {});
+  const lg = t.calls.filter((c) => c.path === '/login')[0]; assert.equal(lg.csrf, undefined);
+  await t.Store.logout(true);
+  assert.equal(t.calls.filter((c) => c.path === '/logout')[0].csrf, undefined);
+});
+
+test('32d1: a 403 csrf fetches a fresh token and retries that request once; a second csrf failure is reported, not looped', async () => {
+  let n = 0, tokens = ['old', 'new'];
+  const t = bootWithHeaders(async (m, p, b, h) => {
+    if (p === '/csrf') return [200, { token: tokens.shift() || 'new' }];
+    if (m === 'PATCH' && /^\/cases\/[^/]+$/.test(p)) { n++; return h['X-CSRF-Token'] === 'new' ? [200, { version: 2 }] : [403, { error: { code: 'csrf', message: 'Missing or wrong CSRF token.' } }]; }
+    return OK(m, p, b);
+  });
+  await t.Store.init(); const id = crypto.randomUUID(); t.Store.setCases([mkCase(id)]); await t.Store.flush();
+  edit(t.Store, id, (c) => { c.narrative = 'v2'; }); await t.Store.flush();
+  assert.equal(n, 2, 'sent twice: the stale token, then the fresh one'); assert.equal(t.Store.status().state, 'saved');
+  // a server that always says csrf: one retry only, then NOT SAVED with the reason
+  let m2 = 0;
+  const u = bootWithHeaders(async (m, p, b) => { if (p === '/csrf') return [200, { token: 'x' }]; if (m === 'PATCH') { m2++; return [403, { error: { code: 'csrf', message: 'Missing or wrong CSRF token.' } }]; } return OK(m, p, b); });
+  await u.Store.init(); const id2 = crypto.randomUUID(); u.Store.setCases([mkCase(id2)]); await u.Store.flush();
+  edit(u.Store, id2, (c) => { c.narrative = 'v2'; }); await u.Store.flush();
+  assert.equal(m2, 2); assert.match(u.Store.status().text, /^NOT SAVED/);
+});
+
+test('32d1: a 401 during use shows the login hook, keeps the unsent queue, and login resumes it', async () => {
+  let signedIn = true, hits = 0;
+  const t = bootWithHeaders(async (m, p, b) => {
+    if (!signedIn && p !== '/login') return [401, { error: { code: 'session_expired', message: 'Your session ended. Please log in again.' } }];
+    if (p === '/login') { signedIn = true; return [200, { id: 'u1', name: 'Dev', role: 'admin', mustChangePassword: false }]; }
+    return OK(m, p, b);
+  });
+  t.Store.hooks.onUnauthorized = () => { hits++; };
+  await t.Store.init(); const id = crypto.randomUUID(); t.Store.setCases([mkCase(id)]); await t.Store.flush();
+  signedIn = false;
+  edit(t.Store, id, (c) => { c.narrative = 'typed while signed out'; });
+  await until(() => t.Store.status().state === 'login', 'login state');
+  assert.ok(hits >= 1); assert.match(t.Store.status().text, /^NOT SAVED: sign in/); assert.equal(t.Store.pending() > 0, true, 'the change is still queued');
+  edit(t.Store, id, (c) => { c.narrative = 'typed more'; }); await tick();       // more edits while signed out stay queued, nothing is sent
+  const before = t.writes().length;
+  await t.Store.login('dev', 'a long password'); assert.equal(t.Store.needsLogin(), false);
+  t.Store.resume(); await t.Store.flush();
+  const w = t.writes().slice(before).filter((c) => c.method === 'PATCH');
+  assert.equal(w.length, 1, 'one coalesced PATCH after login'); assert.equal(w[0].body.narrative, 'typed more');
+  assert.equal(t.Store.status().state, 'saved');
+});
+
+test('32d1: unsent changes are never sent as a different user', async () => {
+  let signedIn = true, who = { id: 'u1', name: 'Dr One', role: 'doctor' };
+  const t = bootWithHeaders(async (m, p, b) => {
+    if (!signedIn && p !== '/login') return [401, { error: { code: 'session_expired', message: 'x' } }];
+    if (p === '/login') { signedIn = true; return [200, who]; }
+    if (p === '/session' || p === '/me') return [200, { id: 'u1', name: 'Dr One', role: 'doctor' }];
+    return OK(m, p, b);
+  });
+  await t.Store.init(); const id = crypto.randomUUID(); t.Store.setCases([mkCase(id)]); await t.Store.flush();
+  signedIn = false; edit(t.Store, id, (c) => { c.narrative = 'Dr One note'; }); await until(() => t.Store.status().state === 'login', 'login');
+  who = { id: 'u2', name: 'Nurse Two', role: 'nurse' }; const mark = t.calls.length;
+  await assert.rejects(t.Store.login('n2', 'pw'), (e) => e.code === 'other_user' && /Dr One/.test(e.message));
+  assert.ok(t.calls.some((c) => c.path === '/logout'), 'the wrong session is ended again');
+  assert.equal(t.Store.pending() > 0, true); t.Store.resume(); await tick(); // even a mistaken resume must not send under the wrong session
+  assert.equal(t.calls.slice(mark).filter((c) => c.method === 'PATCH').length, 0, 'nothing sent after the wrong-user login');
+});
+
+test('32d1: a wrong password does not trigger the login hook again and keeps the error for the screen', async () => {
+  let hits = 0;
+  const t = bootWithHeaders(async (m, p, b) => (p === '/login' ? [401, { error: { code: 'invalid_credentials', message: 'Invalid username or password' } }] : OK(m, p, b)));
+  t.Store.hooks.onUnauthorized = () => { hits++; };
+  await assert.rejects(t.Store.login('x', 'y'), (e) => e.status === 401 && e.code === 'invalid_credentials');
+  assert.equal(hits, 0);
+  const l = bootWithHeaders(async (m, p) => (p === '/login' ? [429, { error: { code: 'account_locked', message: 'This account is locked' } }] : OK(m, p)));
+  await assert.rejects(l.Store.login('x', 'y'), (e) => e.status === 429 && e.code === 'account_locked');
+});
+
+test('32d1: logout clears every cached record; it refuses while changes are unsent unless forced', async () => {
+  const t = bootWithHeaders(async (m, p, b) => (m === 'PATCH' ? new Promise(() => {}) : OK(m, p, b)));   // PATCH never answers: the change stays unsent
+  await t.Store.init(); const id = crypto.randomUUID(); t.Store.setCases([mkCase(id)]); await t.Store.flush();
+  edit(t.Store, id, (c) => { c.narrative = 'unsent'; }); await tick();
+  await assert.rejects(t.Store.logout(), (e) => e.code === 'unsent');
+  assert.equal(t.calls.filter((c) => c.path === '/logout').length, 0);
+  await t.Store.logout(true);
+  assert.equal(t.Store.getCases().length, 0); assert.equal(t.Store.me, null); assert.equal(t.Store.ready, false); assert.equal(t.Store.pending(), 0);
+});
+
+test('32d1: Demo mode never calls /session, /csrf or /login', async () => {
+  const t = bootWithHeaders(async (m, p, b) => OK(m, p, b), { mode: 'local' });
+  await t.Store.init(); t.Store.setCases([mkCase(crypto.randomUUID())]); await tick();
+  assert.equal(t.calls.length, 0); assert.equal(t.Store.needsLogin(), false);
 });
