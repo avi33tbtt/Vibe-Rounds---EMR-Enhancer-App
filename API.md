@@ -1,4 +1,4 @@
-# EMR Enhancer API (chunk 28)
+# EMR Enhancer API (chunks 28 to 31a)
 
 Base path `/api`. JSON in, JSON out. Synthetic data only; not for clinical use.
 
@@ -63,5 +63,15 @@ Seed sets (loaded by `node seed.js`) and any set with `readOnly: true` (marketpl
 | `POST /rules/:owner/:ruleId/disable {expectedVersion}`, `DELETE ...?expectedVersion=n` | |
 | `GET /protocols`, `PUT /protocols/:setId {body,expectedVersion}`, `POST /protocols/:setId/approve {expectedVersion}` | bands ship empty; editing clears approval |
 | `GET /prefs`, `PUT /prefs/:key {value}` | per user |
+
+## Import of browser data (chunk 31a)
+`POST /import/dry-run` and `POST /import`. Body (all keys optional, unknown keys rejected, 10 MB limit on these two routes only): `{v?, utcOffsetMinutes?, cases?, sets?, setUsage?, pinned?, codes?, rules?, protocols?}` in the shape the prototype exports (`cases` up to 500, `sets` up to 500).
+
+- **Dry-run** → `200 {dryRun:true, ok, counts, invalid[{kind,ref,reason}], invalidCounts, collisions[{kind,ref,reason}], collisionCounts, orphanedSets[{setId,usedBy}], warnings[{kind,message}]}`. Writes nothing.
+- **Import** runs the same checks, then writes everything in one transaction or nothing. Valid → `201 {status:"committed", importId, cases:[{legacyId,id}], ...report}`. Any `invalid` item → `422 import_invalid` with `report`, nothing inserted except an `imports` row with status `failed`.
+- **Idempotent:** a case is identified by its browser id (`legacy_id`); a case already imported, or whose id is already a server case id, is skipped and listed under `collisions`. Sets, codes, rules, protocols, usage and the default quick bar that already exist are skipped, never overwritten. Items listed twice in one file are invalid.
+- **Cases:** repeat groups (`setId/@group`) become one row record each (`entered_by` = the importing user, `entered_at` = now); more than 500 rows in a group is invalid. Row time = `__time` if present, else the group's first date/datetime column read from the set definition (this file's `sets` or the server's), with zone-less times read at `utcOffsetMinutes` (browser offset in minutes east of UTC, `-new Date().getTimezoneOffset()`; default 0 = UTC). Unreadable times are kept as no time and counted in a warning. Keys starting `__` in a row (server metadata) are ignored; rows marked `__status: "entered_in_error"` stay hidden. Notes keep status, text, times and `amends` links (an amendment needs a reason, a signed note needs `signedAt`). A signed note's signer becomes the importing user; the typed `signedBy` is kept in the `imports` report.
+- **Approvals are never imported:** rules are saved disabled and unapproved (a doctor or admin must approve), protocols unverified, `verifiedBy` inside a case's `setId/__protocol` value is cleared. Rules stored inside a set body are dropped.
+- **Sets:** user sets keep their `version` (later `POST /element-sets` continues from it); an id already on the server is never replaced. **Codes** use the same format checks as `POST /codes`; imported codes join the verified table, so check them against SNOMED or LOINC.
 
 Roles and per-route permission checks arrive in chunk 32; audit rows in chunk 33.

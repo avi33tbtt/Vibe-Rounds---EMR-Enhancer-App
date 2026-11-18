@@ -101,6 +101,7 @@ function createApp({ db, getActor }) {
     if (req.path.startsWith('/api/')) res.set('Cache-Control', 'no-store');
     next();
   });
+  app.use('/api/import', express.json({ limit: '10mb' }));   // browser data import (chunk 31a); the parser below then skips it
   app.use('/api', express.json({ limit: '1mb' }));
 
   app.get('/api/health', async (req, res) => {

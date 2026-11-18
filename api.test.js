@@ -375,3 +375,143 @@ test('bindings: bind, rebind, list, unbind, validation', async () => {
   assert.equal((await api().get('/api/bindings')).body.filter((b) => b.setId === 'care.vitals').length, 0);
   assert.equal((await api().delete('/api/bindings/care.vitals/temp')).status, 204);   // unbinding twice is harmless
 });
+
+// ---------- chunk 31a: transactional import of browser data ----------
+const imp = (b, dry) => api().post(dry ? '/api/import/dry-run' : '/api/import').send(b);
+const iso0 = '2026-11-18T08:00:00.000Z';
+const mkCase = (id, extra = {}) => ({ id, patient: { name: 'Demo', ageSex: '40 F', bed: 'B2', mrn: 'M1' }, narrative: 'n ' + id, applied: [], pathways: [], values: {}, notes: [], ...extra });
+const counts = async () => ({ cases: (await db.query('SELECT count(*)::int n FROM cases')).rows[0].n, rows: (await db.query('SELECT count(*)::int n FROM case_rows')).rows[0].n,
+  imports: (await db.query('SELECT count(*)::int n FROM imports')).rows[0].n });
+
+test('import: dry-run reports counts, invalid cases, collisions and orphaned sets, and writes nothing', async () => {
+  const before = await counts(), id = 'dry-' + crypto.randomBytes(3).toString('hex');
+  const body = { cases: [mkCase(id, { applied: [{ setId: 'gone.set', addedAt: iso0 }] }), { id: 'bad-' + id, narrative: 5 * 1 && 'x'.repeat(200001) }, { narrative: 'no id' }],
+    codes: { ['snomed|' + (7000000 + Math.floor(Math.random() * 1e6))]: 'Test concept', 'snomed|12': 'short' }, rules: { 'dry.set': [{ ruleId: 'r1', fieldRef: 'dry.set/f', op: '>', threshold: 5, indicator: 'info', summary: 'Review' }] } };
+  const r = await imp(body, true);
+  assert.equal(r.status, 200); assert.equal(r.body.dryRun, true); assert.equal(r.body.ok, false);
+  assert.equal(r.body.counts.cases, 1); assert.equal(r.body.counts.codes, 1); assert.equal(r.body.counts.rules, 1);
+  assert.equal(r.body.invalid.filter((x) => x.kind === 'case').length, 2);
+  assert.ok(r.body.invalid.some((x) => x.kind === 'case' && /longer than 200000/.test(x.reason)));
+  assert.ok(r.body.invalid.some((x) => x.kind === 'code' && x.ref === 'snomed|12'));
+  assert.deepEqual(r.body.orphanedSets.map((x) => x.setId).sort(), ['dry.set', 'gone.set']);
+  assert.deepEqual(await counts(), before);
+  assert.equal((await db.query("SELECT 1 FROM verified_codes WHERE display='Test concept'")).rows.length, 0);
+});
+
+test('import: all-or-nothing, a bad case stops everything and the attempt is recorded as failed', async () => {
+  const before = await counts(), good = 'aon-' + crypto.randomBytes(3).toString('hex');
+  const r = await imp({ cases: [mkCase(good), mkCase('aon-bad-' + good, { values: { 'bad key with spaces': 1 } })] });
+  assert.equal(r.status, 422); assert.equal(r.body.error.code, 'import_invalid'); assert.equal(r.body.report.invalid.length, 1);
+  const after = await counts();
+  assert.equal(after.cases, before.cases); assert.equal(after.imports, before.imports + 1);
+  assert.equal((await db.query('SELECT status FROM imports ORDER BY created_at DESC LIMIT 1')).rows[0].status, 'failed');
+  assert.equal((await db.query('SELECT 1 FROM cases WHERE legacy_id=$1', [good])).rows.length, 0);
+});
+
+test('import: idempotent, the second run inserts nothing and reports collisions', async () => {
+  const id = 'idem-' + crypto.randomBytes(3).toString('hex'), body = { cases: [mkCase(id, { values: { 'care.vitals/@vitals': [{ vit_time: '2026-11-18T09:00', hr: 70 }] } })], codes: { 'loinc|9999-9': 'Idem code' } };
+  const a = await imp(body); assert.equal(a.status, 201); assert.equal(a.body.counts.cases, 1); assert.equal(a.body.cases.length, 1); assert.equal(a.body.cases[0].legacyId, id);
+  const mid = await counts();
+  const b = await imp(body); assert.equal(b.status, 201); assert.equal(b.body.counts.cases, 0); assert.equal(b.body.counts.rows, 0); assert.equal(b.body.counts.codes, 0);
+  assert.ok(b.body.collisions.some((x) => x.kind === 'case' && x.ref === id)); assert.ok(b.body.collisions.some((x) => x.kind === 'code'));
+  const end = await counts(); assert.equal(end.cases, mid.cases); assert.equal(end.rows, mid.rows);
+});
+
+test('import: two imports at the same time insert the case once', async () => {
+  const id = 'race-' + crypto.randomBytes(3).toString('hex'), body = { cases: [mkCase(id)] };
+  const [a, b] = await Promise.all([imp(body), imp(body)]);
+  assert.deepEqual([a.status, b.status], [201, 201]);
+  assert.equal(a.body.counts.cases + b.body.counts.cases, 1);
+  assert.equal((await db.query('SELECT count(*)::int n FROM cases WHERE legacy_id=$1', [id])).rows[0].n, 1);
+});
+
+test('import: approvals are cleared (rules disabled and unapproved, protocols unverified, protocol value unverified)', async () => {
+  const sid = 'appr31.' + crypto.randomBytes(2).toString('hex'), cid = 'appr-' + sid;
+  const r = await imp({ cases: [mkCase(cid, { values: { [sid + '/__protocol']: { verifiedBy: 'Dr X', bands: [{ min: '1', max: '2', instruction: 'typed text' }] } } })],
+    rules: { [sid]: [{ ruleId: 'r1', fieldRef: sid + '/f', op: '>=', threshold: '38.5', unit: '°C', indicator: 'warning', summary: 'Review temperature', enabled: true, provenance: { source: 'manual', verifiedBy: 'Dr X', verifiedAt: iso0 } }] },
+    protocols: { [sid]: { verifiedBy: 'Dr X', bands: [{ min: 1, max: 2, instruction: 'typed text' }] } } });
+  assert.equal(r.status, 201); assert.equal(r.body.counts.rules, 1); assert.equal(r.body.counts.protocols, 1);
+  const rules = (await api().get('/api/rules')).body[sid]; assert.equal(rules.length, 1);
+  assert.equal(rules[0].enabled, false); assert.equal(rules[0].verifiedBy, null); assert.equal(rules[0].body.enabled, false); assert.equal(rules[0].body.provenance.verifiedBy, ''); assert.equal(rules[0].body.threshold, 38.5);
+  const p = (await api().get('/api/protocols')).body[sid]; assert.equal(p.verifiedBy, null); assert.equal(p.body.verifiedBy, ''); assert.deepEqual(p.body.bands, [{ min: '1', max: '2', instruction: 'typed text' }]);
+  const c = (await api().get('/api/cases/' + r.body.cases[0].id)).body; assert.equal(c.values[sid + '/__protocol'].verifiedBy, ''); assert.equal(c.values[sid + '/__protocol'].bands[0].instruction, 'typed text');
+  assert.ok(r.body.warnings.some((w) => w.kind === 'rule') && r.body.warnings.some((w) => w.kind === 'protocol'));
+  const again = await imp({ rules: { [sid]: [{ ruleId: 'r1', fieldRef: sid + '/f', op: '<', threshold: 1, indicator: 'info', summary: 'Changed' }] } });
+  assert.equal(again.body.counts.rules, 0); assert.equal((await api().get('/api/rules')).body[sid][0].body.op, '>=');         // an existing rule is never overwritten
+});
+
+test('import: repeat arrays become rows; times use the browser offset; error rows and bad times are kept; metadata is stripped', async () => {
+  const cid = 'rows-' + crypto.randomBytes(3).toString('hex'), sid = 'rowset31.' + crypto.randomBytes(2).toString('hex');
+  const def = { setId: sid, kind: 'care', sections: [{ title: 'g', fields: [{ id: 'vit_time', label: 'Time', type: 'datetime', repeat: true, group: 'vitals' }, { id: 'hr', label: 'HR', type: 'number', repeat: true, group: 'vitals' }] }] };
+  const r = await imp({ utcOffsetMinutes: 345, sets: [def], cases: [mkCase(cid, { values: { [sid + '/@vitals']: [
+    { vit_time: '2026-11-18T09:30', hr: 80, __id: 'x', __v: 9 }, { vit_time: 'not a time', hr: 81 }, { vit_time: '2026-11-18T10:00', hr: 82, __status: 'entered_in_error' }, { vit_time: '2026-11-18T08:00:00Z', hr: 79 }],
+    [sid + '/temp_note']: 'free text' } })] });
+  assert.equal(r.status, 201); assert.equal(r.body.counts.rows, 4); assert.equal(r.body.counts.values, 1);
+  assert.ok(r.body.warnings.some((w) => w.kind === 'row'));
+  const c = (await api().get('/api/cases/' + r.body.cases[0].id)).body, rows = c.values[sid + '/@vitals'];
+  assert.deepEqual(rows.map((x) => x.hr), [80, 79, 81]);                                                       // sorted by time, no-time row last, error row hidden
+  assert.equal(rows[0].__time, '2026-11-18T03:45:00.000Z'); assert.equal(rows[1].__time, '2026-11-18T08:00:00.000Z'); assert.equal(rows[2].__time, null); assert.equal(rows[0].__id.length, 36); assert.ok(!('x' in rows[0]) && rows[0].__v === 1);
+  const all = (await api().get(`/api/cases/${r.body.cases[0].id}?includeErrors=1`)).body.values[sid + '/@vitals'];
+  assert.equal(all.length, 4); assert.equal(all.find((x) => x.hr === 82).__status, 'entered_in_error');
+  assert.equal(c.values[sid + '/temp_note'], 'free text');
+  const by = (await db.query('SELECT DISTINCT entered_by FROM case_rows WHERE case_id=$1', [c.id])).rows; assert.equal(by.length, 1); assert.ok(by[0].entered_by);
+});
+
+test('import: more than 500 rows in a group refuses the import (nothing is dropped silently)', async () => {
+  const before = await counts(), rows = Array.from({ length: 501 }, (_, i) => ({ vit_time: '2026-11-18T09:00', hr: i }));
+  const r = await imp({ cases: [mkCase('big-' + crypto.randomBytes(3).toString('hex'), { values: { 'care.vitals/@vitals': rows } })] });
+  assert.equal(r.status, 422); assert.match(r.body.report.invalid[0].reason, /501 rows/);
+  assert.equal((await counts()).rows, before.rows);
+});
+
+test('import: notes keep status, signing time and amendment links; signer is the importing user, original name kept in the import record', async () => {
+  const cid = 'notes-' + crypto.randomBytes(3).toString('hex');
+  const r = await imp({ cases: [mkCase(cid, { notes: [
+    { id: 'n1', type: 'template', setId: 'template.basic_emr', text: 'signed text', status: 'signed', signedBy: 'Dr Typed Name', signedAt: '2026-11-17T10:00:00Z', createdAt: '2026-11-17T09:00:00Z' },
+    { id: 'n2', type: 'template', setId: 'template.basic_emr', text: 'amended text', status: 'draft', amends: 'n1', reason: 'wrong dose typed', createdAt: '2026-11-18T09:00:00Z' },
+    { id: 'n3', type: 'narrative', text: 'draft only', status: 'draft' }] })] });
+  assert.equal(r.status, 201); assert.equal(r.body.counts.notes, 3);
+  const c = (await api().get('/api/cases/' + r.body.cases[0].id)).body, by = Object.fromEntries(c.notes.map((n) => [n.text, n]));
+  assert.equal(by['signed text'].status, 'signed'); assert.equal(by['signed text'].signedAt, '2026-11-17T10:00:00.000Z'); assert.ok(by['signed text'].signedBy);
+  assert.equal(by['amended text'].amends, by['signed text'].id); assert.equal(by['amended text'].reason, 'wrong dose typed'); assert.equal(by['draft only'].status, 'draft');
+  assert.equal((await api().patch(`/api/cases/${c.id}/notes/${by['signed text'].id}`).send({ expectedVersion: 1, text: 'edit' })).status, 409);     // signed stays read-only
+  const rec = (await db.query('SELECT report FROM imports WHERE id=$1', [r.body.importId])).rows[0].report;
+  assert.equal(rec.signers[0].signedBy, 'Dr Typed Name'); assert.ok(r.body.warnings.some((w) => w.kind === 'note'));
+  const bad = await imp({ cases: [mkCase('nb-' + cid, { notes: [{ id: 'a', type: 'narrative', text: 'x', status: 'draft', amends: 'zzz', reason: 'r' }, { id: 'b', type: 'narrative', text: 'x', status: 'signed' }] })] }, true);
+  assert.equal(bad.body.ok, false); assert.match(bad.body.invalid[0].reason, /amends a note that is not in this case/); assert.match(bad.body.invalid[0].reason, /signing time/);
+});
+
+test('import: sets (version kept, rules inside stripped, existing ids never replaced), usage, pinned', async () => {
+  const tag = crypto.randomBytes(2).toString('hex'), sid = 'mine31.' + tag, other = 'exist31.' + tag;
+  const mk = (id, extra = {}) => ({ setId: id, kind: 'custom', version: 3, title: 'Mine', sections: [{ title: 's', fields: [{ id: 'f', label: 'F', type: 'text' }] }], ...extra });
+  assert.equal((await api().post('/api/element-sets').send({ setId: other, kind: 'custom', body: { title: 'Already here', sections: [] } })).status, 201);
+  const set = mk(sid, { rules: [{ ruleId: 'x' }] }), had = 'pinned' in (await api().get('/api/prefs')).body;
+  const body = { sets: [set, mk(other), { setId: 'nokind.' + tag, kind: 'weird', sections: [] }], setUsage: { [sid]: { count: 4, lastUsed: iso0, withDx: { dka: 2 } } }, pinned: ['care.vitals', sid] };
+  const d = await imp(body, true); assert.equal(d.body.invalid.length, 1); assert.equal(d.body.invalid[0].kind, 'set'); assert.ok(d.body.collisions.some((x) => x.ref === other));
+  const r = await imp({ ...body, sets: [set, mk(other)] }); assert.equal(r.status, 201); assert.equal(r.body.counts.sets, 1); assert.equal(r.body.counts.pinned, had ? 0 : 1);
+  const s = (await api().get('/api/element-sets/' + sid)).body; assert.equal(s.version, 3); assert.equal(s.source, 'user'); assert.equal(s.tier, 'local-draft'); assert.equal(s.readOnly, false); assert.ok(!('rules' in s.body));
+  assert.equal((await api().get('/api/element-sets/' + other)).body.body.title, 'Already here');                              // an existing set is never replaced
+  assert.deepEqual((await api().get('/api/usage')).body[sid], { count: 4, lastUsed: iso0, withDx: { dka: 2 } });
+  if (!had) assert.deepEqual((await api().get('/api/prefs')).body.pinned, ['care.vitals', sid]);
+  const nv = await api().post('/api/element-sets').send({ setId: sid, kind: 'custom', body: set, expectedVersion: 3 }); assert.equal(nv.status, 201); assert.equal(nv.body.version, 4);   // later saves continue the version line
+  const again = await imp({ setUsage: { [sid]: { count: 99 } }, pinned: ['x'] }); assert.equal(again.body.counts.usage, 0); assert.equal(again.body.counts.pinned, 0);
+  assert.equal((await api().get('/api/usage')).body[sid].count, 4);
+});
+
+test('import: codes follow the same format rules as /api/codes and never overwrite', async () => {
+  const r = await imp({ codes: { 'snomed|2345678': 'Concept A', 'loinc|1234-5': 'Obs B', 'snomed|0123456': 'leading zero', 'foo|1': 'x', 'loinc|1234-5|x': 'extra' } }, true);
+  assert.equal(r.body.counts.codes, 2); assert.equal(r.body.invalid.length, 3); assert.ok(r.body.warnings.some((w) => w.kind === 'code'));
+  await api().post('/api/codes').send({ system: 'snomed', code: '7654321', display: 'Original' });
+  const again = await imp({ codes: { 'snomed|7654321': 'Different' } }); assert.equal(again.body.counts.codes, 0);
+  assert.equal((await api().get('/api/codes')).body.find((c) => c.code === '7654321').display, 'Original');
+});
+
+test('import: validation of the body and a body larger than 1 MB is accepted (10 MB limit on this route only)', async () => {
+  assert.equal((await imp({ cases: 'nope' }, true)).status, 400);
+  assert.equal((await imp({ cases: [], extra: 1 }, true)).status, 400);
+  assert.equal((await imp({ utcOffsetMinutes: 5000 }, true)).status, 400);
+  const big = Array.from({ length: 10 }, (_, i) => mkCase('large-' + i + crypto.randomBytes(2).toString('hex'), { narrative: 'x'.repeat(150000) }));
+  const r = await imp({ cases: big }, true); assert.equal(r.status, 200); assert.equal(r.body.counts.cases, 10);
+  assert.equal((await api().post('/api/cases').send({ narrative: 'y'.repeat(1100000) })).status, 413);                  // other routes keep the 1 MB cap
+  const empty = await imp({}); assert.equal(empty.status, 201); assert.equal(empty.body.counts.cases, 0);
+});
