@@ -23,6 +23,7 @@ const ACTIONS = {
   'case.patient': ['admin', 'doctor', 'nurse'],      // patient banner details (demo fields until chunk 34)
   'case.pin': ['admin', 'doctor', 'nurse'],          // quick bar
   'alert.ack': ['admin', 'doctor', 'nurse'],         // acknowledge an alert (alertLog)
+  'case.read_errors': CLIN,                          // GET /cases/:id?include_errors=true: see rows marked entered in error (chunk 33b)
   'case.narrative': CLIN,
   'case.apply': CLIN,                                // applied sets and pathways
   'row.add': ['admin', 'doctor', 'nurse'],           // a nurse: care sets only (see canAddRow)

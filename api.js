@@ -41,6 +41,7 @@ const CODE_RE = { snomed: /^[1-9]\d{5,17}$/, loinc: /^\d{1,7}-\d$/ };
 function codeShape(o, ctx) {
   if (!CODE_RE[o.system].test(o.code)) ctx.addIssue({ code: 'custom', path: ['code'], message: o.system === 'snomed' ? 'not a SNOMED CT concept id (6 to 18 digits)' : 'not a LOINC code (digits, a hyphen, one check digit)' });
 }
+const reasonText = z.string().trim().min(3).max(1000);
 const S = {
   caseCreate: z.object({ id: uuid.optional(), patient: patientObj.optional(), narrative: z.string().max(200000).optional(),
     applied: appliedArr.optional(), pathways: pathwaysArr.optional(), pinned: pinnedArr.optional() }).strict(),
@@ -48,10 +49,10 @@ const S = {
     applied: appliedArr.optional(), pathways: pathwaysArr.optional(), pinned: pinnedArr.optional(), alertLog: alertLogArr.optional() }).strict()
     .refine((o) => Object.keys(o).length > 1, 'nothing to change'),
   rowCreate: z.object({ setId: ident, groupId: ident, row: rowObj, rowTime: isoTime.nullable().optional() }).strict(),
-  rowPatch: z.object({ expectedVersion: ver, row: rowObj.optional(), rowTime: isoTime.nullable().optional() }).strict()
+  rowPatch: z.object({ expectedVersion: ver, row: rowObj.optional(), rowTime: isoTime.nullable().optional(), reason: reasonText.optional() }).strict()
     .refine((o) => o.row !== undefined || o.rowTime !== undefined, 'nothing to change'),
-  rowError: z.object({ expectedVersion: ver, reason: z.string().trim().min(3).max(1000) }).strict(),
-  valuePut: z.object({ key: valueKey, value: anyJson(100000), expectedVersion: z.number().int().min(0) }).strict(),
+  rowError: z.object({ expectedVersion: ver, reason: reasonText }).strict(),       // a reason is always required to mark a row entered in error
+  valuePut: z.object({ key: valueKey, value: anyJson(100000), expectedVersion: z.number().int().min(0), reason: reasonText.optional() }).strict(),
   noteCreate: z.object({ id: uuid.optional(), type: z.enum(['narrative', 'template', 'disease']), setId: ident.optional(), text: z.string().max(200000).optional() }).strict(),
   notePatch: z.object({ expectedVersion: ver, text: z.string().max(200000) }).strict(),
   noteSign: z.object({ expectedVersion: ver }).strict(),
@@ -109,6 +110,12 @@ async function conflict(q, id, what) {
   throw new ApiError(409, 'conflict', `${what} was changed by someone else`, { current: cur });
 }
 const touch = (q, id) => q.query('UPDATE cases SET updated_at=now() WHERE id=$1', [id]);
+// chunk 33b: copy the version being replaced into row_versions / value_versions. Call on the SAME transaction client, after the change succeeded.
+const saveRowVersion = (q, old, by, reason) => q.query(`INSERT INTO row_versions (row_id,case_id,version,row,row_time,status,error_reason,written_by,written_at,replaced_by,reason)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [old.id, old.case_id, old.version, JSON.stringify(old.row), old.row_time, old.status, old.error_reason,
+  old.updated_by || old.entered_by, old.updated_at || old.entered_at, by, reason || null]);
+const saveValueVersion = (q, caseId, key, old, by, reason) => q.query(`INSERT INTO value_versions (case_id,key,version,value,written_by,written_at,replaced_by,reason)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [caseId, key, old.version, JSON.stringify(old.value), old.updated_by, old.updated_at, by, reason || null]);
 const rowOut = (r) => ({ id: r.id, caseId: r.case_id, setId: r.set_id, groupId: r.group_id, row: r.row, rowTime: iso(r.row_time), version: r.version,
   status: r.status, errorReason: r.error_reason, enteredBy: r.entered_by, enteredAt: iso(r.entered_at) });
 
@@ -379,7 +386,9 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
       pathways: c.pathways.map((p) => p.pathwayId), version: c.version, updatedAt: iso(c.updated_at) })));
   }));
   r.get('/cases/:id', wrap(async (req, res) => {
-    const c = await loadCase(db, idParam(req.params.id), { includeErrors: req.query.includeErrors === '1' });
+    const wantErrors = req.query.include_errors === 'true' || req.query.includeErrors === '1';            // rows marked entered in error: hidden unless asked for
+    if (wantErrors && !can(req.actor, 'case.read_errors')) return denied(res, req.actor, 'see rows entered in error');   // doctors and admins only
+    const c = await loadCase(db, idParam(req.params.id), { includeErrors: wantErrors });
     if (!c) throw new ApiError(404, 'not_found', 'Case not found');
     res.json(c);
   }));
@@ -445,8 +454,9 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
     const sets = [], p = [rid, id, b.expectedVersion];
     if (b.row !== undefined) { p.push(JSON.stringify(b.row)); sets.push(`row=$${p.length}`); }
     if (b.rowTime !== undefined) { p.push(b.rowTime); sets.push(`row_time=$${p.length}`); }
+    p.push(req.actor.id); sets.push(`updated_by=$${p.length}`, 'updated_at=now()');            // who wrote this version (the old one is kept below)
     const out = await db.withTx(async (c) => {
-      const old = (await c.query('SELECT row, row_time, version FROM case_rows WHERE id=$1 AND case_id=$2 FOR UPDATE', [rid, id])).rows[0];
+      const old = (await c.query('SELECT * FROM case_rows WHERE id=$1 AND case_id=$2 FOR UPDATE', [rid, id])).rows[0];
       const u = await c.query(`UPDATE case_rows SET ${sets.join(',')}, version=version+1 WHERE id=$1 AND case_id=$2 AND version=$3 AND status='active' RETURNING *`, p);
       if (!u.rows.length) {
         const cur = (await c.query('SELECT * FROM case_rows WHERE id=$1 AND case_id=$2', [rid, id])).rows[0];
@@ -454,8 +464,9 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
         if (cur.status !== 'active') throw new ApiError(422, 'entered_in_error', 'This row was entered in error and cannot be edited', { current: rowOut(cur) });
         throw new ApiError(409, 'conflict', 'This row was changed by someone else', { current: rowOut(cur) });
       }
+      await saveRowVersion(c, old, req.actor.id, b.reason);                                    // the version just replaced stays, in the same transaction
       await touch(c, id);
-      await audit(c, { action: 'row.amend', entity: 'case_row', entity_id: rid, case_id: id,
+      await audit(c, { action: 'row.amend', entity: 'case_row', entity_id: rid, case_id: id, reason: b.reason,
         before: { row: old.row, rowTime: iso(old.row_time), version: old.version }, after: { row: u.rows[0].row, rowTime: iso(u.rows[0].row_time), version: u.rows[0].version } });
       return u.rows[0];
     });
@@ -465,13 +476,15 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
     const id = idParam(req.params.id), rid = idParam(req.params.rowId), b = parse(S.rowError, req.body);
     await assertRowAmend(req, id, rid);
     const out = await db.withTx(async (c) => {
-      const u = await c.query(`UPDATE case_rows SET status='entered_in_error', error_reason=$4, version=version+1
-        WHERE id=$1 AND case_id=$2 AND version=$3 AND status='active' RETURNING *`, [rid, id, b.expectedVersion, b.reason]);
+      const old = (await c.query('SELECT * FROM case_rows WHERE id=$1 AND case_id=$2 FOR UPDATE', [rid, id])).rows[0];
+      const u = await c.query(`UPDATE case_rows SET status='entered_in_error', error_reason=$4, version=version+1, updated_by=$5, updated_at=now()
+        WHERE id=$1 AND case_id=$2 AND version=$3 AND status='active' RETURNING *`, [rid, id, b.expectedVersion, b.reason, req.actor.id]);
       if (!u.rows.length) {
         const cur = (await c.query('SELECT * FROM case_rows WHERE id=$1 AND case_id=$2', [rid, id])).rows[0];
         if (!cur) throw new ApiError(404, 'not_found', 'Row not found');
         throw new ApiError(409, 'conflict', 'This row was changed by someone else', { current: rowOut(cur) });
       }
+      await saveRowVersion(c, old, req.actor.id, b.reason);                                    // hidden, never removed: the last good version and the reason stay
       await touch(c, id);
       await audit(c, { action: 'row.entered_in_error', entity: 'case_row', entity_id: rid, case_id: id, reason: b.reason,
         before: { status: 'active', version: b.expectedVersion }, after: { status: 'entered_in_error', version: u.rows[0].version } });
@@ -485,15 +498,16 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
     const id = idParam(req.params.id), b = parse(S.valuePut, req.body);
     if (!(await db.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
     const out = await db.withTx(async (c) => {
-      const old = (await c.query('SELECT value, version FROM case_values WHERE case_id=$1 AND key=$2 FOR UPDATE', [id, b.key])).rows[0] || null;
+      const old = (await c.query('SELECT value, version, updated_by, updated_at FROM case_values WHERE case_id=$1 AND key=$2 FOR UPDATE', [id, b.key])).rows[0] || null;
       const q = b.expectedVersion === 0
         ? await c.query(`INSERT INTO case_values (case_id,key,value,updated_by) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING key,value,version`,
           [id, b.key, JSON.stringify(b.value), req.actor.id])
         : await c.query(`UPDATE case_values SET value=$3, version=version+1, updated_by=$4, updated_at=now() WHERE case_id=$1 AND key=$2 AND version=$5 RETURNING key,value,version`,
           [id, b.key, JSON.stringify(b.value), req.actor.id, b.expectedVersion]);
-      if (!q.rows.length) throw new ApiError(409, 'conflict', 'This value was changed by someone else', { current: old && { key: b.key, ...old } });
+      if (!q.rows.length) throw new ApiError(409, 'conflict', 'This value was changed by someone else', { current: old && { key: b.key, value: old.value, version: old.version } });
+      if (b.expectedVersion > 0) await saveValueVersion(c, id, b.key, old, req.actor.id, b.reason);   // the version just replaced stays, in the same transaction
       await touch(c, id);
-      await audit(c, { action: 'value.set', entity: 'case_value', entity_id: b.key, case_id: id, before: old, after: { value: q.rows[0].value, version: q.rows[0].version } });
+      await audit(c, { action: 'value.set', entity: 'case_value', entity_id: b.key, case_id: id, reason: b.reason, before: old && { value: old.value, version: old.version }, after: { value: q.rows[0].value, version: q.rows[0].version } });
       return q.rows[0];
     });
     res.json(out);

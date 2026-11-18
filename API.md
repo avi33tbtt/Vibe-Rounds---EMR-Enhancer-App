@@ -26,24 +26,24 @@ Base path `/api`. JSON in, JSON out. Synthetic data only; not for clinical use.
 | Route | Body | Result |
 |---|---|---|
 | `GET /cases` | | summary list `[{id,patient,preview,appliedCount,pathways,version,updatedAt}]` |
-| `GET /cases/:id[?includeErrors=1]` | | the case in the prototype shape (below) |
+| `GET /cases/:id[?include_errors=true]` | | the case in the prototype shape (below). `include_errors=true` (older spelling `includeErrors=1`) also returns rows marked entered in error; doctor and admin only, other roles get 403 |
 | `POST /cases` | `{id?, patient?, narrative?, applied?, pathways?, pinned?}` | 201 case; an existing `id` gives 409 (idempotent import) |
 | `PATCH /cases/:id` | `{expectedVersion, patient?, narrative?, applied?, pathways?, pinned?, alertLog?}` | updated case |
 
 Case shape: `{id, patient, patientId, encounterId, narrative, applied[{setId,addedAt}], pathways[], pinned, alertLog[], values, valueVersions, notes[], version, createdAt, updatedAt}`.
-`values` holds scalar keys (`setId/fieldId`, `setId/__ref`, `setId/__protocol`) and, for repeat groups, `values["setId/@group"] = [row objects]`, sorted by time. Each row object also carries metadata keys `__id`, `__v` (version), `__by`, `__at`, `__status`, `__time`, which the client uses to patch a row and strips before display or export. Rows entered in error are hidden unless `includeErrors=1`.
+`values` holds scalar keys (`setId/fieldId`, `setId/__ref`, `setId/__protocol`) and, for repeat groups, `values["setId/@group"] = [row objects]`, sorted by time. Each row object also carries metadata keys `__id`, `__v` (version), `__by`, `__at`, `__status`, `__time`, which the client uses to patch a row and strips before display or export. Rows entered in error are hidden unless `include_errors=true` (doctor and admin).
 
 ## Rows (append-only)
 | Route | Body |
 |---|---|
 | `POST /cases/:id/rows` | `{setId, groupId, row:{...}, rowTime?}` → 201. No version needed; parallel appends all succeed. |
-| `PATCH /cases/:id/rows/:rowId` | `{expectedVersion, row?, rowTime?}`; 422 if the row is entered in error |
+| `PATCH /cases/:id/rows/:rowId` | `{expectedVersion, row?, rowTime?, reason?}` (`reason` optional, 3 to 1000 characters); 422 if the row is entered in error; the replaced version is kept (see Versions) |
 | `POST /cases/:id/rows/:rowId/error` | `{expectedVersion, reason}` (reason required); the row is hidden, kept, and cannot be edited |
 
 A row with an invalid or missing time is stored with `rowTime: null` and still shown.
 
 ## Values
-`PUT /cases/:id/values` `{key, value, expectedVersion}` (0 to create). Key pattern `setId/fieldId`, `setId/@group` or `setId/__ref`.
+`PUT /cases/:id/values` `{key, value, expectedVersion, reason?}` (0 to create; `reason` optional; the replaced value is kept, see Versions). Key pattern `setId/fieldId`, `setId/@group` or `setId/__ref`.
 
 ## Notes
 `POST /cases/:id/notes` `{id?, type:"narrative|template|disease", setId?, text?}` · `PATCH .../notes/:nid` `{expectedVersion,text}` (drafts only) · `POST .../notes/:nid/sign` `{expectedVersion}` (signer = session user; signed notes are read-only, 409 `signed`) · `POST .../notes/:nid/amend` `{reason,text}` creates a new draft linked by `amends`.
@@ -101,6 +101,12 @@ Every route that changes data writes **one** `audit_log` row on the same databas
 `POST /import/dry-run` and the refused `PATCH`/`DELETE /element-sets/:setId` write nothing, so they write no audit row. `audit.test.js` fails if a new write route is added without an audit test. Login, logout and failed-login events are not audited yet (see the next chunk).
 
 **Database role.** The server serves requests as `emr_app` (created by `003_audit_grants.sql`), which has `INSERT` and `SELECT` only on `audit_log` and `review_events` (no `UPDATE`, `DELETE`, `TRUNCATE`; the append-only trigger is a second guard) and no access to `schema_migrations`. Migrations still run as the owner in `DATABASE_URL`. One-time setup by a database admin: `ALTER ROLE emr_app LOGIN PASSWORD '<long random value>';`, then set `APP_DATABASE_URL=postgres://emr_app:<password>@host:5432/dbname` for the server. Without `APP_DATABASE_URL` the server uses the owner role and warns (development only). A later migration that adds a table must also grant `emr_app` its rights on it.
+
+## Versions and entered in error (chunk 33b)
+Nothing a clinician saved is overwritten or removed.
+- **Edits keep the old version.** `PATCH …/rows/:rowId` and `PUT …/values` (with `expectedVersion` above 0) copy the version they replace into `row_versions` / `value_versions` in the same transaction as the change, with the old content, who wrote it and when (`written_by`, `written_at`), and who replaced it, when and why (`replaced_by`, `replaced_at`, `reason`). If saving the old version fails the edit fails. Creating a row or a value keeps nothing because nothing was replaced. Both tables are append-only (no UPDATE, DELETE or TRUNCATE for anyone). Reading them through the API arrives with the History drawer in chunk 33c.
+- **Entered in error needs a reason** (`POST …/rows/:rowId/error`, 3 to 1000 characters; also enforced by a database CHECK). The row is hidden from `GET /cases/:id`, kept in `case_rows` with its reason, its last active content is kept in `row_versions`, and it cannot be edited or marked again. Doctors and admins can see hidden rows with `include_errors=true` (permission `case.read_errors`); every other role gets 403 for that parameter.
+- **Never DELETE.** There is no route that deletes a case, row, value or note. The database refuses DELETE and TRUNCATE on `cases`, `case_rows`, `case_values`, `case_notes`, `row_versions` and `value_versions` by trigger (even for the owner), and `emr_app` is not granted them. Migration `004_versions.sql` also adds `case_rows.updated_by` and `updated_at` (who wrote the current version).
 
 ## Login, logout and session (chunk 32a)
 Mounted before the data routes. The data routes still use the development user until chunk 32b, so they do not require a login yet.
