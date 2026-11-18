@@ -78,7 +78,7 @@ Seed sets (loaded by `node seed.js`) and any set with `readOnly: true` (marketpl
 - **Approvals are never imported:** rules are saved disabled and unapproved (a doctor or admin must approve), protocols unverified, `verifiedBy` inside a case's `setId/__protocol` value is cleared. Rules stored inside a set body are dropped.
 - **Sets:** user sets keep their `version` (later `POST /element-sets` continues from it); an id already on the server is never replaced. **Codes** use the same format checks as `POST /codes`; imported codes join the verified table, so check them against SNOMED or LOINC.
 
-Roles and per-route permission checks: chunk 32 (see below). Audit rows: chunk 33a (next section).
+Roles and per-route permission checks: chunk 32 (see below). Audit rows: chunk 33a (next section); versions and entered in error: 33b; the admin Audit screen and export: 33d (see "Audit screen and export").
 
 ## Audit trail (chunk 33a)
 Every route that changes data writes **one** `audit_log` row on the same database transaction as the change, so both are saved or neither is: if the audit insert fails, the request fails (500) and nothing changes. Who (`user_id`, `role`) and from where (`ip`) come from the login session, never from a request body. `before` and `after` hold only what that request changed; `case_id` routes also record the case's `patient_id` when it has one. A request that is refused (401, 403, 400), conflicts (409) or only reads writes no audit row.
@@ -177,3 +177,13 @@ One table, `permissions.js`: action -> roles. Each route maps to exactly one act
 - Defined for later chunks, no routes yet: `user.manage` (admin), `content.review` and `package.install` (informatician, admin).
 
 **Decisions to confirm:** admin holds every action; a nurse cannot apply sets or pathways, write notes or save non-repeating values (so a nurse cannot start a new flowsheet; a doctor applies it first); informatician may author sets, pathways and codes but not chart.
+
+## Audit screen and export (chunk 33d)
+Admin only (action `audit.read`; every other role gets 403, logged out gets 401). Both routes read `audit_log` as the app role (SELECT only).
+
+| Route | What it does |
+|---|---|
+| `GET /audit` | One page of entries, newest first: `{ items, nextBefore }`. Each item: `id, at, userId, username, role, action, entity, entityId, patientId, before, after, reason, ip`. Query (all optional, anything else is 400): `user` (user id or username, case-insensitive), `patient` (id), `from` (inclusive), `to` (exclusive; a bare `YYYY-MM-DD` means that whole UTC day), `action` (exact, or a prefix ending in `*`, such as `row.*`), `limit` (1 to 200, default 50), `before` (the `nextBefore` of the previous page). Paging is by id, so rows arriving meanwhile never cause gaps or repeats. Viewing writes no audit row. |
+| `GET /audit.csv` | The same filters (no `limit`/`before`) as a CSV download, up to 50,000 rows; `X-Audit-Rows` and `X-Audit-Truncated` say what was sent. Columns: `id, at, user_id, username, role, action, entity, entity_id, patient_id, reason, ip`. Record contents (`before`/`after`) are **not** exported. Cells starting with `=`, `+`, `-`, `@`, tab or CR get a leading `'` so a spreadsheet cannot run them as formulas. The export writes its own `audit_export` row (the filter, the row count, whether it was cut off) in the same transaction as the read: if that row cannot be written, nothing is exported (500). The export is not in its own file, but is in the next one. |
+
+Decisions to confirm: viewing the screen is not logged (only exports are); `before`/`after` are on screen but not in the CSV; the 50,000-row cap is reported, not silent.

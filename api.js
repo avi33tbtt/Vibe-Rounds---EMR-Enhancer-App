@@ -11,7 +11,7 @@ const express = require('express');
 const { z } = require('zod');
 const crypto = require('node:crypto');
 const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied } = require('./permissions.js');
-const { audit, auditContext } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
+const { audit, auditContext, auditPage, auditOut, csvLine, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
 
 class ApiError extends Error {
   constructor(status, code, message, extra) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -41,8 +41,14 @@ const CODE_RE = { snomed: /^[1-9]\d{5,17}$/, loinc: /^\d{1,7}-\d$/ };
 function codeShape(o, ctx) {
   if (!CODE_RE[o.system].test(o.code)) ctx.addIssue({ code: 'custom', path: ['code'], message: o.system === 'snomed' ? 'not a SNOMED CT concept id (6 to 18 digits)' : 'not a LOINC code (digits, a hyphen, one check digit)' });
 }
+const auditFilter = {
+  user: z.string().trim().min(1).max(100).optional(), patient: uuid.optional(), from: isoTime.optional(), to: isoTime.optional(),
+  action: z.string().regex(/^[A-Za-z0-9_.]{1,60}\*?$/).optional(),
+};
 const reasonText = z.string().trim().min(3).max(1000);
 const S = {
+  auditQuery: z.object({ ...auditFilter, before: z.string().regex(/^\d{1,18}$/).optional(), limit: z.string().regex(/^\d{1,3}$/).optional() }).strict(),
+  auditCsv: z.object(auditFilter).strict(),
   caseCreate: z.object({ id: uuid.optional(), patient: patientObj.optional(), narrative: z.string().max(200000).optional(),
     applied: appliedArr.optional(), pathways: pathwaysArr.optional(), pinned: pinnedArr.optional() }).strict(),
   casePatch: z.object({ expectedVersion: ver, patient: patientObj.optional(), narrative: z.string().max(200000).optional(),
@@ -833,6 +839,24 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
       throw new ApiError(422, 'import_invalid', `Nothing was imported: ${done.rep.invalid.length} problem(s) found. Fix them or remove those items and try again.`, { report: full });
     }
     res.status(201).json({ status: 'committed', importId: done.importId, cases: done.idMap, ...reportOut(done.rep) });
+  }));
+
+  // ================= audit log: admin only (chunk 33d) =================
+  r.get('/audit', wrap(async (req, res) => {
+    const f = parse(S.auditQuery, req.query), page = await auditPage(db, f, f.limit);
+    res.json({ items: page.rows.map(auditOut), nextBefore: page.nextBefore });
+  }));
+  r.get('/audit.csv', wrap(async (req, res) => {
+    const f = parse(S.auditCsv, req.query);
+    // The read and its own 'audit_export' row share one transaction: an export that cannot be recorded does not happen.
+    const out = await db.withTx(async (c) => {
+      const page = await auditPage(c, f, AUDIT_CSV_MAX, AUDIT_CSV_MAX), truncated = page.nextBefore !== null;
+      await audit(c, { action: 'audit_export', entity: 'audit_log', after: { filter: f, rows: page.rows.length, truncated } });
+      return { rows: page.rows, truncated };
+    });
+    res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="audit-log.csv"', 'Cache-Control': 'no-store',
+      'X-Audit-Rows': String(out.rows.length), 'X-Audit-Truncated': out.truncated ? 'true' : 'false' });
+    res.send(CSV_COLUMNS.join(',') + '\r\n' + out.rows.map(csvLine).join('\r\n') + (out.rows.length ? '\r\n' : ''));
   }));
 
   // consistent errors (server.js also has a final handler for non-API paths)

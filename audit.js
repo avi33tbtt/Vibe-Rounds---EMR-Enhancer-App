@@ -35,4 +35,52 @@ async function audit(client, e) {
       json(e.before), json(e.after), e.reason || null, ctx.ip]);
 }
 
-module.exports = { audit, auditContext };
+// ---------- reading the log (chunk 33d, admin only) ----------
+const AUDIT_MAX_PAGE = 200, AUDIT_CSV_MAX = 50000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Turn validated query values into a WHERE clause on `audit_log a LEFT JOIN users u`. Always parameterised. Filters: user (a user id, or a username),
+ * patient (id), from (inclusive), to (exclusive; a bare date means the whole of that UTC day), action (exact, or a prefix ending in *), before (id cursor).
+ */
+function auditWhere(f) {
+  const w = [], v = [], add = (sql, val) => { v.push(val); w.push(sql.replace('?', '$' + v.length)); };
+  if (f.user) { if (UUID_RE.test(f.user)) add('a.user_id = ?::uuid', f.user); else add('lower(u.username) = lower(?)', f.user); }
+  if (f.patient) add('a.patient_id = ?::uuid', f.patient);
+  if (f.from) add('a.at >= ?::timestamptz', f.from);
+  if (f.to) {
+    if (DATE_ONLY.test(f.to)) add("a.at < (?::date + 1)::timestamp AT TIME ZONE 'UTC'", f.to);
+    else add('a.at < ?::timestamptz', f.to);
+  }
+  if (f.action) {
+    if (f.action.endsWith('*')) add("a.action LIKE ? ESCAPE '\\'", f.action.slice(0, -1).replace(/[\\%_]/g, '\\$&') + '%');
+    else add('a.action = ?', f.action);
+  }
+  if (f.before) add('a.id < ?::bigint', String(f.before));
+  return { sql: w.length ? 'WHERE ' + w.join(' AND ') : '', values: v };
+}
+
+/** One page, newest first, by id (keyset paging: stable while new rows arrive). `q` is a pool or a transaction client. */
+async function auditPage(q, f, limit, max = AUDIT_MAX_PAGE) {
+  const n = Math.min(Math.max(parseInt(limit, 10) || 50, 1), max), { sql, values } = auditWhere(f);
+  const r = await q.query(
+    `SELECT a.id, a.at, a.user_id, u.username, a.role, a.action, a.entity, a.entity_id, a.patient_id, a.before, a.after, a.reason, a.ip
+       FROM audit_log a LEFT JOIN users u ON u.id = a.user_id ${sql} ORDER BY a.id DESC LIMIT ${n + 1}`, values);
+  const more = r.rows.length > n, rows = more ? r.rows.slice(0, n) : r.rows;
+  return { rows, nextBefore: more ? String(rows[rows.length - 1].id) : null };
+}
+
+/** CSV cell: text starting with = + - @ (or a tab/CR) gets a leading ' so a spreadsheet shows it as text, never runs it as a formula; then standard quoting. */
+function csvCell(v) {
+  let s = v === null || v === undefined ? '' : v instanceof Date ? v.toISOString() : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+const CSV_COLUMNS = ['id', 'at', 'user_id', 'username', 'role', 'action', 'entity', 'entity_id', 'patient_id', 'reason', 'ip'];   // metadata only: before/after (clinical content) are not exported
+const csvLine = (row) => CSV_COLUMNS.map((c) => csvCell(row[c])).join(',');
+
+const auditOut = (r) => ({ id: String(r.id), at: r.at.toISOString(), userId: r.user_id, username: r.username || null, role: r.role, action: r.action, entity: r.entity,
+  entityId: r.entity_id, patientId: r.patient_id, before: r.before, after: r.after, reason: r.reason, ip: r.ip });
+
+module.exports = { audit, auditContext, auditWhere, auditPage, auditOut, csvCell, csvLine, CSV_COLUMNS, AUDIT_MAX_PAGE, AUDIT_CSV_MAX };

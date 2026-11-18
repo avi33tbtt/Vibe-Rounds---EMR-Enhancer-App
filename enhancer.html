@@ -76,6 +76,7 @@ textarea{min-height:70px}label{display:block;margin:10px 0 3px;font-weight:600}b
 #noCase select{max-width:360px}
 /* Phase 4B / 25F: Patients landing / ward list */
 .patients-screen{max-width:1180px!important;margin:18px auto!important;padding:18px!important;text-align:left!important}
+.au-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:10px}.au-filters label{margin:0}.au-btns{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.au-btns .b{margin:0}#auRows td{vertical-align:top;word-break:break-word}#auRows pre{white-space:pre-wrap;max-width:360px;margin:6px 0 0;font-size:11px}
 .patients-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.patients-head h2{margin:0 0 3px}
 .patients-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0 8px}.patients-tools input[type=search]{flex:1;min-width:190px}.patients-tools select{width:auto;min-width:130px}.mypts-toggle{display:flex;align-items:center;gap:5px;white-space:nowrap;margin:0}
 .patients-table-wrap{overflow-x:auto;margin-top:8px}.patients-table{width:100%;border-collapse:collapse;min-width:760px;font-size:13px}.patients-table th,.patients-table td{padding:9px 8px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:top}.patients-table th{color:var(--mu);font-weight:600;white-space:nowrap}.patients-row{cursor:pointer}.patients-row:hover{background:var(--cd)}.patients-row:focus{outline:2px solid var(--ac);outline-offset:-2px}.patient-name{font-weight:700}.patient-sub{font-size:11px;color:var(--mu);margin-top:2px}.patient-chip{display:inline-block;border:1px solid var(--bd);border-radius:99px;padding:2px 7px;margin:1px 3px 2px 0;font-size:11px}.patient-age{white-space:nowrap;font-size:12px}.patient-alert{font-weight:700}.patient-empty{padding:18px;text-align:center;color:var(--mu);border:1px dashed var(--bd);border-radius:8px}
@@ -173,6 +174,7 @@ body.compact label{margin:7px 0 2px}
   <details id="tools"><summary>Tools ▾</summary><div class="toolitems">
     <button data-shell-t="in">Set builder</button><button data-shell-t="fh">Codes</button>
     <button data-shell-t="an">Analytics</button><button data-shell-t="ab">About</button>
+    <button type="button" id="auditTool" hidden>Audit log</button>
     <button type="button" id="settingsTool">Settings</button>
   </div></details>
 </div>
@@ -189,6 +191,21 @@ body.compact label{margin:7px 0 2px}
   <div id="patientsRows" class="patients-table-wrap"></div>
 </div>
 <main><div id="toast"></div>
+<div class="pane" id="au"><div class="cd patients-screen" style="text-align:left;max-width:none;margin:10px 0">
+  <div class="patients-head"><div><h2>Audit log</h2><div class="mu">Administrators only. Who opened or changed what, and when. Entries cannot be edited or deleted. Not for clinical use.</div></div><button class="b" id="auBack" type="button">Back to patients</button></div>
+  <div class="au-filters">
+    <label>User<input id="auUser" placeholder="username or user id" autocomplete="off"></label>
+    <label>Patient id<input id="auPatient" placeholder="patient id" autocomplete="off"></label>
+    <label>From<input id="auFrom" type="date"></label>
+    <label>To<input id="auTo" type="date"></label>
+    <label>Action<input id="auAction" list="auActions" placeholder="e.g. row.add or case.*" autocomplete="off"><datalist id="auActions"></datalist></label>
+  </div>
+  <div class="au-btns"><button class="b" id="auApply" type="button">Apply filters</button><button class="b" id="auReset" type="button">Reset</button><button class="b" id="auCsv" type="button">Export CSV</button></div>
+  <div class="mu">The CSV lists who, when, action and reason only (not the record contents) and the export itself is recorded in this log.</div>
+  <div id="auMsg" class="mu" aria-live="polite"></div>
+  <div class="patients-table-wrap"><table class="patients-table" id="auTable"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Record</th><th>Patient</th><th>Reason</th><th>From</th><th>Details</th></tr></thead><tbody id="auRows"></tbody></table></div>
+  <button class="b" id="auMore" type="button" hidden>Load older entries</button>
+</div></div>
 <div class="pane" id="ab">
 <div class="cd"><b style="font-size:16px">About EMR Enhancer</b>
 <p>EMR Enhancer is a standalone, multi-user EMR built around <b>context</b>. A clinician opens a patient, writes a short narrative, and adds context to it in the form of <b>element sets</b>: small, reusable groups of fields (for example Vitals, Fever chart, or Snake envenomation). Each context added builds up the patient's <b>trajectory</b>. A trajectory turned into a reusable template becomes a <b>pathway</b>, and a pathway can itself be extended by adding more context. The system keeps everything clinicians enter, draws trends from it, raises only the alerts a named clinician has approved, supports analytics across patients, and can export a record as FHIR R4.</p>
@@ -1972,12 +1989,59 @@ async function boot(){
   try{
     await Store.init();
     if(!BOOTED){startApp();BOOTED=true}
-    paintMode();paintSave(Store.status());
+    paintMode();paintSave(Store.status());auTool();
     $('boot').hidden=true;
   }catch(e){
     showBoot('Could not load the record','Reason: '+((e&&e.message)||String(e))+'. Nothing was opened, so nothing can be overwritten.',true);
   }
 }
+/* chunk 33d: admin Audit screen (server mode, admin only; the server refuses everyone else). Read-only: filters, paging by "older entries", and a CSV export
+   that the server records in the log itself. The CSV has no record contents. */
+const AU={next:null,seq:0,seen:false};
+const auIsAdmin=()=>Store.mode==='server'&&!!Store.me&&Store.me.role==='admin';
+function auTool(){$('auditTool').hidden=!auIsAdmin()}
+function auQuery(extra){
+  const p=new URLSearchParams(),v=id=>$(id).value.trim();
+  if(v('auUser'))p.set('user',v('auUser'));if(v('auPatient'))p.set('patient',v('auPatient'));
+  if(v('auFrom'))p.set('from',new Date(v('auFrom')+'T00:00').toISOString());
+  if(v('auTo')){const d=new Date(v('auTo')+'T00:00');d.setDate(d.getDate()+1);p.set('to',d.toISOString())}
+  if(v('auAction'))p.set('action',v('auAction'));
+  Object.keys(extra||{}).forEach(k=>p.set(k,extra[k]));return p.toString()}
+function auRow(i){
+  const det=(i.before!=null||i.after!=null)?'<details><summary>Show</summary><pre>'+esc(JSON.stringify({before:i.before,after:i.after},null,1))+'</pre></details>':'';
+  return '<tr><td>'+esc(new Date(i.at).toLocaleString())+'</td><td>'+esc(i.username||'(unknown)')+'<div class="mu">'+esc(i.role||'')+'</div></td><td>'+esc(i.action)+'</td><td>'+esc(i.entity)+'<div class="mu">'+esc(i.entityId||'')+'</div></td><td class="mu">'+esc(i.patientId||'')+'</td><td>'+esc(i.reason||'')+'</td><td class="mu">'+esc(i.ip||'')+'</td><td>'+det+'</td></tr>'}
+async function auLoad(more){
+  if(!auIsAdmin())return;const my=++AU.seq,msg=$('auMsg');
+  if(!more){$('auRows').innerHTML='';AU.next=null}
+  msg.textContent='Loading…';$('auMore').hidden=true;
+  let r;try{r=await Store.api('GET','/audit?'+auQuery(more&&AU.next?{before:AU.next,limit:50}:{limit:50}))}
+  catch(e){if(my===AU.seq)msg.textContent=(e.status===403?'Only an administrator can read the audit log.':'Could not load the log: '+e.message);return}
+  if(my!==AU.seq)return;                       /* a newer request replaced this one */
+  $('auRows').insertAdjacentHTML('beforeend',r.items.map(auRow).join(''));
+  AU.next=r.nextBefore;$('auMore').hidden=!AU.next;
+  const n=$('auRows').children.length;msg.textContent=n?n+' entr'+(n===1?'y':'ies')+' shown'+(AU.next?' (older entries available)':''):'No entries match these filters.'}
+async function auExport(){
+  if(!auIsAdmin())return;const msg=$('auMsg'),b=$('auCsv');b.disabled=true;msg.textContent='Preparing the export…';
+  try{
+    const res=await fetch(Store.base+'/api/audit.csv?'+auQuery(),{credentials:'same-origin'});
+    if(!res.ok){let m='HTTP '+res.status;try{m=(await res.json()).error.message||m}catch(e){}throw new Error(m)}
+    const blob=await res.blob(),a=document.createElement('a'),url=URL.createObjectURL(blob);
+    a.href=url;a.download='audit-log-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+    msg.textContent='Exported '+(res.headers.get('X-Audit-Rows')||'')+' entries. This export was recorded in the log.'+(res.headers.get('X-Audit-Truncated')==='true'?' The export stopped at its size limit: narrow the filters (for example a date range) to get the rest.':'')
+  }catch(e){msg.textContent='Export failed, nothing was downloaded: '+e.message}
+  b.disabled=false}
+function showAudit(){
+  if(!auIsAdmin())return toast('The audit log is for administrators in server mode.');
+  if($('tools'))$('tools').open=false;persist();showNoCase();$('noCase').classList.remove('show');$('au').classList.add('on');
+  if(!AU.seen){AU.seen=true;$('auActions').innerHTML=['case.*','row.*','note.*','value.set','set.*','rule.*','protocol.*','import.*','audit_export'].map(a=>'<option value="'+a+'">').join('')}
+  auLoad(false)}
+$('auditTool').addEventListener('click',showAudit);
+$('auApply').addEventListener('click',()=>auLoad(false));
+$('auMore').addEventListener('click',()=>auLoad(true));
+$('auCsv').addEventListener('click',auExport);
+$('auReset').addEventListener('click',()=>{['auUser','auPatient','auFrom','auTo','auAction'].forEach(id=>$(id).value='');auLoad(false)});
+$('auBack').addEventListener('click',()=>{$('au').classList.remove('on');showNoCase()});
+['auUser','auPatient','auAction'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();auLoad(false)}}));
 /* chunk 31b: Import from this browser (server mode only). Reads localStorage without changing it, asks the server for a dry run, shows the report in plain words,
    imports only after the person confirms, and removes the browser copy only when asked. Approvals are never imported (the server clears them). */
 const IB={arr:['cases','sets'],obj:['setUsage','codes','binds','rules','protocols'],lst:['pinned'],st:null};

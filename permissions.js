@@ -39,6 +39,7 @@ const ACTIONS = {
   'protocol.write': CLIN, 'protocol.approve': CLIN,
   'usage.write': ALL, 'pref.write': ALL,             // the caller's own ranking and display settings only
   'import.run': ['admin'],
+  'audit.read': ['admin'],                           // GET /audit and /audit.csv: the log itself is admin only (chunk 33d)
   // defined now, routes arrive later (admin screen chunk 32e, Phase 6)
   'user.manage': ['admin'], 'content.review': ['admin', 'informatician'], 'package.install': ['admin', 'informatician'],
 };
@@ -65,6 +66,7 @@ const ROUTE_ACTIONS = {
   'GET /protocols': 'ref.read', 'PUT /protocols/:setId': 'protocol.write', 'POST /protocols/:setId/approve': 'protocol.approve',
   'GET /prefs': 'ref.read', 'PUT /prefs/:key': 'pref.write',
   'POST /import/dry-run': 'import.run', 'POST /import': 'import.run',
+  'GET /audit': 'audit.read', 'GET /audit.csv': 'audit.read',
 };
 
 function can(user, action) {
