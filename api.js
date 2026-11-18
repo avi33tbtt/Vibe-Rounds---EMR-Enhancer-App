@@ -3,12 +3,14 @@
  * REST API (chunk 28). Mounted by server.js. Every body is validated with zod (strict: unknown
  * fields are rejected). Every versioned write needs expectedVersion and returns 409 + {current}
  * on conflict, never last-write-wins. Clinical data is never deleted: no DELETE route exists for
- * cases, rows, values or notes. Auth arrives in chunk 32: until then `getActor` returns a dev user
- * (refused when NODE_ENV=production) and ids like entered_by come from it, never from a request body.
+ * cases, rows, values or notes. Who is acting comes from the login session (auth.js requireAuth, chunk 32a) and what they may do from
+ * permissions.js (chunk 32b): every route has exactly one action there, and ids like entered_by, created_by and verified_by come from the
+ * session user, never from a request body.
  */
 const express = require('express');
 const { z } = require('zod');
 const crypto = require('node:crypto');
+const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied } = require('./permissions.js');
 
 class ApiError extends Error {
   constructor(status, code, message, extra) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -74,20 +76,6 @@ const identParam = (v) => { if (!ident.safeParse(v).success) throw new ApiError(
 const iso = (d) => (d ? new Date(d).toISOString() : null);
 const stable = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, kk) => (o[kk] = x[kk], o), {}) : x));
 const hashOf = (v) => 'sha256:' + crypto.createHash('sha256').update(stable(v)).digest('hex');
-
-// ---------- actor (replaced by sessions in chunk 32) ----------
-function devActor(db) {
-  let cached;
-  return async () => {
-    if (process.env.NODE_ENV === 'production') throw new ApiError(503, 'auth_not_configured', 'Authentication is not configured yet');
-    if (!cached) {
-      const r = await db.query(`INSERT INTO users (username,name,role) VALUES ('dev','Development user','admin')
-        ON CONFLICT (lower(username)) DO UPDATE SET name=users.name RETURNING id,role`);
-      cached = { id: r.rows[0].id, role: r.rows[0].role };
-    }
-    return cached;
-  };
-}
 
 // ---------- case assembly: the exact shape the prototype uses ----------
 async function loadCase(q, id, { includeErrors = false } = {}) {
@@ -362,16 +350,24 @@ async function commitImport(c, out, actor) {
   return idMap;
 }
 
-function mountApi(app, { db, getActor }) {
-  const actorOf = getActor || devActor(db);
-  const r = express.Router();
-  r.use((req, res, next) => { Promise.resolve(actorOf(req)).then((a) => { req.actor = a; next(); }, next); });
+/**
+ * requireAuth (from auth.js) identifies the user from the session cookie. `getActor` is a TEST-ONLY override (returns {id, role}); it is refused when
+ * NODE_ENV=production, so a deployed server can only ever use real sessions.
+ */
+function mountApi(app, { db, getActor, requireAuth }) {
+  if (getActor && process.env.NODE_ENV === 'production') throw new Error('getActor is for tests only and is not allowed when NODE_ENV=production');
+  if (!getActor && !requireAuth) throw new Error('mountApi needs requireAuth');
+  const r = guardRouter(express.Router());            // every route below must have an action in permissions.js ROUTE_ACTIONS
+  r.use(getActor
+    ? (req, res, next) => { Promise.resolve(getActor(req)).then((a) => { req.actor = a; next(); }, next); }
+    : (req, res, next) => requireAuth(req, res, (e) => { if (e) return next(e); req.actor = { id: req.user.id, name: req.user.name, role: req.user.role }; next(); }));
+  const setKindOf = async (setId) => ((await db.query('SELECT kind FROM element_sets_latest WHERE set_id=$1', [setId])).rows[0] || {}).kind || null;
 
-  // ================= who am I (chunk 29a; chunk 32 returns the session user and mode 'session') =================
+  // ================= who am I (the session user) =================
   r.get('/me', wrap(async (req, res) => {
     const u = (await db.query('SELECT id,name,role FROM users WHERE id=$1', [req.actor.id])).rows[0];
     if (!u) throw new ApiError(401, 'unauthorized', 'No such user');
-    res.json({ id: u.id, name: u.name, role: u.role, mode: 'dev' });
+    res.json({ id: u.id, name: u.name, role: u.role, mode: 'session' });
   }));
 
   // ================= cases =================
@@ -396,6 +392,7 @@ function mountApi(app, { db, getActor }) {
   }));
   r.patch('/cases/:id', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.casePatch, req.body), sets = [], p = [id, b.expectedVersion];
+    for (const a of caseFieldActions(b)) if (!can(req.actor, a)) return denied(res, req.actor, 'change this part of the case (' + a + ')');
     const add = (col, v, json) => { p.push(json ? JSON.stringify(v) : v); sets.push(`${col}=$${p.length}`); };
     if (b.patient !== undefined) add('demo_patient', b.patient, true);
     if (b.narrative !== undefined) add('narrative', b.narrative);
@@ -411,6 +408,7 @@ function mountApi(app, { db, getActor }) {
   // ================= rows (append-only; never DELETE) =================
   r.post('/cases/:id/rows', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.rowCreate, req.body);
+    if (!canAddRow(req.actor, await setKindOf(b.setId))) throw new ApiError(403, 'forbidden', 'Your role may add readings to care flowsheets only');
     const out = await db.withTx(async (c) => {
       if (!(await c.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
       await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${id}|${b.setId}|${b.groupId}`]);   // serialises the row COUNT only, appends never conflict
@@ -423,8 +421,14 @@ function mountApi(app, { db, getActor }) {
     });
     res.status(201).json(rowOut(out));
   }));
+  async function assertRowAmend(req, id, rid) {           // doctors and admins amend any row; a nurse only her own readings in care sets
+    if (can(req.actor, 'row.amend_any')) return;
+    const row = (await db.query('SELECT set_id,entered_by FROM case_rows WHERE id=$1 AND case_id=$2', [rid, id])).rows[0];
+    if (row && !canAmendRow(req.actor, row, await setKindOf(row.set_id))) throw new ApiError(403, 'forbidden', 'Your role may amend only readings you entered yourself, in care flowsheets');
+  }
   r.patch('/cases/:id/rows/:rowId', wrap(async (req, res) => {
     const id = idParam(req.params.id), rid = idParam(req.params.rowId), b = parse(S.rowPatch, req.body);
+    await assertRowAmend(req, id, rid);
     const sets = [], p = [rid, id, b.expectedVersion];
     if (b.row !== undefined) { p.push(JSON.stringify(b.row)); sets.push(`row=$${p.length}`); }
     if (b.rowTime !== undefined) { p.push(b.rowTime); sets.push(`row_time=$${p.length}`); }
@@ -440,6 +444,7 @@ function mountApi(app, { db, getActor }) {
   }));
   r.post('/cases/:id/rows/:rowId/error', wrap(async (req, res) => {
     const id = idParam(req.params.id), rid = idParam(req.params.rowId), b = parse(S.rowError, req.body);
+    await assertRowAmend(req, id, rid);
     const u = await db.query(`UPDATE case_rows SET status='entered_in_error', error_reason=$4, version=version+1
       WHERE id=$1 AND case_id=$2 AND version=$3 AND status='active' RETURNING *`, [rid, id, b.expectedVersion, b.reason]);
     if (!u.rows.length) {

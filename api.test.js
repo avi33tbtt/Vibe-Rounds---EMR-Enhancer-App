@@ -16,6 +16,16 @@ const base = new URL(process.env.DATABASE_URL || 'postgres://x@127.0.0.1/x');
 const name = 'emr_api_' + crypto.randomBytes(4).toString('hex');
 const withDb = (n) => { const u = new URL(base); u.pathname = '/' + n; return u.toString(); };
 let db, app;
+// TEST-ONLY actor (createApp refuses getActor when NODE_ENV=production): an admin unless the request sends x-test-role. Real sessions are tested in permissions.test.js.
+const actors = {};
+async function getActor(req) {
+  const role = req.headers['x-test-role'] || 'admin';
+  if (!actors[role]) {
+    const r = await db.query(`INSERT INTO users (username,name,role) VALUES ($1,$2,$3) ON CONFLICT (lower(username)) DO UPDATE SET name=users.name RETURNING id`, ['test-' + role, 'Test ' + role, role]);
+    actors[role] = { id: r.rows[0].id, role };
+  }
+  return actors[role];
+}
 const api = () => request(app);
 const newCase = async (b = {}) => (await api().post('/api/cases').send(b)).body;
 
@@ -24,7 +34,7 @@ test.before(async () => {
   await a.connect(); await a.query(`CREATE DATABASE ${name}`); await a.end();
   db = createDb(withDb(name));
   await migrate(db, __dirname);
-  app = createApp({ db });
+  app = createApp({ db, getActor });
 });
 test.after(async () => {
   if (db) await db.close();
@@ -274,16 +284,11 @@ test('rules and protocols: delete needs the current version; protocol approval i
   assert.equal(all.version, 2); assert.equal(all.body.bands[0].instruction, 'typed text');
 });
 
-test('GET /api/me returns the acting (development) user', async () => {
+test('GET /api/me returns the acting user (a session user: mode "session")', async () => {
   const r = await api().get('/api/me');
   assert.equal(r.status, 200);
   assert.deepEqual(Object.keys(r.body).sort(), ['id', 'mode', 'name', 'role']);
-  assert.equal(r.body.mode, 'dev'); assert.equal(r.body.role, 'admin'); assert.match(r.body.id, /^[0-9a-f-]{36}$/);
-});
-
-test('auth placeholder refuses to run in production', async () => {
-  const old = process.env.NODE_ENV; process.env.NODE_ENV = 'production';
-  try { assert.equal((await api().get('/api/cases')).status, 503); } finally { process.env.NODE_ENV = old; }
+  assert.equal(r.body.mode, 'session'); assert.equal(r.body.role, 'admin'); assert.match(r.body.id, /^[0-9a-f-]{36}$/);
 });
 
 // Chunk 28H: the seed loader against the REAL element-sets.js (earlier tests used a stand-in file).

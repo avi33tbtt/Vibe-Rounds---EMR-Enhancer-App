@@ -1,8 +1,8 @@
-# EMR Enhancer API (chunks 28 to 31a)
+# EMR Enhancer API (chunks 28 to 32b)
 
 Base path `/api`. JSON in, JSON out. Synthetic data only; not for clinical use.
 
-**Auth:** placeholder until chunk 32. Requests act as a development user, and the API answers `503 auth_not_configured` when `NODE_ENV=production`. `entered_by`, `created_by`, `signedBy` and approver ids always come from the acting user, never from a request body.
+**Auth (chunk 32b):** every route below needs a login session (cookie from `POST /api/login`, chunk 32a). No cookie or an ended session is `401 unauthorized`. A logged-in user whose role may not do the action gets `403 forbidden`. `entered_by`, `created_by`, `signedBy`, `addedBy` and approver ids always come from the session user, never from a request body (author fields in a body are rejected as unknown fields). The development user is gone; tests use a test-only `getActor` that `createApp` refuses when `NODE_ENV=production`. Until the first-admin script (chunk 32c) there is no way to create a user except directly in the database, and the browser has no login screen until chunk 32d (Demo mode still works).
 
 **Errors:** `{ "error": { "code": "...", "message": "..." } }`. Codes: `validation` 400, `bad_json` 400, `not_found` 404, `conflict` 409, `signed` 409, `entered_in_error` 422, `too_many_rows` 422, `constraint` 422, `read_only` 403, `method_not_allowed` 405, `too_large` 413, `unauthorized` 401, `auth_not_configured` 503.
 
@@ -90,3 +90,58 @@ Mounted before the data routes. The data routes still use the development user u
 - **Passwords:** scrypt (N=32768, r=8, p=1) with a random salt, stored as `scrypt$N$r$p$salt$hash` so the cost can be raised later. Minimum 12 characters (`passwordProblem`, used when users are created in chunks 32c and 32e).
 - `requireAuth` (in `auth.js`) sets `req.user = {id, name, role, sessionId}`. Deactivating a user ends their open sessions at the next request.
 
+## Routes and permissions (chunk 32b)
+One table, `permissions.js`: action -> roles. Each route maps to exactly one action in `ROUTE_ACTIONS`, and the server refuses to start if a route has none. Paths are under `/api`. `POST /login`, `POST /logout` and `GET /session` are the login itself and `GET /health` is public.
+
+| Route | Action | Roles |
+|---|---|---|
+| `GET /me` | `session.read` | all |
+| `GET /cases` | `case.read` | all |
+| `GET /cases/:id` | `case.read` | all |
+| `POST /cases` | `case.create` | admin, doctor, nurse |
+| `PATCH /cases/:id` | `case.patch` | admin, doctor, nurse |
+| `POST /cases/:id/rows` | `row.add` | admin, doctor, nurse |
+| `PATCH /cases/:id/rows/:rowId` | `row.amend_own` | admin, doctor, nurse |
+| `POST /cases/:id/rows/:rowId/error` | `row.amend_own` | admin, doctor, nurse |
+| `PUT /cases/:id/values` | `value.write` | admin, doctor |
+| `POST /cases/:id/notes` | `note.write` | admin, doctor |
+| `PATCH /cases/:id/notes/:nid` | `note.write` | admin, doctor |
+| `POST /cases/:id/notes/:nid/sign` | `note.sign` | admin, doctor |
+| `POST /cases/:id/notes/:nid/amend` | `note.write` | admin, doctor |
+| `GET /element-sets` | `ref.read` | all |
+| `GET /element-sets/:setId` | `ref.read` | all |
+| `GET /element-sets/:setId/versions` | `ref.read` | all |
+| `GET /element-sets/:setId/versions/:n` | `ref.read` | all |
+| `POST /element-sets` | `set.write` | admin, doctor, informatician |
+| `PATCH /element-sets/:setId` | `set.write` | admin, doctor, informatician |
+| `DELETE /element-sets/:setId` | `set.write` | admin, doctor, informatician |
+| `GET /usage` | `ref.read` | all |
+| `POST /usage/:setId` | `usage.write` | all |
+| `DELETE /usage` | `usage.write` | all |
+| `GET /codes` | `ref.read` | all |
+| `POST /codes` | `code.write` | admin, doctor, informatician |
+| `POST /codes/:system/:code/live` | `code.write` | admin, doctor, informatician |
+| `GET /bindings` | `ref.read` | all |
+| `PUT /bindings` | `binding.write` | admin, doctor, informatician |
+| `DELETE /bindings/:setId/:fieldId` | `binding.write` | admin, doctor, informatician |
+| `GET /rules` | `ref.read` | all |
+| `PUT /rules/:owner/:ruleId` | `rule.write` | admin, doctor |
+| `POST /rules/:owner/:ruleId/approve` | `rule.approve` | admin, doctor |
+| `POST /rules/:owner/:ruleId/disable` | `rule.write` | admin, doctor |
+| `DELETE /rules/:owner/:ruleId` | `rule.write` | admin, doctor |
+| `GET /protocols` | `ref.read` | all |
+| `PUT /protocols/:setId` | `protocol.write` | admin, doctor |
+| `POST /protocols/:setId/approve` | `protocol.approve` | admin, doctor |
+| `GET /prefs` | `ref.read` | all |
+| `PUT /prefs/:key` | `pref.write` | all |
+| `POST /import/dry-run` | `import.run` | admin |
+| `POST /import` | `import.run` | admin |
+
+**Finer rules inside a route**
+- `PATCH /cases/:id` needs the right for *every* field in the body (`narrative` -> `case.narrative`, `applied` and `pathways` -> `case.apply`, `patient` -> `case.patient`, `pinned` -> `case.pin`, `alertLog` -> `alert.ack`). One forbidden field refuses the whole change.
+- A **nurse** adds readings, and amends or marks "entered in error" only **her own** readings, and only in sets of kind `care`. A set the server cannot find counts as not care. Doctors and admins amend any row.
+- Only a **doctor or admin** can approve a rule or protocol. Editing an approved rule or protocol resets approval (unchanged from 30c). The approver is the session user.
+- `usage` and `prefs` are the caller's own display data, so every role (including viewer) may write them.
+- Defined for later chunks, no routes yet: `user.manage` (admin), `content.review` and `package.install` (informatician, admin).
+
+**Decisions to confirm:** admin holds every action; a nurse cannot apply sets or pathways, write notes or save non-repeating values (so a nurse cannot start a new flowsheet; a doctor applies it first); informatician may author sets, pathways and codes but not chart.

@@ -134,8 +134,11 @@ test('logout deletes the session; the old cookie stops working; logout without a
   assert.equal((await db.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1', [id])).rows[0].n, 1);
 });
 
-test('mustChangePassword is reported at login; the data API is unchanged by this chunk (dev user still in place)', async () => {
+test('mustChangePassword is reported at login; data routes now need the session (chunk 32b: no dev user)', async () => {
   const id = await mk('ivy'); await db.query('UPDATE users SET must_change_password=true WHERE id=$1', [id]);
-  assert.equal((await login('ivy', PW)).body.mustChangePassword, true);
-  assert.equal((await request(app).get('/api/me')).body.mode, 'dev');
+  const r = await login('ivy', PW);
+  assert.equal(r.body.mustChangePassword, true);
+  assert.equal((await request(app).get('/api/me')).status, 401);
+  const m = await request(app).get('/api/me').set('Cookie', 'emr_sid=' + tokenOf(r));
+  assert.equal(m.status, 200); assert.equal(m.body.mode, 'session'); assert.equal(m.body.id, id);
 });
