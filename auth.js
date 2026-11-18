@@ -13,6 +13,7 @@ const crypto = require('node:crypto');
 const { promisify } = require('node:util');
 const { z } = require('zod');
 const express = require('express');
+const { allowedActions } = require('./permissions.js');
 
 const scrypt = promisify(crypto.scrypt);
 const COOKIE = 'emr_sid';
@@ -117,7 +118,7 @@ function createAuth({ db, idleMinutes, absoluteHours, lockoutFailures, lockoutMi
       }
       await db.query('UPDATE users SET failed_logins=0, locked_until=NULL, last_login_at=now() WHERE id=$1', [u.id]);
       await startSession(res, u.id);
-      res.json({ id: u.id, name: u.name, role: u.role, mustChangePassword: u.must_change_password });
+      res.json({ id: u.id, name: u.name, role: u.role, mustChangePassword: u.must_change_password, allowed: allowedActions(u) });
     } catch (e) { next(e); }
   });
   router.post('/logout', async (req, res, next) => {
@@ -128,7 +129,7 @@ function createAuth({ db, idleMinutes, absoluteHours, lockoutFailures, lockoutMi
     } catch (e) { next(e); }
   });
   router.get('/csrf', requireAuth, (req, res) => res.json({ token: csrfToken(req.user.sessionId) }));
-  router.get('/session', requireAuth, (req, res) => res.json({ id: req.user.id, name: req.user.name, role: req.user.role }));
+  router.get('/session', requireAuth, (req, res) => res.json({ id: req.user.id, name: req.user.name, role: req.user.role, allowed: allowedActions(req.user) }));
 
   return { router, requireAuth, requireCsrf, settings: { idleMinutes: IDLE_MIN, absoluteHours: ABS_H, lockoutFailures: LOCK_N, lockoutMinutes: LOCK_MIN } };
 }

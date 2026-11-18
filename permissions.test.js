@@ -210,3 +210,50 @@ test('FORGERY: entered_by, created_by, verified_by, signed_by and added_by come 
     if (sql) assert.equal((await db.query(sql)).rows[0].v, who_.id, `${m} ${url}: author is the session user`);
   }
 });
+
+// ---------------------------------------------------------------- chunk 32d2: /me lists the allowed actions; hiding is never relied on
+test('32d2: GET /me, /session and login return the allowed actions of the role, matching the table exactly', async () => {
+  for (const role of P.ROLES) {
+    const a = who[role].agent, expected = Object.keys(P.ACTIONS).filter((x) => P.ACTIONS[x].includes(role));
+    assert.deepEqual((await a.get('/api/me')).body.allowed, expected, role + ' /me');
+    assert.deepEqual((await a.get('/api/session')).body.allowed, expected, role + ' /session');
+  }
+  const nurse = (await who.nurse.agent.get('/api/me')).body.allowed, doctor = (await who.doctor.agent.get('/api/me')).body.allowed;
+  for (const a of ['rule.approve', 'rule.write', 'protocol.approve', 'protocol.write', 'note.sign', 'note.write']) { assert.ok(!nurse.includes(a), 'nurse sees no ' + a); assert.ok(doctor.includes(a), 'doctor has ' + a); }
+  const r = await request(app).post('/api/login').send({ username: 'u_nurse', password: PW });
+  assert.deepEqual(r.body.allowed, nurse, 'login returns the same list');
+});
+
+test('32d2: hiding is not relied on: a nurse calling approve, sign, note and rule routes directly gets 403 with a plain sentence naming the action', async () => {
+  const n = who.nurse.agent, id = '00000000-0000-4000-8000-000000000001';
+  const cases = [
+    ['post', '/api/rules/care.t/r1/approve', 'rule.approve', /may not approve alert rules\.$/],
+    ['post', '/api/protocols/disease.t/approve', 'protocol.approve', /may not verify protocols\.$/],
+    ['put', '/api/rules/care.t/r1', 'rule.write', /may not edit alert rules\.$/],
+    ['post', `/api/cases/${id}/notes/${id}/sign`, 'note.sign', /may not sign notes\.$/],
+    ['post', `/api/cases/${id}/notes`, 'note.write', /may not write notes\.$/],
+  ];
+  for (const [m, p, action, re] of cases) {
+    const r = await n[m](p).send({});
+    assert.equal(r.status, 403, p); assert.equal(r.body.error.code, 'forbidden'); assert.equal(r.body.error.action, action);
+    assert.match(r.body.error.message, /^Your role \(nurse\) /); assert.match(r.body.error.message, re);
+  }
+  const d = await who.doctor.agent.post(`/api/cases/${id}/notes/${id}/sign`).send({});
+  assert.notEqual(d.status, 403, 'a doctor passes the permission check (it then fails on the missing case, not on the role)');
+});
+
+test('32d2: a typed name in a request body is ignored: the server stamps the approver from the session', async () => {
+  const d = who.doctor.agent;
+  assert.equal((await d.put('/api/rules/care.t/rx').send({ body: { ruleId: 'rx', fieldRef: 'care.t/f', op: '>', threshold: 1, indicator: 'info', summary: 's', provenance: { source: 'manual', verifiedBy: 'Dr Forged' } }, expectedVersion: 0 })).status, 200);
+  const ap = await d.post('/api/rules/care.t/rx/approve').send({ expectedVersion: 1 }); assert.equal(ap.status, 200);
+  const got = (await d.get('/api/rules')).body['care.t'].find((x) => x.ruleId === 'rx');
+  assert.equal(got.verifiedBy, who.doctor.id); assert.equal(got.verifiedByName, 'User doctor'); assert.ok(!JSON.stringify(got).includes('Dr Forged'), 'the typed name is not stored anywhere');
+});
+
+test('32d2: a typed verifier in a protocol body is not stored; approval is stamped from the session', async () => {
+  const d = who.doctor.agent;
+  const put = await d.put('/api/protocols/disease.t').send({ body: { bands: [{ min: '1', max: '2', instruction: 'x' }], verifiedBy: 'Dr Forged' }, expectedVersion: 0 }); assert.equal(put.status, 200);
+  const g1 = (await d.get('/api/protocols')).body['disease.t']; assert.equal(g1.verifiedBy, null); assert.ok(!JSON.stringify(g1).includes('Dr Forged'));
+  assert.equal((await d.post('/api/protocols/disease.t/approve').send({ expectedVersion: put.body.version })).status, 200);
+  const g2 = (await d.get('/api/protocols')).body['disease.t']; assert.equal(g2.verifiedBy, who.doctor.id); assert.equal(g2.verifiedByName, 'User doctor');
+});

@@ -66,6 +66,12 @@
   }
   Store.api = api;
 
+  // ---------------------------------------------------------------- session user and role (chunk 32d2)
+  // The server stamps who approved, verified or signed; the screen only shows the session user. Demo mode has no session, so it keeps typed names.
+  // Store.can() is for hiding controls only. The server checks every request, and a refused one still shows a plain message (see the 403 handling below).
+  Store.who = () => (Store.mode === 'server' && Store.me && Store.me.name) || null;
+  Store.can = (action) => { if (Store.mode !== 'server' || !Store.me || !Array.isArray(Store.me.allowed)) return true; return Store.me.allowed.includes(action); };
+
   // ---------------------------------------------------------------- status
   function status() {
     const nc = Object.keys(conflicts).length, nf = Object.keys(failed).length;
@@ -105,7 +111,10 @@
           op.started = false; running = false; retrying = true; notify();
           timer = setTimeout(() => { retrying = false; pump(); }, delay); delay = Math.min(delay * 2, 30000);
           return;
-        } else { Q.shift(); failed[op.key] = e.message; }            // 400/403/404/422: will not succeed by retrying
+        } else {                                                    // 400/403/404/422: will not succeed by retrying
+          Q.shift(); failed[op.key] = e.message;
+          if (e.status === 403 && e.code === 'forbidden') { try { Store.hooks.toast(e.message); } catch (x) { /* UI */ } }   // one plain sentence naming the action, never silent (32d2)
+        }
       }
       notify();
     }
@@ -481,7 +490,7 @@
     });
     return true;
   };
-  const ruleBody = (r) => { const b = clone(r); delete b.enabled; return b; };
+  const ruleBody = (r) => { const b = clone(r); delete b.enabled; if (b.provenance) { delete b.provenance.verifiedBy; delete b.provenance.verifiedAt; } return b; };   // no typed name in a request body: the server stamps the approver (32d2)
   async function syncRule(ow, rid) {
     const k = 'rule:' + ow + '|' + rid, cur = (S.rules[ow] || []).find((r) => r && r.ruleId === rid); let sn = snap[k];
     if (!cur) { if (sn) { await api('DELETE', '/rules/' + ow + '/' + rid + '?expectedVersion=' + sn.ver); delete snap[k]; } return; }
@@ -496,17 +505,19 @@
 
   Store.protocols = () => clone(S.protocols);
   Store.protocol = (sid) => clone(S.protocols[sid]);
+  const protoBody = (p) => { const b = clone(p); delete b.verifiedBy; delete b.verifiedAt; return b; };   // no typed name in a request body (32d2)
   Store.saveProtocol = function (sid, p) {
     S.protocols[sid] = clone(p);
     if (Store.mode === 'local') return lsSet(LS.protocols, S.protocols);
     if (!IDENT.test(sid)) return false;
     enqueue('proto:' + sid, async () => {
-      const cur = S.protocols[sid]; if (!cur) return; const sn = snap['proto:' + sid];
-      if (sn && eq(sn.data, cur)) return;
-      let r = await api('PUT', '/protocols/' + sid, { body: cur, expectedVersion: sn ? sn.ver : 0 });
-      // The server never trusts a typed name: saving always lands unverified. If a verifier was typed, ask the server to stamp approval (by the signed-in user).
-      if (String(cur.verifiedBy || '').trim()) r = await api('POST', '/protocols/' + sid + '/approve', { expectedVersion: r.version });
-      snap['proto:' + sid] = { ver: r.version, data: clone(cur) };
+      const cur = S.protocols[sid]; if (!cur) return; const sn = snap['proto:' + sid] || {}, body = protoBody(cur), wants = !!String(cur.verifiedBy || '').trim();
+      if (sn.data && eq(sn.data, body) && !!sn.approved === wants) return;
+      let ver = sn.ver;
+      // Saving a changed body always lands unverified. A verified mark with nothing else changed only needs the approve call; clearing it needs a save.
+      if (!sn.data || !eq(sn.data, body) || (!wants && sn.approved)) ver = (await api('PUT', '/protocols/' + sid, { body, expectedVersion: sn.data ? sn.ver : 0 })).version;
+      if (wants) ver = (await api('POST', '/protocols/' + sid + '/approve', { expectedVersion: ver })).version;   // the server stamps the signed-in user
+      snap['proto:' + sid] = { ver, data: body, approved: wants };
     });
     return true;
   };
@@ -555,8 +566,9 @@
     S.binds = {}; binds.forEach((b) => { S.binds[b.setId + '|' + b.fieldId] = { system: b.system, code: b.code, display: b.display }; });
     S.rules = {};
     Object.keys(rules).forEach((ow) => { S.rules[ow] = rules[ow].map((r) => {
-      const rule = Object.assign({}, r.body, { enabled: !!r.enabled }); snap['rule:' + ow + '|' + r.ruleId] = { ver: r.version, data: ruleBody(rule), enabled: !!r.enabled }; return rule; }); });
-    S.protocols = {}; Object.keys(protos).forEach((sid) => { S.protocols[sid] = protos[sid].body; snap['proto:' + sid] = { ver: protos[sid].version, data: clone(protos[sid].body) }; });
+      const rule = Object.assign({}, r.body, { enabled: !!r.enabled }); if (r.enabled && r.verifiedBy) rule.provenance = Object.assign({}, rule.provenance, { verifiedBy: r.verifiedByName || 'a user', verifiedAt: r.verifiedAt || '' });
+      snap['rule:' + ow + '|' + r.ruleId] = { ver: r.version, data: ruleBody(rule), enabled: !!r.enabled }; return rule; }); });
+    S.protocols = {}; Object.keys(protos).forEach((sid) => { const x = protos[sid], b = protoBody(x.body), ok = !!x.verifiedBy; S.protocols[sid] = Object.assign(clone(b), ok ? { verifiedBy: x.verifiedByName || 'a user', verifiedAt: x.verifiedAt || '' } : { verifiedBy: '' }); snap['proto:' + sid] = { ver: x.version, data: b, approved: ok }; });
     S.prefs = prefs; Store.ready = true; notify();
   };
 

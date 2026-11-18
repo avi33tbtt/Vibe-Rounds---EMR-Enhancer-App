@@ -10,7 +10,7 @@
 const express = require('express');
 const { z } = require('zod');
 const crypto = require('node:crypto');
-const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied } = require('./permissions.js');
+const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied, allowedActions, ACTION_LABELS } = require('./permissions.js');
 const { audit, auditContext, auditPage, auditOut, csvLine, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
 
 class ApiError extends Error {
@@ -382,7 +382,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   r.get('/me', wrap(async (req, res) => {
     const u = (await db.query('SELECT id,name,role FROM users WHERE id=$1', [req.actor.id])).rows[0];
     if (!u) throw new ApiError(401, 'unauthorized', 'No such user');
-    res.json({ id: u.id, name: u.name, role: u.role, mode: 'session' });
+    res.json({ id: u.id, name: u.name, role: u.role, mode: 'session', allowed: allowedActions(u) });   // allowed: for hiding controls only (chunk 32d2); the server still checks every request
   }));
 
   // ================= cases =================
@@ -393,7 +393,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   }));
   r.get('/cases/:id', wrap(async (req, res) => {
     const wantErrors = req.query.include_errors === 'true' || req.query.includeErrors === '1';            // rows marked entered in error: hidden unless asked for
-    if (wantErrors && !can(req.actor, 'case.read_errors')) return denied(res, req.actor, 'see rows entered in error');   // doctors and admins only
+    if (wantErrors && !can(req.actor, 'case.read_errors')) return denied(res, req.actor, 'see rows entered in error', 'case.read_errors');   // doctors and admins only
     const c = await loadCase(db, idParam(req.params.id), { includeErrors: wantErrors });
     if (!c) throw new ApiError(404, 'not_found', 'Case not found');
     res.json(c);
@@ -413,7 +413,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   }));
   r.patch('/cases/:id', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.casePatch, req.body), sets = [], p = [id, b.expectedVersion];
-    for (const a of caseFieldActions(b)) if (!can(req.actor, a)) return denied(res, req.actor, 'change this part of the case (' + a + ')');
+    for (const a of caseFieldActions(b)) if (!can(req.actor, a)) return denied(res, req.actor, ACTION_LABELS[a] || 'change this part of the case', a);
     const add = (col, v, json) => { p.push(json ? JSON.stringify(v) : v); sets.push(`${col}=$${p.length}`); };
     if (b.patient !== undefined) add('demo_patient', b.patient, true);
     if (b.narrative !== undefined) add('narrative', b.narrative);
@@ -716,10 +716,10 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   }));
 
   // ================= rules (editing resets approval; approval stamped by the server) =================
-  const ruleOut = (x) => ({ ruleId: x.rule_id, ownerSetId: x.owner_set_id, body: x.body, enabled: x.enabled, verifiedBy: x.verified_by_user, verifiedAt: iso(x.verified_at), source: x.source, version: x.version });
+  const ruleOut = (x) => ({ ruleId: x.rule_id, ownerSetId: x.owner_set_id, body: x.body, enabled: x.enabled, verifiedBy: x.verified_by_user, verifiedByName: x.verified_by_name || null, verifiedAt: iso(x.verified_at), source: x.source, version: x.version });
   r.get('/rules', wrap(async (req, res) => {
     const o = {};
-    for (const x of (await db.query('SELECT * FROM cds_rules ORDER BY owner_set_id, rule_id')).rows) (o[x.owner_set_id] = o[x.owner_set_id] || []).push(ruleOut(x));
+    for (const x of (await db.query('SELECT x.*, u.name AS verified_by_name FROM cds_rules x LEFT JOIN users u ON u.id=x.verified_by_user ORDER BY x.owner_set_id, x.rule_id')).rows) (o[x.owner_set_id] = o[x.owner_set_id] || []).push(ruleOut(x));
     res.json(o);
   }));
   async function ruleConflict(owner, rid) {
@@ -730,6 +730,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   r.put('/rules/:owner/:ruleId', wrap(async (req, res) => {
     const owner = identParam(req.params.owner), rid = identParam(req.params.ruleId), b = parse(S.rulePut, req.body);
     const src = b.body.provenance && b.body.provenance.source === 'ai-drafted' ? 'ai-drafted' : 'manual';
+    if (b.body.provenance) { b.body.provenance = { ...b.body.provenance }; delete b.body.provenance.verifiedBy; delete b.body.provenance.verifiedAt; }   // a typed approver name is never stored: approval is stamped from the session (32d2)
     const row = await db.withTx(async (c) => {
       const old = (await c.query('SELECT body,enabled,version FROM cds_rules WHERE owner_set_id=$1 AND rule_id=$2 FOR UPDATE', [owner, rid])).rows[0] || null;
       const q = b.expectedVersion === 0
@@ -770,15 +771,16 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   }));
 
   // ================= protocols (bands ship empty; typed by clinicians; approval stamped by the server) =================
-  const protoOut = (x) => ({ setId: x.set_id, body: x.body, verifiedBy: x.verified_by_user, verifiedAt: iso(x.verified_at), version: x.version });
+  const protoOut = (x) => ({ setId: x.set_id, body: x.body, verifiedBy: x.verified_by_user, verifiedByName: x.verified_by_name || null, verifiedAt: iso(x.verified_at), version: x.version });
   async function protoConflict(sid) {
     const cur = (await db.query('SELECT * FROM protocols WHERE set_id=$1', [sid])).rows[0];
     if (!cur) throw new ApiError(404, 'not_found', 'Protocol not found');
     throw new ApiError(409, 'conflict', 'This protocol was changed by someone else', { current: protoOut(cur) });
   }
-  r.get('/protocols', wrap(async (req, res) => { const o = {}; for (const x of (await db.query('SELECT * FROM protocols')).rows) o[x.set_id] = protoOut(x); res.json(o); }));
+  r.get('/protocols', wrap(async (req, res) => { const o = {}; for (const x of (await db.query('SELECT x.*, u.name AS verified_by_name FROM protocols x LEFT JOIN users u ON u.id=x.verified_by_user')).rows) o[x.set_id] = protoOut(x); res.json(o); }));
   r.put('/protocols/:setId', wrap(async (req, res) => {
     const sid = identParam(req.params.setId), b = parse(S.protoPut, req.body);
+    delete b.body.verifiedBy; delete b.body.verifiedAt;   // a typed verifier is never stored: verification is stamped from the session (32d2)
     const row = await db.withTx(async (c) => {
       const old = (await c.query('SELECT body,version FROM protocols WHERE set_id=$1 FOR UPDATE', [sid])).rows[0] || null;
       const q = b.expectedVersion === 0

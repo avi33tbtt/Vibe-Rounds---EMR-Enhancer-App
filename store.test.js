@@ -233,20 +233,26 @@ test('set versions (server): saving a user set sends expectedVersion and remembe
   assert.equal(t.calls.filter((c) => /versions\//.test(c.path)).length, 0);
 });
 
-test('protocols: saving PUTs the body; a typed verifier makes the Store ask the server to stamp approval', async () => {
+test('protocols: saving PUTs the body without a name; a typed verifier makes the Store ask the server to stamp approval (chunk 32d2)', async () => {
   const t = await readyServerStore();
   t.custom = async (m, p, b) => {
     if (m === 'PUT' && p === '/protocols/care.sss') return [200, { setId: 'care.sss', body: b.body, verifiedBy: null, version: b.expectedVersion + 1 }];
     if (m === 'POST' && p === '/protocols/care.sss/approve') return [200, { setId: 'care.sss', verifiedBy: 'u1', version: b.expectedVersion + 1 }];
     return null;
   };
-  t.Store.saveProtocol('care.sss', { verifiedBy: '', bands: [{ min: '', max: '', instruction: 'typed' }] }); await t.Store.flush();
+  const bands = [{ min: '', max: '', instruction: 'typed' }];
+  t.Store.saveProtocol('care.sss', { verifiedBy: '', bands }); await t.Store.flush();
   let w = t.writes(); assert.equal(w.length, 1); assert.equal(w[0].method, 'PUT'); assert.equal(w[0].body.expectedVersion, 0);
-  t.Store.saveProtocol('care.sss', { verifiedBy: 'Dr A', bands: [{ min: '', max: '', instruction: 'typed' }] }); await t.Store.flush();
-  w = t.writes(); assert.deepEqual(w.map((x) => x.method + ' ' + x.path), ['PUT /protocols/care.sss', 'PUT /protocols/care.sss', 'POST /protocols/care.sss/approve']);
-  assert.equal(w[1].body.expectedVersion, 1); assert.equal(w[2].body.expectedVersion, 2);
-  t.Store.saveProtocol('care.sss', { verifiedBy: 'Dr A', bands: [{ min: '', max: '', instruction: 'typed' }] }); await t.Store.flush();
-  assert.equal(t.writes().length, 3, 'unchanged protocol is not sent again');
+  t.Store.saveProtocol('care.sss', { verifiedBy: 'Dr A', bands }); await t.Store.flush();
+  w = t.writes(); assert.deepEqual(w.map((x) => x.method + ' ' + x.path), ['PUT /protocols/care.sss', 'POST /protocols/care.sss/approve'], 'nothing else changed, so only the approve call is sent');
+  assert.equal(w[1].body.expectedVersion, 1);
+  t.Store.saveProtocol('care.sss', { verifiedBy: 'Dr A', bands }); await t.Store.flush();
+  assert.equal(t.writes().length, 2, 'unchanged protocol is not sent again');
+  t.Store.saveProtocol('care.sss', { verifiedBy: 'Dr A', bands: [{ min: '', max: '', instruction: 'edited' }] }); await t.Store.flush();
+  w = t.writes(); assert.deepEqual(w.slice(2).map((x) => x.method + ' ' + x.path), ['PUT /protocols/care.sss', 'POST /protocols/care.sss/approve'], 'an edit saves (which unverifies) and then asks for approval again');
+  t.Store.saveProtocol('care.sss', { verifiedBy: '', bands: [{ min: '', max: '', instruction: 'edited' }] }); await t.Store.flush();
+  w = t.writes(); assert.equal(w[w.length - 1].method + ' ' + w[w.length - 1].path, 'PUT /protocols/care.sss', 'clearing the mark saves the body, which resets approval on the server');
+  for (const x of w) assert.ok(!JSON.stringify(x.body).match(/verifiedBy|verifiedAt|Dr A/), 'no typed name in any request body');
   assert.equal(t.Store.status().state, 'saved');
 });
 
@@ -488,4 +494,45 @@ test('32d1: Demo mode never calls /session, /csrf or /login', async () => {
   const t = bootWithHeaders(async (m, p, b) => OK(m, p, b), { mode: 'local' });
   await t.Store.init(); t.Store.setCases([mkCase(crypto.randomUUID())]); await tick();
   assert.equal(t.calls.length, 0); assert.equal(t.Store.needsLogin(), false);
+});
+
+// ---------------------------------------------------------------- chunk 32d2: session user, hiding by role, plain 403
+const nurseMe = { id: 'u2', name: 'Nurse Neha', role: 'nurse', mode: 'session', allowed: ['session.read', 'case.read', 'row.add'] };
+test('32d2: Store.who and Store.can come from the session (server mode only); Demo mode and an older server never hide anything', async () => {
+  const t = await readyServerStore();
+  t.custom = async (m, p) => (m === 'GET' && p === '/me' ? [200, nurseMe] : undefined);
+  await t.Store.init();
+  assert.equal(t.Store.who(), 'Nurse Neha');
+  assert.equal(t.Store.can('row.add'), true); assert.equal(t.Store.can('rule.approve'), false); assert.equal(t.Store.can('note.sign'), false);
+  const old = await readyServerStore();                                   // happy() /me has no allowed list: nothing is hidden
+  assert.equal(old.Store.can('rule.approve'), true);
+  const demo = boot(happy(), { mode: 'local' }); await demo.Store.init();
+  assert.equal(demo.Store.who(), null, 'Demo mode keeps typed names'); assert.equal(demo.Store.can('rule.approve'), true);
+});
+
+test('32d2: rule requests carry no typed name (the server stamps the approver); a loaded approved rule shows the approver name', async () => {
+  const t = await readyServerStore();
+  t.custom = async (m, p, b) => {
+    if (m === 'PUT' && /^\/rules\//.test(p)) return [200, { version: b.expectedVersion + 1, enabled: false }];
+    if (m === 'POST' && /\/approve$/.test(p)) return [200, { version: b.expectedVersion + 1, enabled: true }];
+    return null;
+  };
+  const rule = { ruleId: 'r1', fieldRef: 'care.vitals/temp', op: '>=', threshold: 1, indicator: 'info', summary: 's', enabled: true, provenance: { source: 'manual', verifiedBy: 'Dev', verifiedAt: '2026-01-01T00:00:00Z' } };
+  t.Store.saveRules({ 'care.vitals': [rule] }); await t.Store.flush();
+  const w = t.writes(); assert.deepEqual(w.map((x) => x.method + ' ' + x.path), ['PUT /rules/care.vitals/r1', 'POST /rules/care.vitals/r1/approve']);
+  assert.ok(!JSON.stringify(w[0].body).match(/verifiedBy|verifiedAt|Dev/), 'no typed name in the body');
+  const t2 = await readyServerStore();
+  t2.custom = async (m, p) => (m === 'GET' && p === '/rules' ? [200, { 'care.vitals': [{ ruleId: 'r1', ownerSetId: 'care.vitals', enabled: true, verifiedBy: 'u9', verifiedByName: 'Dr Rao', verifiedAt: '2026-02-01T00:00:00Z', version: 3,
+    body: { ruleId: 'r1', fieldRef: 'care.vitals/temp', op: '>=', threshold: 1, indicator: 'info', summary: 's', provenance: { source: 'manual' } } }] }] : undefined);
+  await t2.Store.init();
+  const got = t2.Store.rules()['care.vitals'][0]; assert.equal(got.provenance.verifiedBy, 'Dr Rao'); assert.equal(got.enabled, true);
+});
+
+test('32d2: a 403 forbidden shows one plain sentence, is not retried, and the save status names it', async () => {
+  const t = await readyServerStore(); const toasts = []; t.Store.hooks.toast = (m) => toasts.push(m);
+  const msg = 'Your role (nurse) may not approve alert rules.';
+  t.custom = async (m, p) => (m === 'PUT' && /^\/rules\//.test(p) ? [403, { error: { code: 'forbidden', message: msg, action: 'rule.approve' } }] : undefined);
+  t.Store.saveRules({ 'care.vitals': [{ ruleId: 'r1', fieldRef: 'care.vitals/temp', op: '>=', threshold: 1, indicator: 'info', summary: 's', enabled: false, provenance: { source: 'manual' } }] }); await t.Store.flush();
+  assert.deepEqual(toasts, [msg]); assert.equal(t.writes().length, 1, 'not retried');
+  assert.equal(t.Store.status().state, 'failed'); assert.match(t.Store.status().text, /may not approve alert rules/);
 });

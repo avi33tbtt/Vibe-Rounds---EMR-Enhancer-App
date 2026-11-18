@@ -47,6 +47,19 @@ const ACTIONS = {
 const CASE_FIELD_ACTION = { patient: 'case.patient', narrative: 'case.narrative', applied: 'case.apply', pathways: 'case.apply', pinned: 'case.pin', alertLog: 'alert.ack' };
 ACTIONS['case.patch'] = ROLES.filter((r) => Object.values(CASE_FIELD_ACTION).some((a) => ACTIONS[a].includes(r)));
 
+// Plain-words label for each action, used in the 403 sentence the screen shows (chunk 32d2). A missing label falls back to the action code.
+const ACTION_LABELS = {
+  'case.create': 'create cases', 'case.patient': 'edit patient banner details', 'case.pin': 'change the quick bar', 'alert.ack': 'acknowledge alerts',
+  'case.read_errors': 'see rows entered in error', 'case.narrative': 'edit the narrative', 'case.apply': 'apply sets or pathways', 'case.patch': 'change this case',
+  'row.add': 'add readings', 'row.amend_own': 'amend readings', 'row.amend_any': 'amend other people\'s readings', 'value.write': 'save these values',
+  'note.write': 'write notes', 'note.sign': 'sign notes', 'set.write': 'edit element sets and pathways', 'code.write': 'edit verified codes', 'binding.write': 'edit code bindings',
+  'rule.write': 'edit alert rules', 'rule.approve': 'approve alert rules', 'protocol.write': 'edit protocols', 'protocol.approve': 'verify protocols',
+  'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'audit.read': 'read the audit log', 'user.manage': 'manage users',
+  'content.review': 'review content', 'package.install': 'install packages',
+};
+/** The actions a user may take, in the order of ACTIONS. Sent with GET /me so the screen can hide controls; the server stays the control. */
+const allowedActions = (user) => Object.keys(ACTIONS).filter((a) => can(user, a));
+
 const CARE_ONLY_ROLES = ['nurse'];
 
 /** Every route, keyed 'METHOD /path' exactly as registered in api.js. */
@@ -73,14 +86,14 @@ function can(user, action) {
   if (!Object.prototype.hasOwnProperty.call(ACTIONS, action)) throw new Error('Unknown permission action: ' + action);   // a typo must fail loudly, never silently allow or deny
   return !!user && ACTIONS[action].includes(user.role);
 }
-const denied = (res, user, what) => res.status(403).json({ error: { code: 'forbidden', message: `Your role (${user && user.role}) may not ${what}` } });
+const denied = (res, user, what, action) => res.status(403).json({ error: Object.assign({ code: 'forbidden', message: `Your role (${user && user.role}) may not ${what}.` }, action ? { action } : {}) });
 
 /** Express guard for one action. Needs req.actor ({id, role}); no actor is a 401. */
 function requireAction(action) {
   if (!ACTIONS[action]) throw new Error('Unknown permission action: ' + action);
   return (req, res, next) => {
     if (!req.actor) return res.status(401).json({ error: { code: 'unauthorized', message: 'Login required' } });
-    return can(req.actor, action) ? next() : denied(res, req.actor, 'do this (' + action + ')');
+    return can(req.actor, action) ? next() : denied(res, req.actor, ACTION_LABELS[action] || 'do this (' + action + ')', action);
   };
 }
 
@@ -110,4 +123,4 @@ function canAmendRow(user, row, setKind) {
   return can(user, 'row.amend_own') && row.entered_by === user.id && (!CARE_ONLY_ROLES.includes(user.role) || setKind === 'care');
 }
 
-module.exports = { ROLES, ACTIONS, ROUTE_ACTIONS, CASE_FIELD_ACTION, can, requireAction, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied };
+module.exports = { ROLES, ACTIONS, ACTION_LABELS, allowedActions, ROUTE_ACTIONS, CASE_FIELD_ACTION, can, requireAction, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied };

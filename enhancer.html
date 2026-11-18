@@ -711,6 +711,8 @@ g.CDS={OPS,IND,NUMT,TIMT,evalRules,approved,problem,parseRef,conv,num};
 
 /* ---------------- Part 2: editor + banner (uses enhancer.html globals: CUR, registry, getSet, flS, isPw, pwMembers, esc, $, toast, persist, ageTxt) ---------------- */
 const RK='rules';let RF=null,inited=false;
+/* Chunk 32d2: in server mode the session user is shown read-only and the server stamps who approved, verified or signed (no typed names).
+   mayDo only hides controls; the server still checks every request and a refused one shows a plain sentence. Demo mode keeps the old typed names. */
 const userRules=()=>Store.rules();
 function saveUserRules(o){if(Store.saveRules(o))return true;toast('Storage full or blocked: the rule was NOT saved.');return false}
 /* registry with clinician-entered rules merged in; shipped rules (set.rules) stay read-only */
@@ -725,7 +727,7 @@ function ruleBox(owner){return`<details class="rlb"><summary class="mu">Alert ru
 function ruleList(owner,res){const o=ruleReg().find(s=>s.setId==owner),rs=(o&&o.rules)||[],mine=new Set((userRules()[owner]||[]).map(r=>r&&r.ruleId)),fl=ruleFields(owner);
 const row=r=>{const f=fl.find(x=>x.ref==(r&&r.fieldRef)),n=(res.notes||[]).find(x=>x.ruleId==(r&&r.ruleId)&&x.owner==owner),st=ST[n&&n.state]||['Not evaluated','--mu'],own=mine.has(r.ruleId),
 who=r.provenance&&r.provenance.verifiedBy?`approved by ${esc(r.provenance.verifiedBy)} ${esc((r.provenance.verifiedAt||'').slice(0,10))}`:'not approved';
-return`<tr><td>${esc(describe(r,f?f.label:r.fieldRef))}<div class="mu">${who} · ${esc((r.provenance&&r.provenance.source)||'manual')}${own?'':' · shipped with the registry (read-only)'}</div></td><td><span class="bd" style="background:var(${st[1]})">${esc(st[0])}</span></td><td>${own?`${approved(r)?'':`<button class="b sm" data-capp="${esc(r.ruleId)}" data-co="${esc(owner)}">Approve</button> `}<button class="b sm" data-cedit="${esc(r.ruleId)}" data-co="${esc(owner)}">Edit</button> <button class="b sm" data-ctog="${esc(r.ruleId)}" data-co="${esc(owner)}">${r.enabled===false?'Enable':'Disable'}</button> <button class="b sm" data-cdel="${esc(r.ruleId)}" data-co="${esc(owner)}">Delete</button>`:''}</td></tr>`},ok=rs.filter(r=>approved(r)||r.enabled===false&&r.provenance&&r.provenance.verifiedBy),nr=rs.filter(r=>!ok.includes(r));
+return`<tr><td>${esc(describe(r,f?f.label:r.fieldRef))}<div class="mu">${who} · ${esc((r.provenance&&r.provenance.source)||'manual')}${own?'':' · shipped with the registry (read-only)'}</div></td><td><span class="bd" style="background:var(${st[1]})">${esc(st[0])}</span></td><td>${own?`${approved(r)||!mayDo('rule.approve')?'':`<button class="b sm" data-capp="${esc(r.ruleId)}" data-co="${esc(owner)}">Approve</button> `}${mayDo('rule.write')?`<button class="b sm" data-cedit="${esc(r.ruleId)}" data-co="${esc(owner)}">Edit</button> <button class="b sm" data-ctog="${esc(r.ruleId)}" data-co="${esc(owner)}">${r.enabled===false?'Enable':'Disable'}</button> <button class="b sm" data-cdel="${esc(r.ruleId)}" data-co="${esc(owner)}">Delete</button>`:''}`:''}</td></tr>`},ok=rs.filter(r=>approved(r)||r.enabled===false&&r.provenance&&r.provenance.verifiedBy),nr=rs.filter(r=>!ok.includes(r));
 return(ok.length?`<table class="pt rlt">${ok.map(row).join('')}</table>`:nr.length?'':'<div class="mu">No rules. Nothing is evaluated until a clinician types and approves one.</div>')
 +(nr.length?`<div class="kh">Needs review (${nr.length}): these never run until approved</div><table class="pt rlt">${nr.map(row).join('')}</table>`:'')}
 function ruleForm(owner,r){const fl=ruleFields(owner);if(!fl.length)return'<div class="mu">This set has no numeric or date/time field to build a rule on.</div>';
@@ -740,10 +742,10 @@ return`<div class="cf cd" style="margin:6px 0"><b>${r?'Edit rule':'New rule'}</b
 <label>Indicator</label><select data-cf="ind">${IND.map(o=>`<option${o==(c.indicator||'warning')?' selected':''}>${o}</option>`).join('')}</select>
 <label>Summary (decision-support wording, e.g. "Review potassium before insulin")</label><input data-cf="sum" maxlength="140" value="${esc(c.summary||'')}">
 <label>Detail (optional)</label><input data-cf="det" maxlength="300" value="${esc(c.detail||'')}">
-<label>Verified by (name / role) <span class="mu">leave blank to save as not approved</span></label><input data-cf="by" value="" placeholder="${r?'re-enter to approve this edited rule':'name / role'}">
+${SRV()?(mayDo('rule.approve')?`<label><input type="checkbox" data-cf="by" value="${esc(me())}"> Approve this rule as <b>${esc(me())}</b> <span class="mu">(you, stamped by the server; leave unticked to save as not approved)</span></label>`:'<div class="mu">Your role cannot approve rules. It will be saved as not approved until a doctor approves it.</div>'):`<label>Verified by (name / role) <span class="mu">leave blank to save as not approved</span></label><input data-cf="by" value="" placeholder="${r?'re-enter to approve this edited rule':'name / role'}">`}
 <div><button class="b sm" data-csave="${esc(owner)}" data-crid="${esc(c.ruleId||'')}">Save rule</button> <button class="b sm" data-ccancel="${esc(owner)}">Cancel</button></div></div>`}
 function ruleUI(owner){const el=$('rl_'+owner);if(!el||!CUR)return;let res;try{res=evalRules(CUR,ruleReg())}catch(e){res={notes:[]}}
-const rf=RF&&RF.owner==owner?ruleForm(owner,RF.rid?((userRules()[owner]||[]).find(x=>x.ruleId==RF.rid)||null):null):'<button class="b sm" data-cadd="'+esc(owner)+'">+ Add rule</button>';
+const rf=RF&&RF.owner==owner?ruleForm(owner,RF.rid?((userRules()[owner]||[]).find(x=>x.ruleId==RF.rid)||null):null):(mayDo('rule.write')?'<button class="b sm" data-cadd="'+esc(owner)+'">+ Add rule</button>':'<span class="mu">Your role cannot add or edit rules.</span>');
 const dr=RF?'':`<div class="mu" style="margin-top:8px">Or describe the rule in plain words. The model sees only this set's field names and units plus your sentence, never patient values. The result is a draft that cannot run until you edit and approve it.</div><textarea data-cd="text" style="min-height:44px" maxlength="300" placeholder="e.g. warn when the latest temperature is above 38"></textarea><button class="b sm" data-cdraft="${esc(owner)}" style="margin-top:4px" disabled title="AI is available after the server AI step.">Draft rule</button> <span class="mu">AI is available after the server AI step.</span>`;
 el.innerHTML=ruleList(owner,res)+rf+dr}
 function cdsRender(){RF=null;if(!CUR)return;
@@ -766,7 +768,7 @@ el.innerHTML=h}
 function cdsAck(rid,sid){if(!CUR)return;const a=evalRules(CUR,ruleReg()).find(x=>x.ruleId==rid&&x.setId==sid);if(!a)return alertsRender();
 CUR.alertLog=Array.isArray(CUR.alertLog)?CUR.alertLog:[];CUR.alertLog.push({ruleId:rid,setId:sid,ackedAt:new Date().toISOString(),sig:a.sig});if(CUR.alertLog.length>500)CUR.alertLog=CUR.alertLog.slice(-500);persist();alertsRender()}
 const ORDERY=/^\s*(give|administer|start|stop|order|inject|infuse|increase|decrease|titrate|hold|prescribe)\b/i;
-function cdsSave(owner,rid,box){const q=k=>{const e=box.querySelector('[data-cf="'+k+'"]');return e?e.value:''},ref=q('ref'),op=q('op'),thrS=String(q('thr')).trim(),ind=q('ind'),sum=q('sum').trim(),det=q('det').trim(),unit=q('unit').trim(),by=q('by').trim();
+function cdsSave(owner,rid,box){const q=k=>{const e=box.querySelector('[data-cf="'+k+'"]');return e?(e.type=='checkbox'?(e.checked?e.value:''):e.value):''},ref=q('ref'),op=q('op'),thrS=String(q('thr')).trim(),ind=q('ind'),sum=q('sum').trim(),det=q('det').trim(),unit=q('unit').trim(),by=q('by').trim();
 const fo=ruleFields(owner).find(x=>x.ref==ref);if(!fo)return toast('Pick a field from the list.');if(!OPS.includes(op))return toast('Pick a condition.');
 const thr=thrS===''?null:num(thrS);if(thr===null)return toast('Type a threshold number. None is pre-filled on purpose.');
 const isT=TIMT.includes(fo.f.type);if(op=='minutes_since_gt'){if(!fo.f.repeat&&!isT)return toast('"Reading is older than" needs a field that has timestamps (a repeat table or a date/time field).');if(thr<0)return toast('Minutes cannot be negative.')}
@@ -805,7 +807,8 @@ try{await generateRuleDraft(owner,ta&&ta.value);ruleUI(owner);alertsRender();toa
 catch(e){toast(e.name=='TimeoutError'?'Error: LLM call timed out.':e.message);btn.disabled=false;btn.textContent=l}}
 function cdsApprove(owner,rid){const all=userRules(),arr=Array.isArray(all[owner])?all[owner]:[],r=arr.find(x=>x&&x.ruleId==rid);if(!r)return;
 const f=ruleFields(owner).find(x=>x.ref==r.fieldRef);if(!f)return toast('The rule\'s field no longer exists. Edit or delete it.');if(problem(r))return toast('This rule is invalid and cannot be approved.');
-const by=(prompt('Check the rule in plain words:\n\n'+describe(r,f.label)+'\n\nVerified by (name / role). Leave empty to cancel:','')||'').trim();if(!by)return;
+if(SRV()&&!mayDo('rule.approve'))return toast('Your role ('+Store.me.role+') may not approve alert rules.');
+const by=SRV()?(confirm('Check the rule in plain words:\n\n'+describe(r,f.label)+'\n\nApprove as '+me()+'?')?me():''):(prompt('Check the rule in plain words:\n\n'+describe(r,f.label)+'\n\nVerified by (name / role). Leave empty to cancel:','')||'').trim();if(!by)return;
 r.provenance={source:(r.provenance&&r.provenance.source)||'manual',verifiedBy:by,verifiedAt:new Date().toISOString()};r.enabled=true;if(saveUserRules(all)){ruleUI(owner);alertsRender();toast('Approved by '+by+'. The rule now runs.')}}
 function cdsInit(){if(inited)return;inited=true;const cp=$('al');if(!cp)return;
 cp.addEventListener('click',e=>{const t=e.target,b=k=>t.closest('['+k+']');let x;
@@ -1084,11 +1087,22 @@ const ageTxt=t=>{if(t==null)return'';const m=Math.round((Date.now()-t)/6e4);if(m
 function setForm(s){let h=s.protocol?protoCard(s):'';const done=new Set();(s.sections||[]).forEach(sec=>{h+=`<div class="sec"><b>${esc(sec.title)}</b>`;sec.fields.forEach(f=>{if(f.repeat){const g=f.group||f.id;if(!done.has(g)){done.add(g);h+=`<div class="rg" id="rg_${esc(s.setId)}@${esc(g)}">${grpInner(s,g)}</div>`}return}const k=vk(s.setId,f.id);
 h+=`<label>${esc(f.label)}${f.required?' *':''}${f.unit?' ('+esc(f.unit)+')':''}<span id="bg_${esc(k)}"></span><span id="cb_${esc(k)}"></span></label>${inp(f,k)}<div class="mu">${esc(f.rationale||'')}</div>`});h+='</div>'});return h}
 /* Protocol sets (e.g. sliding scale): bands are typed by the clinician; the tool only echoes the matching typed band */
+/* Chunk 32d2 helpers (top level so the rules, protocol and notes code all see them). */
+function SRV(){return Store.mode==='server'&&!!Store.me}
+function mayDo(a){return Store.can(a)}
+function me(){return Store.who()||''}
 function protoOf(sid){const p=CUR.values[vk(sid,'__protocol')];return p&&Array.isArray(p.bands)?p:{verifiedBy:'',bands:[]}}
 function saveProto(sid,p){Store.saveProtocol(sid,p)}
-function protoCard(s){const p=protoOf(s.setId),id=esc(s.setId),cell=(i,f,t)=>`<td><input data-p="${id}" data-i="${i}" data-f="${f}" ${t=='n'?'type="number" step="any"':''} value="${esc(p.bands[i][f])}"></td>`;
-const rows=p.bands.map((b,i)=>'<tr>'+cell(i,'min','n')+cell(i,'max','n')+cell(i,'instruction','t')+`<td><button class="b sm" data-pdel="${id}" data-i="${i}">×</button></td></tr>`).join('');
-return `<div class="sec proto"><b>Sliding-scale protocol</b><div class="mu">Typed by the clinician or institution. This tool never calculates or suggests a dose; it only shows the band you typed that covers the latest glucose reading entered below. Blank min or max means open-ended. Bands are compared with glucose in the unit shown on the field (mg/dL); there is no unit conversion.</div><div class="pn" id="pn_${id}"></div><table class="pt"><tr><th>Glucose min</th><th>Glucose max</th><th>Instruction (as typed)</th><th></th></tr>${rows}</table><button class="b sm" data-padd="${id}">+ Add band</button> <button class="b sm" data-pload="${id}">Load last entered protocol</button><label>Protocol verified by</label><input data-p="${id}" data-f="verifiedBy" value="${esc(p.verifiedBy)}" placeholder="name / role / date"><div class="pm" id="pm_${id}"></div></div>`}
+function protoVerify(id,p){if(!SRV())return`<label>Protocol verified by</label><input data-p="${id}" data-f="verifiedBy" value="${esc(p.verifiedBy)}" placeholder="name / role / date">`;
+const v=String(p.verifiedBy||'').trim();return`<div class="mu" style="margin-top:6px">${v?'Verified by <b>'+esc(v)+'</b>':'Not verified'}${v&&mayDo('protocol.write')?` <button class="b sm" data-pverify="${id}" data-pv="0">Remove verification</button>`:''}${!v&&mayDo('protocol.approve')?` <button class="b sm" data-pverify="${id}" data-pv="1">Verify as ${esc(me())}</button>`:''}${!v&&!mayDo('protocol.approve')?' · your role cannot verify protocols':''}</div>`}
+function protoCard(s){const p=protoOf(s.setId),id=esc(s.setId),ro=!mayDo('protocol.write'),cell=(i,f,t)=>`<td><input data-p="${id}" data-i="${i}" data-f="${f}" ${t=='n'?'type="number" step="any"':''} ${ro?'disabled':''} value="${esc(p.bands[i][f])}"></td>`;
+const rows=p.bands.map((b,i)=>'<tr>'+cell(i,'min','n')+cell(i,'max','n')+cell(i,'instruction','t')+`<td>${ro?'':`<button class="b sm" data-pdel="${id}" data-i="${i}">×</button>`}</td></tr>`).join('');
+return `<div class="sec proto"><b>Sliding-scale protocol</b><div class="mu">Typed by the clinician or institution. This tool never calculates or suggests a dose; it only shows the band you typed that covers the latest glucose reading entered below. Blank min or max means open-ended. Bands are compared with glucose in the unit shown on the field (mg/dL); there is no unit conversion.</div><div class="pn" id="pn_${id}"></div><table class="pt"><tr><th>Glucose min</th><th>Glucose max</th><th>Instruction (as typed)</th><th></th></tr>${rows}</table>${ro?'<div class="mu">Your role cannot edit protocols.</div>':`<button class="b sm" data-padd="${id}">+ Add band</button> <button class="b sm" data-pload="${id}">Load last entered protocol</button>`}${protoVerify(id,p)}<div class="pm" id="pm_${id}"></div></div>`}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-pverify]');if(!t||!CUR||!SRV())return;const sid=t.dataset.pverify,p=protoOf(sid);
+if(t.dataset.pv==='1'&&!mayDo('protocol.approve'))return toast('Your role ('+Store.me.role+') may not verify protocols.');
+if(t.dataset.pv==='1'&&!(p.bands||[]).length)return toast('Enter the protocol bands before verifying.');
+if(t.dataset.pv==='1'&&!confirm('Verify this protocol as '+me()+'? Check every band first.'))return;
+p.verifiedBy=t.dataset.pv==='1'?me():'';CUR.values[vk(sid,'__protocol')]=p;saveProto(sid,p);persist();renderCase();if(typeof renderNotes==='function'&&$('notesList'))renderNotes();toast(p.verifiedBy?'Protocol marked verified by '+p.verifiedBy+'.':'Verification removed.')});
 function protoShow(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId,a);if(!s||!s.protocol)return;const p=protoOf(a.setId),n=$('pn_'+a.setId),m=$('pm_'+a.setId);if(!n||!m)return;
 const ok=p.bands.some(b=>String(b.instruction||'').trim());
 n.innerHTML=!ok?'<span class="bd" style="background:var(--r);margin:0">Protocol not entered</span> <span class="mu">add the bands your clinician or institution has verified</span>':!String(p.verifiedBy||'').trim()?'<span class="bd" style="background:var(--a);margin:0">Not marked as verified</span>':'';
@@ -1872,7 +1886,7 @@ function renderNotes(){
     const content=(n.type==='narrative'||!n.setId)
       ? `<div class="note-body"><label>Note text</label><textarea data-note-text="${esc(n.id)}" ${n.status==='signed'?'disabled':''}>${esc(n.text)}</textarea></div>`
       : `<div class="note-set-form" ${n.status==='signed'?'inert aria-disabled="true"':''}>${linked?setForm(linked):`<div class="mu">Linked set is not available: ${esc(n.setId)}</div>`}</div>`;
-    return `<article class="note-card" data-note-card="${esc(n.id)}"><div class="note-head"><b>${esc(title)}</b><span class="note-state">${n.status==='signed'?'Signed':'Draft'}</span><span class="note-meta">${esc(meta)}</span><span style="flex:1"></span><button class="b sm" type="button" data-note-toggle="${esc(n.id)}">Details</button></div><div data-note-detail="${esc(n.id)}" ${n.status==='signed'?'':' '}>${content}${n.status==='draft'?`<div class="note-actions"><button class="b sm" type="button" data-note-sign="${esc(n.id)}">Sign</button><button class="b sm" type="button" data-note-delete="${esc(n.id)}">Remove draft</button></div>`:`<div class="note-actions"><button class="b sm" type="button" data-note-amend="${esc(n.id)}">Amend</button></div>`}</div></article>`;
+    return `<article class="note-card" data-note-card="${esc(n.id)}"><div class="note-head"><b>${esc(title)}</b><span class="note-state">${n.status==='signed'?'Signed':'Draft'}</span><span class="note-meta">${esc(meta)}</span><span style="flex:1"></span><button class="b sm" type="button" data-note-toggle="${esc(n.id)}">Details</button></div><div data-note-detail="${esc(n.id)}" ${n.status==='signed'?'':' '}>${content}${n.status==='draft'?`<div class="note-actions"><button class="b sm" type="button" data-note-sign="${esc(n.id)}" ${mayDo('note.sign')?'':'hidden'}>Sign</button><button class="b sm" type="button" data-note-delete="${esc(n.id)}">Remove draft</button></div>`:`<div class="note-actions"><button class="b sm" type="button" data-note-amend="${esc(n.id)}">Amend</button></div>`}</div></article>`;
   }).join('');
 }
 function createNote(){
@@ -1896,7 +1910,8 @@ function createNote(){
 }
 function signNote(id){
   const n=CUR?.notes?.find(x=>x.id===id);if(!n||n.status==='signed')return;
-  const signer=Store.mode==='server'&&Store.me&&Store.me.name?Store.me.name:prompt('Enter the signer name (demo only):');if(!signer||!signer.trim())return toast('Signing cancelled: signer name is required.');
+  if(SRV()&&!mayDo('note.sign'))return toast('Your role ('+Store.me.role+') may not sign notes.');
+  const signer=SRV()&&Store.me.name?Store.me.name:prompt('Enter the signer name (demo only):');if(!signer||!signer.trim())return toast('Signing cancelled: signer name is required.');
   n.status='signed';n.signedBy=signer.trim();n.signedAt=noteNow();
   if(n.type==='narrative')CUR.narrative=n.text;
   persist();renderNotes();toast('Note signed and locked.');
@@ -1912,7 +1927,7 @@ function amendNote(id){
   }else n.text=old.text+'\n\nAmendment ('+reason.trim()+'):\n';
   CUR.notes.push(n);persist();renderNotes();toast('A new amendment draft was created; the signed note is unchanged.');
 }
-$('newNoteBtn')?.addEventListener('click',()=>{$('noteComposer').hidden=false;notesSetOptions()});
+$('newNoteBtn')?.addEventListener('click',()=>{if(SRV()&&!mayDo('note.write'))return toast('Your role ('+Store.me.role+') may not write notes.');$('noteComposer').hidden=false;notesSetOptions()});
 $('cancelNoteBtn')?.addEventListener('click',()=>$('noteComposer').hidden=true);
 $('createNoteBtn')?.addEventListener('click',createNote);
 $('noteType')?.addEventListener('change',()=>{const t=$('noteType').value;$('noteSet').hidden=t!=='disease';$('noteDraftText').hidden=t!=='free';notesSetOptions()});

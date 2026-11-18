@@ -48,7 +48,7 @@ test('hashing: scrypt string with its own parameters and salt; right and wrong p
 test('login: cookie is httpOnly, SameSite=Lax, not Secure in dev; only the hash of the token is stored; no password data returned', async () => {
   await mk('asha', { name: 'Dr Asha', role: 'doctor' });
   const r = await login('ASHA', PW);                                    // username is case-insensitive
-  assert.equal(r.status, 200); assert.deepEqual(r.body, { id: r.body.id, name: 'Dr Asha', role: 'doctor', mustChangePassword: false });
+  assert.equal(r.status, 200); assert.deepEqual(r.body, { id: r.body.id, name: 'Dr Asha', role: 'doctor', mustChangePassword: false, allowed: require('./permissions.js').allowedActions({ role: 'doctor' }) });
   const c = cookieOf(r); assert.match(c, /HttpOnly/); assert.match(c, /SameSite=Lax/); assert.doesNotMatch(c, /Secure/); assert.match(c, /Max-Age=43200/);
   const tok = tokenOf(r), s = (await db.query('SELECT id FROM sessions WHERE user_id=$1', [r.body.id])).rows;
   assert.equal(tok.length, 64); assert.deepEqual(s.map((x) => x.id), [crypto.createHash('sha256').update(tok).digest('hex')]); assert.notEqual(s[0].id, tok);
