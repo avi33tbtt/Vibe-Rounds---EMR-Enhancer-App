@@ -354,13 +354,13 @@ async function commitImport(c, out, actor) {
  * requireAuth (from auth.js) identifies the user from the session cookie. `getActor` is a TEST-ONLY override (returns {id, role}); it is refused when
  * NODE_ENV=production, so a deployed server can only ever use real sessions.
  */
-function mountApi(app, { db, getActor, requireAuth }) {
+function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   if (getActor && process.env.NODE_ENV === 'production') throw new Error('getActor is for tests only and is not allowed when NODE_ENV=production');
-  if (!getActor && !requireAuth) throw new Error('mountApi needs requireAuth');
+  if (!getActor && !(requireAuth && requireCsrf)) throw new Error('mountApi needs requireAuth and requireCsrf');
   const r = guardRouter(express.Router());            // every route below must have an action in permissions.js ROUTE_ACTIONS
   r.use(getActor
     ? (req, res, next) => { Promise.resolve(getActor(req)).then((a) => { req.actor = a; next(); }, next); }
-    : (req, res, next) => requireAuth(req, res, (e) => { if (e) return next(e); req.actor = { id: req.user.id, name: req.user.name, role: req.user.role }; next(); }));
+    : (req, res, next) => requireAuth(req, res, (e) => { if (e) return next(e); req.actor = { id: req.user.id, name: req.user.name, role: req.user.role }; requireCsrf(req, res, next); }));
   const setKindOf = async (setId) => ((await db.query('SELECT kind FROM element_sets_latest WHERE set_id=$1', [setId])).rows[0] || {}).kind || null;
 
   // ================= who am I (the session user) =================

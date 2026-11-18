@@ -11,7 +11,8 @@
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "seed": "node seed.js",
-    "test": "node --test server.test.js api.test.js auth.test.js store.test.js"
+    "create-admin": "node create-admin.js",
+    "test": "node --test server.test.js api.test.js auth.test.js permissions.test.js store.test.js"
   },
   "dependencies": {
     "express": "^4.21.2",

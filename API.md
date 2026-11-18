@@ -1,8 +1,12 @@
-# EMR Enhancer API (chunks 28 to 32b)
+# EMR Enhancer API (chunks 28 to 32c)
 
 Base path `/api`. JSON in, JSON out. Synthetic data only; not for clinical use.
 
-**Auth (chunk 32b):** every route below needs a login session (cookie from `POST /api/login`, chunk 32a). No cookie or an ended session is `401 unauthorized`. A logged-in user whose role may not do the action gets `403 forbidden`. `entered_by`, `created_by`, `signedBy`, `addedBy` and approver ids always come from the session user, never from a request body (author fields in a body are rejected as unknown fields). The development user is gone; tests use a test-only `getActor` that `createApp` refuses when `NODE_ENV=production`. Until the first-admin script (chunk 32c) there is no way to create a user except directly in the database, and the browser has no login screen until chunk 32d (Demo mode still works).
+**Auth (chunk 32b):** every route below needs a login session (cookie from `POST /api/login`, chunk 32a). No cookie or an ended session is `401 unauthorized`. A logged-in user whose role may not do the action gets `403 forbidden`. `entered_by`, `created_by`, `signedBy`, `addedBy` and approver ids always come from the session user, never from a request body (author fields in a body are rejected as unknown fields). The development user is gone; tests use a test-only `getActor` that `createApp` refuses when `NODE_ENV=production`. The browser has no login screen until chunk 32d (Demo mode still works).
+
+**CSRF (chunk 32c):** after login, `GET /api/csrf` returns `{token}` (tied to the session). Every `POST`, `PUT`, `PATCH` and `DELETE` under `/api` except `/login` and `/logout` must send it in the `X-CSRF-Token` header, otherwise `403 csrf`. `GET` needs no token. The token is an HMAC of the session id with `SESSION_SECRET` (16+ characters; required when `NODE_ENV=production`; a random per-process value is used otherwise). The check runs before the role check.
+
+**First administrator:** `npm run create-admin` (or `node create-admin.js`) asks for username, name and a password typed twice (12+ characters). There is no default password. It refuses when an active admin with a password already exists unless `--allow-more` is passed.
 
 **Errors:** `{ "error": { "code": "...", "message": "..." } }`. Codes: `validation` 400, `bad_json` 400, `not_found` 404, `conflict` 409, `signed` 409, `entered_in_error` 422, `too_many_rows` 422, `constraint` 422, `read_only` 403, `method_not_allowed` 405, `too_large` 413, `unauthorized` 401, `auth_not_configured` 503.
 

@@ -8,6 +8,7 @@ const request = require('supertest');
 const { Client } = require('pg');
 const { createDb, migrate, createApp } = require('./server.js');
 const { hashPassword, verifyPassword, passwordProblem } = require('./auth.js');
+const { createAdmin } = require('./create-admin.js');
 
 try { fs.existsSync('.env') && process.loadEnvFile('.env'); } catch (_) {}
 const base = new URL(process.env.DATABASE_URL || 'postgres://x@127.0.0.1/x');
@@ -141,4 +142,20 @@ test('mustChangePassword is reported at login; data routes now need the session 
   assert.equal((await request(app).get('/api/me')).status, 401);
   const m = await request(app).get('/api/me').set('Cookie', 'emr_sid=' + tokenOf(r));
   assert.equal(m.status, 200); assert.equal(m.body.mode, 'session'); assert.equal(m.body.id, id);
+});
+
+// ---------------------------------------------------------------- chunk 32c: create-admin
+test('create-admin: needs a typed strong password, no default exists, first admin can log in, a second is refused unless allowed', async () => {
+  await db.query("DELETE FROM sessions"); await db.query("UPDATE users SET active=false WHERE role='admin'");   // earlier tests may have made admins
+  await assert.rejects(createAdmin(db, { username: 'root', name: 'Root', password: 'short' }), /at least 12/);
+  await assert.rejects(createAdmin(db, { username: 'bad name', name: 'Root', password: PW }), /Username/);
+  await assert.rejects(createAdmin(db, { username: 'root', name: '', password: PW }), /Name is required/);
+  assert.equal((await db.query("SELECT count(*)::int n FROM users WHERE username='root'")).rows[0].n, 0, 'nothing created by the refusals');
+  const id = await createAdmin(db, { username: 'root', name: 'Root', password: PW });
+  const u = (await db.query('SELECT role,active,must_change_password,password_hash FROM users WHERE id=$1', [id])).rows[0];
+  assert.equal(u.role, 'admin'); assert.equal(u.active, true); assert.equal(u.must_change_password, false); assert.ok(u.password_hash.startsWith('scrypt$') && !u.password_hash.includes(PW));
+  assert.equal((await login('root', PW)).status, 200);
+  await assert.rejects(createAdmin(db, { username: 'root2', name: 'R2', password: PW }), /already exists/);
+  await assert.rejects(createAdmin(db, { username: 'ROOT', name: 'R3', password: PW }, { allowMore: true }), /already taken/);
+  assert.ok(await createAdmin(db, { username: 'root2', name: 'R2', password: PW }, { allowMore: true }));
 });

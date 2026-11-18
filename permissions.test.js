@@ -1,7 +1,7 @@
 'use strict';
 // node --test permissions.test.js  (needs DATABASE_URL; creates and drops its own database)
 // Chunk 32b spot tests: the permission table itself, and real login sessions (no test actor) against the API.
-// The full role x route matrix is chunk 32c.
+// Chunk 32c adds: the role x route matrix generated from the table, the CSRF check, and the author-forgery checks.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -32,6 +32,7 @@ test.before(async () => {
     const id = (await db.query('INSERT INTO users (username,name,role,password_hash) VALUES ($1,$2,$3,$4) RETURNING id', ['u_' + role, 'User ' + role, role, h])).rows[0].id;
     const agent = request.agent(app);
     assert.equal((await agent.post('/api/login').send({ username: 'u_' + role, password: PW })).status, 200);
+    agent.set('x-csrf-token', (await agent.get('/api/csrf')).body.token);        // chunk 32c: state-changing requests carry this session's token
     who[role] = { id, agent };
   }
   const ins = (id, kind) => db.query(`INSERT INTO element_sets (set_id,version,kind,body,source) VALUES ($1,1,$2,'{}','user')`, [id, kind]);
@@ -61,8 +62,8 @@ test('every route registered in api.js is in ROUTE_ACTIONS, and every entry is r
   const layers = (app._router || app.router).stack.filter((l) => l.handle && l.handle.stack && l.handle.stack.some((x) => x.route));
   const registered = layers.flatMap((l) => l.handle.stack.filter((x) => x.route).flatMap((x) => Object.keys(x.route.methods).map((m) => m.toUpperCase() + ' ' + x.route.path)));
   assert.ok(registered.length > 40, 'router not found');
-  registered.splice(0, registered.length, ...registered.filter((x) => !['POST /login', 'POST /logout', 'GET /session'].includes(x)));
-  const PUBLIC = ['POST /login', 'POST /logout', 'GET /session'];       // auth.js routes: the login itself, checked in auth.test.js
+  registered.splice(0, registered.length, ...registered.filter((x) => !['POST /login', 'POST /logout', 'GET /session', 'GET /csrf'].includes(x)));
+  const PUBLIC = ['POST /login', 'POST /logout', 'GET /session', 'GET /csrf'];       // auth.js routes: the login itself, checked in auth.test.js
   for (const k of registered.filter((x) => !PUBLIC.includes(x))) assert.ok(P.ROUTE_ACTIONS[k], 'route without action: ' + k);
   for (const k of Object.keys(P.ROUTE_ACTIONS)) assert.ok(registered.includes(k), 'ROUTE_ACTIONS entry for a route that does not exist: ' + k);
 });
@@ -138,4 +139,74 @@ test('informatician authors sets and codes but cannot chart; only admin imports;
   assert.equal((await who.nurse.agent.post('/api/element-sets').send({ setId: 'care.nn', kind: 'care', body: {} })).status, 403);
   assert.equal((await who.doctor.agent.post('/api/import/dry-run').send({})).status, 403);
   assert.equal((await who.admin.agent.post('/api/import/dry-run').send({})).status, 200);
+});
+
+// ---------------------------------------------------------------- chunk 32c: generated matrix, CSRF, forgery
+const PARAMS = { id: '11111111-1111-4111-8111-111111111111', nid: '11111111-1111-4111-8111-111111111111', rowId: '11111111-1111-4111-8111-111111111111',
+  setId: 'care.t', owner: 'care.t', ruleId: 'r9', system: 'loinc', code: '8310-5', fieldId: 'f', key: 'k', n: '1' };
+const urlOf = (path) => '/api' + path.replace(/:(\w+)/g, (_, k) => PARAMS[k]);
+const splitRoute = (k) => { const i = k.indexOf(' '); return [k.slice(0, i).toLowerCase(), k.slice(i + 1)]; };
+
+test('MATRIX: every role against every route: allowed means not 401/403, otherwise 403 forbidden; logged out is always 401', async () => {
+  const bad = [];
+  for (const [route, action] of Object.entries(P.ROUTE_ACTIONS)) {
+    const [m, path] = splitRoute(route);
+    for (const role of P.ROLES) {
+      const r = await who[role].agent[m](urlOf(path)).send({});
+      const ok = P.ACTIONS[action].includes(role);
+      if (ok ? (r.status === 401 || r.status === 403) : !(r.status === 403 && r.body.error && r.body.error.code === 'forbidden')) bad.push(`${role} ${route} (${action}) -> ${r.status} ${r.body.error ? r.body.error.code : ''}`);
+    }
+    const out = await request(app)[m](urlOf(path)).send({});
+    if (out.status !== 401) bad.push(`logged out ${route} -> ${out.status}`);
+  }
+  assert.deepEqual(bad, [], 'unprotected or wrongly protected routes');
+});
+
+test('CSRF: GET /csrf needs a session; a state-changing request without, with a wrong, or with another session\'s token is 403 csrf on every route', async () => {
+  assert.equal((await request(app).get('/api/csrf')).status, 401);
+  const fresh = request.agent(app);
+  await fresh.post('/api/login').send({ username: 'u_admin', password: PW });
+  const tok = (await fresh.get('/api/csrf')).body.token;
+  assert.match(tok, /^[0-9a-f]{64}$/);
+  const other = request.agent(app); await other.post('/api/login').send({ username: 'u_admin', password: PW });
+  const otherTok = (await other.get('/api/csrf')).body.token;
+  assert.notEqual(tok, otherTok, 'the token belongs to one session');
+  assert.equal((await fresh.get('/api/cases')).status, 200, 'GET needs no token');
+  for (const route of Object.keys(P.ROUTE_ACTIONS).filter((k) => !k.startsWith('GET '))) {
+    const [m, path] = splitRoute(route);
+    for (const h of [null, 'wrong', otherTok]) {
+      const q = fresh[m](urlOf(path)); if (h) q.set('x-csrf-token', h);
+      const r = await q.send({});
+      assert.equal(r.status, 403, route + ' with ' + (h || 'no header')); assert.equal(r.body.error.code, 'csrf', route);
+    }
+  }
+  const ok = await fresh.post('/api/cases').set('x-csrf-token', tok).send({});
+  assert.equal(ok.status, 201);
+});
+
+test('FORGERY: entered_by, created_by, verified_by, signed_by and added_by come from the session; the same key in a body is rejected', async () => {
+  const d = who.doctor, n = who.nurse, other = who.admin.id;
+  const c = (await d.agent.post('/api/cases').send({})).body;
+  const note = (await d.agent.post(`/api/cases/${c.id}/notes`).send({ type: 'narrative', text: 'x' })).body;
+  const cases = [
+    ['POST', '/api/cases', {}, d, 'SELECT created_by v FROM cases ORDER BY created_at DESC LIMIT 1'],
+    ['POST', `/api/cases/${c.id}/rows`, { setId: 'care.t', groupId: 'g', row: { a: 1 } }, n, `SELECT entered_by v FROM case_rows WHERE case_id='${c.id}' ORDER BY entered_at DESC LIMIT 1`],
+    ['POST', `/api/cases/${c.id}/notes`, { type: 'narrative' }, d, `SELECT created_by v FROM case_notes WHERE case_id='${c.id}' ORDER BY created_at DESC LIMIT 1`],
+    ['POST', `/api/cases/${c.id}/notes/${note.id}/sign`, { expectedVersion: 1 }, d, `SELECT signed_by v FROM case_notes WHERE id='${note.id}'`],
+    ['PUT', '/api/rules/care.t/rf', { body: { field: 'care.t/x', op: '>', threshold: 1 }, expectedVersion: 0 }, d, "SELECT created_by v FROM cds_rules WHERE rule_id='rf'"],
+    ['POST', '/api/rules/care.t/rf/approve', { expectedVersion: 1 }, d, "SELECT verified_by_user v FROM cds_rules WHERE rule_id='rf'"],
+    ['PUT', '/api/protocols/care.t', { body: { bands: [] }, expectedVersion: 0 }, d, null],
+    ['POST', '/api/protocols/care.t/approve', { expectedVersion: 1 }, d, "SELECT verified_by_user v FROM protocols WHERE set_id='care.t'"],
+    ['POST', '/api/codes', { system: 'loinc', code: '8867-4', display: 'Heart rate' }, d, "SELECT added_by v FROM verified_codes WHERE code='8867-4'"],
+    ['POST', '/api/element-sets', { setId: 'care.forge', kind: 'care', body: {} }, d, "SELECT created_by v FROM element_sets WHERE set_id='care.forge'"],
+  ];
+  for (const [m, url, body, who_, sql] of cases) {
+    for (const key of ['enteredBy', 'entered_by', 'createdBy', 'created_by', 'verifiedBy', 'verified_by', 'signedBy', 'addedBy', 'checkedBy']) {
+      const r = await who_.agent[m.toLowerCase()](url).send({ ...body, [key]: other });
+      assert.equal(r.status, 400, `${m} ${url} accepted a body key ${key}`);
+    }
+    const r = await who_.agent[m.toLowerCase()](url).send(body);
+    assert.ok(r.status >= 200 && r.status < 300, `${m} ${url} -> ${r.status} ${JSON.stringify(r.body.error || '')}`);
+    if (sql) assert.equal((await db.query(sql)).rows[0].v, who_.id, `${m} ${url}: author is the session user`);
+  }
 });

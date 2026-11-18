@@ -117,7 +117,7 @@ function createApp({ db, getActor, authOptions }) {
   const auth = createAuth(Object.assign({ db }, authOptions));       // chunk 32a/32b: login, logout, session; every data route requires a session and a permitted role
   app.locals.auth = auth;
   app.use('/api', auth.router);
-  mountApi(app, { db, getActor, requireAuth: auth.requireAuth });
+  mountApi(app, { db, getActor, requireAuth: auth.requireAuth, requireCsrf: auth.requireCsrf });
 
   const sendStatic = (name) => (req, res) => res.sendFile(name, { root: __dirname, dotfiles: 'deny' }, (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: { code: 'not_found', message: 'Not found' } });
