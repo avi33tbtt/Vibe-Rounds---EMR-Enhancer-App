@@ -381,6 +381,18 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   r.use(getActor
     ? (req, res, next) => { Promise.resolve(getActor(req)).then((a) => { req.actor = a; next(); }, next); }
     : (req, res, next) => requireAuth(req, res, (e) => { if (e) return next(e); req.actor = { id: req.user.id, name: req.user.name, role: req.user.role }; requireCsrf(req, res, next); }));
+  // Chunk 32e3: a user whose password is a temporary one (users.must_change_password) can call nothing but the routes below, so the rule holds even
+  // when the screen is bypassed. The flag is read from the database on EVERY request (never cached in the session): an admin reset blocks an already
+  // signed-in user on the very next request, and a completed change lifts the block at once on the same session. GET /session, GET /csrf and
+  // POST /logout live in auth.js, which is mounted before this router, so they never reach this check. Anything not listed is refused (deny by default).
+  const PASSWORD_CHANGE_ROUTES = new Set(['GET /me', 'POST /password']);
+  r.use((req, res, next) => {
+    if (PASSWORD_CHANGE_ROUTES.has(req.method + ' ' + req.path)) return next();
+    db.query('SELECT must_change_password FROM users WHERE id=$1', [req.actor.id]).then((q) => {
+      const u = q.rows[0];
+      next(u && u.must_change_password ? new ApiError(403, 'password_change_required', 'Change your temporary password before continuing.') : undefined);
+    }, next);
+  });
   r.use(auditContext);                                // who/role/ip for audit(); every write below runs inside it
   const setKindOf = async (setId) => ((await db.query('SELECT kind FROM element_sets_latest WHERE set_id=$1', [setId])).rows[0] || {}).kind || null;
 

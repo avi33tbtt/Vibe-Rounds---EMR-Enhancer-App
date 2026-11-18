@@ -8,7 +8,7 @@ Base path `/api`. JSON in, JSON out. Synthetic data only; not for clinical use.
 
 **First administrator:** `npm run create-admin` (or `node create-admin.js`) asks for username, name and a password typed twice (12+ characters). There is no default password. It refuses when an active admin with a password already exists unless `--allow-more` is passed.
 
-**Errors:** `{ "error": { "code": "...", "message": "..." } }`. Codes: `validation` 400, `bad_json` 400, `not_found` 404, `conflict` 409, `signed` 409, `entered_in_error` 422, `too_many_rows` 422, `constraint` 422, `read_only` 403, `method_not_allowed` 405, `too_large` 413, `unauthorized` 401, `auth_not_configured` 503.
+**Errors:** `{ "error": { "code": "...", "message": "..." } }`. Codes: `validation` 400, `bad_json` 400, `not_found` 404, `conflict` 409, `signed` 409, `entered_in_error` 422, `too_many_rows` 422, `constraint` 422, `read_only` 403, `method_not_allowed` 405, `too_large` 413, `unauthorized` 401, `password_change_required` 403, `auth_not_configured` 503.
 
 **Concurrency:** every versioned write sends `expectedVersion`. A mismatch returns `409` with `{ "error": {...}, "current": <what the server holds> }`. Nothing is last-write-wins. `expectedVersion: 0` means "create, must not exist yet".
 
@@ -116,13 +116,18 @@ Mounted before the data routes. The data routes still use the development user u
 |---|---|---|
 | `POST /login` | `{username, password}` (strict) | 200 `{id, name, role, mustChangePassword}` and an `emr_sid` cookie. Wrong user or password: 401 `invalid_credentials` (same text for both). Locked account: 429 `account_locked` with `Retry-After`. Too many failures from one address: 429 `too_many_attempts`. |
 | `POST /logout` | none | 204; deletes the session on the server and clears the cookie (also 204 with no session). |
-| `GET /session` | none | 200 `{id, name, role}` for the logged-in user; 401 `unauthorized` or `session_expired` otherwise. |
+| `GET /session` | none | 200 `{id, name, role, mustChangePassword, allowed}` for the logged-in user (`mustChangePassword` is read from the database on every call); 401 `unauthorized` or `session_expired` otherwise. |
 
 - **Cookie:** `emr_sid`, random 256-bit token, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` when `NODE_ENV=production`. Only the SHA-256 of the token is stored (`sessions.id`).
 - **Timeouts:** idle 30 min (`SESSION_IDLE_MINUTES`, slides forward on use, written at most every 30 s) and absolute 12 h (`SESSION_ABSOLUTE_HOURS`, never extended). Both use the database clock. An ended session is deleted and the cookie cleared.
 - **Lockout:** 5 wrong passwords lock that account for 15 minutes; no password check happens while locked and the count does not grow. A success resets the count. A limiter of 20 failures per address per 10 minutes (in memory, per server process) also covers usernames that do not exist.
 - **Passwords:** scrypt (N=32768, r=8, p=1) with a random salt, stored as `scrypt$N$r$p$salt$hash` so the cost can be raised later. Minimum 12 characters (`passwordProblem`, used when users are created in chunks 32c and 32e).
 - `requireAuth` (in `auth.js`) sets `req.user = {id, name, role, sessionId}`. Deactivating a user now also deletes their sessions at once (chunk 32e1); `requireAuth` still refuses an inactive user as a second guard.
+
+## Temporary password gate (chunk 32e3)
+A user whose password is a temporary one (`users.must_change_password`, set when an admin creates the account or resets the password) can call **nothing** under `/api` except `GET /me`, `POST /password`, and the three login routes in `auth.js` (`GET /session`, `GET /csrf`, `POST /logout`). Every other request, including unknown paths, is refused with `403 password_change_required` and the sentence `Change your temporary password before continuing.` The check runs after the session user is known and before the role check, so a screen that is bypassed or never loaded changes nothing.
+- The flag is read from the database on **every** request (never cached in the session). An admin reset also ends the user's old sessions (`401` on the next request); a user who signs in with the new temporary password is blocked until `POST /password` succeeds, and the same session works at once after it. Setting the flag by any other means blocks an already signed-in session on its very next request.
+- A failed change (`422 wrong_password`, `400 validation`) leaves the block in place. `GET /me` and `GET /session` report `mustChangePassword` so the screen can show the change form (chunk 32e2).
 
 ## Routes and permissions (chunk 32b)
 One table, `permissions.js`: action -> roles. Each route maps to exactly one action in `ROUTE_ACTIONS`, and the server refuses to start if a route has none. Paths are under `/api`. `POST /login`, `POST /logout` and `GET /session` are the login itself and `GET /health` is public.

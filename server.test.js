@@ -91,20 +91,20 @@ test('static: app files served, server files and dotfiles are not', async () => 
   }
 });
 
-test('unknown API route returns the standard error shape', async () => {
-  // The API resolves an actor (a users-table lookup) on every /api request, and the schema is only migrated
-  // in a later test, so this test supplies a stub actor and stays independent of the database schema.
-  const stubApp = createApp({ db, getActor: async () => ({ id: '00000000-0000-0000-0000-000000000000', role: 'admin' }) });
-  const r = await request(stubApp).get('/api/nope');
-  assert.equal(r.status, 404);
-  assert.equal(r.body.error.code, 'not_found');
-});
-
 // ---------------- schema v1 (001_core.sql) ----------------
 const rejects = (p, re) => assert.rejects(p, re);
 test('numbered migrations apply once to a fresh database, in order', async () => {
   assert.deepEqual(await migrate(db, __dirname), fs.readdirSync(__dirname).filter((f) => /^\d{3}_[\w-]+\.sql$/.test(f)).sort());   // 001_core.sql, 002_auth.sql, ...
   assert.deepEqual(await migrate(db, __dirname), []);
+});
+
+test('unknown API route returns the standard error shape', async () => {
+  // Chunk 32e3: every /api request now reads users.must_change_password, so this test runs after the schema is migrated (above).
+  // The stub actor is not a row in users; a missing user passes that check and the unknown path then answers 404.
+  const stubApp = createApp({ db, getActor: async () => ({ id: '00000000-0000-0000-0000-000000000000', role: 'admin' }) });
+  const r = await request(stubApp).get('/api/nope');
+  assert.equal(r.status, 404);
+  assert.equal(r.body.error.code, 'not_found');
 });
 
 test('schema: concurrent row appends both succeed', async () => {

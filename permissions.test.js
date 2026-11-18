@@ -257,3 +257,90 @@ test('32d2: a typed verifier in a protocol body is not stored; approval is stamp
   assert.equal((await d.post('/api/protocols/disease.t/approve').send({ expectedVersion: put.body.version })).status, 200);
   const g2 = (await d.get('/api/protocols')).body['disease.t']; assert.equal(g2.verifiedBy, who.doctor.id); assert.equal(g2.verifiedByName, 'User doctor');
 });
+
+// ---------- chunk 32e3: a temporary password blocks every route except the password change ----------
+const TEMP_PW = 'a brand new passphrase';
+const PW_BLOCK = 'Change your temporary password before continuing.';
+let tempN = 0;
+async function tempUser(role = 'admin', mustChange = true) {                       // a real user and a real session, like the other tests here
+  const username = `tmp_${role}_${++tempN}`;
+  const id = (await db.query('INSERT INTO users (username,name,role,password_hash,must_change_password) VALUES ($1,$2,$3,$4,$5) RETURNING id', [username, 'Temp ' + role, role, await hashPassword(PW), mustChange])).rows[0].id;
+  const agent = request.agent(app);
+  const li = await agent.post('/api/login').send({ username, password: PW }); assert.equal(li.status, 200); assert.equal(li.body.mustChangePassword, mustChange);
+  agent.set('x-csrf-token', (await agent.get('/api/csrf')).body.token);
+  return { id, username, agent };
+}
+const blocked = (r, what) => { assert.equal(r.status, 403, what); assert.equal(r.body.error.code, 'password_change_required', what); assert.equal(r.body.error.message, PW_BLOCK, what); };
+
+test('32e3: a user with a temporary password gets 403 password_change_required on cases and users, but 200 on /me and 204 on POST /password', async () => {
+  const t = await tempUser('admin');
+  blocked(await t.agent.get('/api/cases'), 'GET /cases');
+  blocked(await t.agent.post('/api/cases').send({}), 'POST /cases');
+  blocked(await t.agent.get('/api/users'), 'GET /users');
+  const me = await t.agent.get('/api/me'); assert.equal(me.status, 200); assert.equal(me.body.mustChangePassword, true);
+  const se = await t.agent.get('/api/session'); assert.equal(se.status, 200); assert.equal(se.body.mustChangePassword, true);
+  assert.equal((await t.agent.get('/api/csrf')).status, 200);
+  assert.equal((await t.agent.post('/api/password').send({ currentPassword: PW, newPassword: TEMP_PW })).status, 204);
+});
+
+test('32e3: after the change the same session works at once and /me reports mustChangePassword false', async () => {
+  const t = await tempUser('doctor');
+  blocked(await t.agent.get('/api/cases'), 'before the change');
+  assert.equal((await t.agent.post('/api/password').send({ currentPassword: PW, newPassword: TEMP_PW })).status, 204);
+  assert.equal((await t.agent.get('/api/cases')).status, 200, 'same session, no new login');
+  assert.equal((await t.agent.get('/api/me')).body.mustChangePassword, false);
+  assert.equal((await t.agent.get('/api/session')).body.mustChangePassword, false);
+});
+
+test('32e3: a failed change (wrong current password, too short) does not lift the block', async () => {
+  const t = await tempUser('nurse');
+  assert.equal((await t.agent.post('/api/password').send({ currentPassword: 'wrong wrong wrong', newPassword: TEMP_PW })).status, 422);
+  assert.equal((await t.agent.post('/api/password').send({ currentPassword: PW, newPassword: 'short' })).status, 400);
+  blocked(await t.agent.get('/api/cases'), 'still blocked');
+  assert.equal((await db.query('SELECT must_change_password FROM users WHERE id=$1', [t.id])).rows[0].must_change_password, true);
+});
+
+test('32e3: every route in the table except GET /me and POST /password is refused with password_change_required, for every role, before the role check', async () => {
+  const keep = new Set(['GET /me', 'POST /password']), bad = [];
+  for (const role of P.ROLES) {
+    const t = await tempUser(role);
+    for (const route of Object.keys(P.ROUTE_ACTIONS)) {
+      if (keep.has(route)) continue;
+      const [m, path] = splitRoute(route), r = await t.agent[m](urlOf(path)).send({});
+      if (r.status !== 403 || !r.body.error || r.body.error.code !== 'password_change_required') bad.push(`${role} ${route} -> ${r.status} ${r.body.error ? r.body.error.code : ''}`);
+    }
+    blocked(await t.agent.get('/api/not-a-route'), 'unknown routes are refused too (deny by default)');
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('32e3: the flag is read from the database on every request: setting it blocks an already signed-in session on the very next request, clearing it lifts the block', async () => {
+  const t = await tempUser('doctor', false);
+  assert.equal((await t.agent.get('/api/cases')).status, 200);
+  await db.query('UPDATE users SET must_change_password=true WHERE id=$1', [t.id]);
+  blocked(await t.agent.get('/api/cases'), 'next request after the flag was set');
+  await db.query('UPDATE users SET must_change_password=false WHERE id=$1', [t.id]);
+  assert.equal((await t.agent.get('/api/cases')).status, 200, 'and lifted at once');
+});
+
+test('32e3: an admin reset stops a signed-in user on the very next request, and the new temporary password is blocked until it is changed', async () => {
+  const t = await tempUser('nurse', false);
+  assert.equal((await t.agent.get('/api/cases')).status, 200);
+  const rs = await who.admin.agent.post(`/api/users/${t.id}/reset-password`).send({ password: 'reset by the admin 1' });
+  assert.equal(rs.status, 200);
+  assert.equal((await t.agent.get('/api/cases')).status, 401, 'the reset also ends the old sessions: not served either way');
+  const again = request.agent(app), li = await again.post('/api/login').send({ username: t.username, password: 'reset by the admin 1' });
+  assert.equal(li.status, 200); assert.equal(li.body.mustChangePassword, true);
+  again.set('x-csrf-token', (await again.get('/api/csrf')).body.token);
+  blocked(await again.get('/api/cases'), 'new session with the temporary password');
+  assert.equal((await again.post('/api/password').send({ currentPassword: 'reset by the admin 1', newPassword: TEMP_PW })).status, 204);
+  assert.equal((await again.get('/api/cases')).status, 200);
+});
+
+test('32e3: logout still works while the password change is pending, and the block is not shown to users without the flag', async () => {
+  const t = await tempUser('viewer');
+  assert.equal((await t.agent.post('/api/logout')).status, 204);
+  assert.equal((await t.agent.get('/api/me')).status, 401);
+  const ok = await tempUser('viewer', false);
+  assert.equal((await ok.agent.get('/api/cases')).status, 200);
+});
