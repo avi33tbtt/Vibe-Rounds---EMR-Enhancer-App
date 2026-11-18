@@ -101,6 +101,13 @@ body.shell #oldnav{display:none}
 #addPanel.open{display:block}#addPanel #sb{display:block;position:static;max-height:none;width:auto;border:0;padding:0;background:transparent}
 #layout #cm{min-width:0}
 @media(max-width:700px){#addPanel{inset:0;width:100%;height:100dvh;max-height:100dvh;border-radius:0;padding:16px}}
+/* chunk 33c2: History drawer (read-only) */
+#hist{display:none;position:fixed;z-index:55;top:calc(var(--patientbar-height,0px) + 8px);right:12px;width:min(520px,calc(100vw - 24px));max-height:calc(100vh - var(--patientbar-height,0px) - 24px);overflow:auto;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px;box-shadow:0 12px 34px #0003}
+#hist.open{display:block}#hist .sh{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+#hist .hi{border:1px solid var(--bd);border-radius:8px;padding:8px;margin:8px 0;background:var(--cd)}#hist .hi h4{margin:0 0 6px;font-size:14px}
+#hist .hv{border-left:3px solid var(--bd);padding:2px 0 2px 8px;margin:6px 0;overflow-wrap:anywhere}#hist .hv.cur{border-left-color:var(--ac)}
+#hist .hv .hm{font-size:12px;color:var(--mu)}#hist .hv b.chg{background:#f5c54233;border-radius:3px;padding:0 2px}#hist .hv.err{border-left-color:var(--r)}
+@media(max-width:700px){#hist{inset:0;width:100%;height:100dvh;max-height:100dvh;border-radius:0;padding:16px}}
 
 /* Phase 4B / 25G: final shell polish, accessibility and responsive density */
 :focus-visible{outline:2px solid var(--ac);outline-offset:2px}
@@ -185,7 +192,9 @@ body.compact label{margin:7px 0 2px}
 <div id="chartbar" aria-label="Chart now shortcuts">
   <b class="chartbar-label">Chart now</b><div id="chartbarItems"></div>
   <button class="b sm" type="button" data-chart-add="1">+ Add context</button>
+  <button class="b sm" type="button" id="histBtn" hidden title="See earlier versions of readings and values on this case (read-only)">History</button>
 </div>
+<div id="hist" role="dialog" aria-modal="false" aria-labelledby="histTitle"><div class="sh"><b id="histTitle">Case history</b><span style="flex:1"></span><label id="histErrWrap" class="mu" hidden style="display:none;align-items:center;gap:4px;margin:0"><input type="checkbox" id="histErr"> Show entered-in-error</label><button class="b sm" type="button" id="histClose">Close</button></div><div class="mu" id="histMsg" aria-live="polite"></div><div id="histBody"></div></div>
 <div id="addPanel"><div class="sh"><b>Add to chart</b><span style="flex:1"></span><button class="b sm" type="button" id="addClose">Close</button></div><aside id="sb"><b>Suggested</b><div id="chips"></div><button class="b sm" id="sugb" style="margin-top:6px" onclick="suggestSets()" disabled title="AI is available after the server AI step.">Suggest sets &amp; pathways from narrative</button><div id="sugs"></div><label for="ctxp" style="margin-top:14px">Context</label><select id="ctxp" onchange="CTX=this.value;sidebar()"></select><label for="q" style="margin-top:10px">Element sets</label><input id="q" placeholder="Search sets…"><div id="slist"></div></aside></div>
 <div id="noCase" class="cd patients-screen">
   <div class="patients-head"><div><h2>Patients</h2><div class="mu">Ward list · synthetic demo records only</div></div><button class="b" id="patientsNew" type="button">+ New patient</button></div>
@@ -1629,6 +1638,7 @@ function summaryWorkspace(){
   $('summaryDue').innerHTML=due.length?`<table class="summary-list"><tr><th>Follow-up</th><th>Date</th><th>Element set</th></tr>${due.map(x=>`<tr><td>${esc(x.label)}</td><td>${esc(x.value)}</td><td>${esc(x.set)}</td></tr>`).join('')}</table>`:'<div class="summary-empty">No follow-up date has been entered in the applied sets.</div>';
 }
 function renderChartBar(){
+  histBtnUpdate();
   const el=$('chartbarItems');if(!el||!CUR||!CASE_OPEN)return;
   const ids=pinList().filter(id=>getSet(id));
   el.innerHTML=ids.map(id=>{const s=getSet(id);return `<button class="b sm" type="button" data-chart-go="${esc(id)}">${esc(shortOf(s))}</button><button class="b sm" type="button" data-chart-quick="${esc(id)}" title="Open a one-row quick-entry form">＋</button>`}).join('');
@@ -1812,7 +1822,7 @@ $('patientsNew').addEventListener('click',createPatientFromList);
 $('patientsLink').addEventListener('click',()=>{persist();showNoCase()});
 
 function showNoCase(){
-  CASE_OPEN=false;
+  histClose();CASE_OPEN=false;histBtnUpdate();
   $('noCase').classList.add('show');
   $('chartbar').classList.remove('open');$('addPanel').classList.remove('open');
   $('patientbar').classList.remove('open');document.documentElement.style.setProperty('--patientbar-height','0px');
@@ -1822,7 +1832,7 @@ function showNoCase(){
   refreshLandingPicker();renderPatients();
 }
 function enterCase(c,tab){
-  CUR=c;cleanRows(CUR);cleanPw(CUR);patientOf(CUR);CASE_OPEN=true;
+  histClose();CUR=c;cleanRows(CUR);cleanPw(CUR);patientOf(CUR);CASE_OPEN=true;
   $('noCase').classList.remove('show');$('shellnav').style.display='flex';$('chartbar').classList.add('open');
   renderPatientBanner();renderCase();renderChartBar();showShellTab(tab||'ov');if((tab||'ov')==='nt')renderNotes();picker();
 }
@@ -2169,6 +2179,53 @@ $('usAdd').addEventListener('click',async()=>{
   const r=await usDo(()=>Store.users.create(pw?{username:un,name:nm,role,password:pw}:{username:un,name:nm,role}),'User '+un+' was added. They must change the password at first sign-in.');
   $('usAdd').disabled=false;
   if(r&&r.user){$('usNewUser').value='';$('usNewName').value='';if(r.temporaryPassword)showTmp(nm+' ('+un+')',r.temporaryPassword)}});
+/* chunk 33c2: History drawer. Server mode only, read-only (no restore button), data from GET /api/cases/:id/history (chunk 33c1). Rows and values that were ever
+   changed, newest version first, with who, when and why. The server decides who may see rows entered in error (doctor, admin); the checkbox only shows or hides them. */
+const HI={seq:0,data:null,opener:null};
+function histLabel(setId,fid){/* a field's label from the set definition, or its id */
+  const seen=new Set();let found=null;
+  (function walk(o,d){if(found||!o||typeof o!=='object'||d>8||seen.has(o))return;seen.add(o);
+    if(!Array.isArray(o)&&o.id===fid&&typeof o.label==='string'&&o.label){found=o.label;return}
+    for(const k in o){if(typeof o[k]==='object')walk(o[k],d+1)}})(getSet(setId),0);
+  return found||fid}
+function histFmt(v){let t=typeof v==='string'?v:JSON.stringify(v);if(t===undefined)t='';return t.length>500?t.slice(0,500)+'…':t}
+function histWho(name,id){return esc(name||(id?'(unknown user)':'(unknown)'))}
+function histContent(it,v,older,setId){
+  if(it.kind==='row'){
+    const f=x=>Object.keys(x||{}).filter(k=>k.slice(0,2)!=='__');
+    const keys=f(v.row);if(!keys.length)return '<span class="mu">(empty)</span>';
+    return keys.map(k=>{const ch=older&&JSON.stringify(older.row[k])!==JSON.stringify(v.row[k]);
+      const t=esc(histLabel(setId,k))+': '+esc(histFmt(v.row[k]));return ch?'<b class="chg">'+t+'</b>':t}).join(' · ')}
+  const ch=older&&JSON.stringify(older.value)!==JSON.stringify(v.value),t=esc(histFmt(v.value));return ch?'<b class="chg">'+t+'</b>':t}
+function histHtml(data,showErrors){
+  const items=[];
+  (data&&data.rows||[]).forEach(r=>{if(r.status==='entered_in_error'&&!showErrors)return;
+    const st=getSet(r.setId);items.push({kind:'row',setId:r.setId,title:((st&&st.title)||r.setId)+' · '+r.groupId,versions:r.versions,err:r.status==='entered_in_error'})});
+  (data&&data.values||[]).forEach(v=>{const i=v.key.indexOf('/'),sid=i>0?v.key.slice(0,i):'',st=sid?getSet(sid):null;
+    items.push({kind:'value',setId:sid,title:((st&&st.title)||sid||'Value')+' · '+(i>0?histLabel(sid,v.key.slice(i+1)):v.key),versions:v.versions})});
+  if(!items.length)return '<p class="mu">Nothing on this case has been changed yet. Edited readings, changed values and entries marked as errors will appear here.</p>';
+  return items.map(it=>'<div class="hi"><h4>'+esc(it.title)+(it.err?' <span class="tag">entered in error</span>':'')+'</h4>'+it.versions.map((v,n)=>{
+    const older=it.versions[n+1],isErr=it.kind==='row'&&v.status==='entered_in_error',
+      head=isErr?'Marked entered in error':v.current?'Current version':'Version '+v.version+' (replaced)',
+      meta=esc(new Date(v.writtenAt).toLocaleString())+' · '+histWho(v.writtenByName,v.writtenBy)+(v.replacedAt?' · replaced '+esc(new Date(v.replacedAt).toLocaleString())+' by '+histWho(v.replacedByName,v.replacedBy):'');
+    return '<div class="hv'+(v.current?' cur':'')+(isErr?' err':'')+'"><div><b>'+esc(head)+'</b> <span class="mu">v'+esc(v.version)+'</span></div><div class="hm">'+meta+'</div>'
+      +(v.reason?'<div class="hm">Reason: '+esc(v.reason)+'</div>':'')+'<div>'+histContent(it,v,older,it.setId)+'</div></div>'}).join('')+'</div>').join('')}
+function histRender(){const body=$('histBody');if(HI.data)body.innerHTML=histHtml(HI.data,$('histErr').checked)}
+function histBtnUpdate(){const b=$('histBtn');if(b)b.hidden=!(SRV()&&CASE_OPEN&&Store.can('case.history'))}
+function histClose(){const h=$('hist');if(!h||!h.classList.contains('open'))return;h.classList.remove('open');HI.seq++;HI.data=null;if(HI.opener&&document.contains(HI.opener))HI.opener.focus();HI.opener=null}
+async function histOpen(){
+  if(!SRV()||!CASE_OPEN||!CUR)return toast('History is shown for cases on the server. Demo mode keeps no history.');
+  const my=++HI.seq,h=$('hist'),msg=$('histMsg'),canErr=Store.can('case.read_errors');
+  HI.opener=document.activeElement;HI.data=null;$('histBody').innerHTML='';$('histErrWrap').style.display=canErr?'flex':'none';$('histErrWrap').hidden=!canErr;if(!canErr)$('histErr').checked=false;
+  h.classList.add('open');msg.textContent='Loading…';$('histClose').focus();
+  let d;try{d=await Store.api('GET','/cases/'+encodeURIComponent(CUR.id)+'/history')}
+  catch(e){if(my===HI.seq)msg.textContent=e.status===404?'This case is not on the server yet, so it has no history. Wait for it to save and try again.':e.status===403?'Your role cannot see case history.':'Could not load the history: '+e.message;return}
+  if(my!==HI.seq)return;                       /* closed, or a newer open replaced this one */
+  HI.data=d;msg.textContent='Newest first. Read-only: nothing here can be restored or changed.';histRender()}
+$('histBtn').addEventListener('click',histOpen);
+$('histClose').addEventListener('click',histClose);
+$('histErr').addEventListener('change',histRender);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')histClose()});
 /* chunk 33d: admin Audit screen (server mode, admin only; the server refuses everyone else). Read-only: filters, paging by "older entries", and a CSV export
    that the server records in the log itself. The CSV has no record contents. */
 const AU={next:null,seq:0,seen:false};
