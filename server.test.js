@@ -102,8 +102,8 @@ test('unknown API route returns the standard error shape', async () => {
 
 // ---------------- schema v1 (001_core.sql) ----------------
 const rejects = (p, re) => assert.rejects(p, re);
-test('001_core.sql applies once to a fresh database', async () => {
-  assert.deepEqual(await migrate(db, __dirname), ['001_core.sql']);
+test('numbered migrations apply once to a fresh database, in order', async () => {
+  assert.deepEqual(await migrate(db, __dirname), fs.readdirSync(__dirname).filter((f) => /^\d{3}_[\w-]+\.sql$/.test(f)).sort());   // 001_core.sql, 002_auth.sql, ...
   assert.deepEqual(await migrate(db, __dirname), []);
 });
 

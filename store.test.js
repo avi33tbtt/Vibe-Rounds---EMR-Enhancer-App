@@ -277,3 +277,96 @@ test('usage: a bump sends the diagnosis keys the server accepts; reset only clea
   t.Store.resetUsage(); await t.Store.flush();
   assert.equal(t.writes().pop().method, 'DELETE'); assert.equal(Object.keys(t.Store.usage()).length, 0);
 });
+
+// ---------------------------------------------------------------- chunk 31c: conflict review and resolve
+const srv = (id, over = {}) => Object.assign({ id, patient: { name: 'Demo', ageSex: '', bed: '', mrn: '' }, narrative: 'base', applied: [], pathways: [], alertLog: [], pinned: null, values: {}, valueVersions: {}, notes: [], version: 5, updatedAt: '2026-01-01T00:00:00Z' }, over);
+const srvRow = (rid, row, v = 1) => Object.assign({}, row, { __id: rid, __v: v, __by: 'u2', __at: '2026-01-01T00:00:00Z', __time: null });
+// Creates the case on the "server" (so the snapshot is the base), then makes `route` answer 409 and applies `mineEdit` so a conflict is raised.
+async function conflicted(id, initial, route, mineEdit, theirsCase, extra) {
+  const t = await readyServerStore(); t.Store.setCases([mkCase(id, initial)]); await t.Store.flush();
+  t.custom = async (m, p, b) => {
+    if (m === 'GET' && p === '/cases/' + id) return [200, theirsCase];
+    if (route(m, p)) return [409, { error: { code: 'conflict', message: 'changed by someone else' }, current: { id, version: 5 } }];
+    return extra && extra(m, p, b);
+  };
+  edit(t.Store, id, mineEdit); await until(() => t.Store.status().state === 'conflict', 'conflict');
+  return t;
+}
+const isCasePatch = (m, p) => m === 'PATCH' && caseRoute.test(p), isRowPatch = (m, p) => m === 'PATCH' && /\/rows\//.test(p);
+
+test('31c: only true conflicts need a choice; my other edits are kept and re-sent after the person resolves', async () => {
+  const id = crypto.randomUUID(), rid = crypto.randomUUID();
+  const t = await conflicted(id, { narrative: 'base', values: { 'care.vitals/@vit': [{ __id: rid, hr: 70 }] } }, isCasePatch,
+    (c) => { c.narrative = 'mine'; c.values['care.vitals/@vit'][0].hr = 75; },
+    srv(id, { narrative: 'theirs', values: { 'care.vitals/@vit': [srvRow(rid, { hr: 70 })] } }));
+  assert.equal(t.Store.conflictInfo(id).isCase, true);
+  const rv = await t.Store.conflictReview(id);
+  assert.deepEqual(Array.from(rv.items, (i) => i.key + ':' + i.state).sort(), ['f:narrative:conflict', 'r:' + rid + ':mine']);
+  const before = t.writes().length;
+  assert.throws(() => t.Store.resolveConflict(id, {}), /Choose mine or theirs/);
+  t.Store.resolveConflict(id, { 'f:narrative': 'theirs' }); await t.Store.flush();
+  const w = t.writes().slice(before);
+  assert.equal(w.length, 1, 'only my row edit is sent'); assert.equal(w[0].method, 'PATCH'); assert.match(w[0].path, /\/rows\//); assert.equal(w[0].body.expectedVersion, 1); assert.equal(w[0].body.row.hr, 75);
+  assert.equal(t.Store.getCases()[0].narrative, 'theirs'); assert.equal(t.Store.status().state, 'saved');
+});
+
+test('31c: choosing mine sends only that item with the server\'s current version, and the queue works again', async () => {
+  const id = crypto.randomUUID();
+  const t = await conflicted(id, { narrative: 'base' }, isCasePatch, (c) => { c.narrative = 'mine'; }, srv(id, { narrative: 'theirs' }));
+  await t.Store.conflictReview(id); const before = t.writes().length;
+  t.custom = undefined; t.Store.resolveConflict(id, { 'f:narrative': 'mine' }); await t.Store.flush();
+  const w = t.writes().slice(before); assert.equal(w.length, 1); assert.equal(w[0].body.expectedVersion, 5); assert.deepEqual(Object.keys(w[0].body).sort(), ['expectedVersion', 'narrative']); assert.equal(w[0].body.narrative, 'mine');
+  edit(t.Store, id, (c) => { c.narrative = 'later'; }); await t.Store.flush();
+  assert.equal(t.writes().pop().body.narrative, 'later'); assert.equal(t.Store.status().state, 'saved');
+});
+
+test('31c: the same reading edited by both: mine re-sends against their version, theirs sends nothing', async () => {
+  for (const pick of ['mine', 'theirs']) {
+    const id = crypto.randomUUID(), rid = crypto.randomUUID();
+    const t = await conflicted(id, { values: { 'care.vitals/@vit': [{ __id: rid, hr: 70 }] } }, isRowPatch, (c) => { c.values['care.vitals/@vit'][0].hr = 75; },
+      srv(id, { values: { 'care.vitals/@vit': [srvRow(rid, { hr: 80 }, 2)] } }));
+    const rv = await t.Store.conflictReview(id); assert.deepEqual(Array.from(rv.items, (i) => i.key + ':' + i.state), ['r:' + rid + ':conflict']);
+    const before = t.writes().length; t.custom = undefined; t.Store.resolveConflict(id, { ['r:' + rid]: pick }); await t.Store.flush();
+    const w = t.writes().slice(before);
+    if (pick === 'mine') { assert.equal(w.length, 1); assert.equal(w[0].body.expectedVersion, 2); assert.equal(w[0].body.row.hr, 75); } else { assert.equal(w.length, 0); assert.equal(t.Store.getCases()[0].values['care.vitals/@vit'][0].hr, 80); }
+  }
+});
+
+test('31c: a reading someone marked entered in error is not brought back; my edit to it is dropped and nothing is sent', async () => {
+  const id = crypto.randomUUID(), rid = crypto.randomUUID();
+  const t = await conflicted(id, { values: { 'care.vitals/@vit': [{ __id: rid, hr: 70 }] } }, isRowPatch, (c) => { c.values['care.vitals/@vit'][0].hr = 75; }, srv(id));
+  const rv = await t.Store.conflictReview(id); assert.equal(rv.items.length, 1); assert.equal(rv.items[0].state, 'theirs'); assert.match(rv.items[0].why, /entered in error/);
+  const before = t.writes().length; t.custom = undefined; t.Store.resolveConflict(id, {}); await t.Store.flush();
+  assert.equal(t.writes().length, before); assert.equal((t.Store.getCases()[0].values['care.vitals/@vit'] || []).length, 0);
+});
+
+test('31c: a single value conflict uses the value version from the server', async () => {
+  const id = crypto.randomUUID(), key = 'care.vitals/__ref';
+  const t = await readyServerStore(); t.Store.setCases([mkCase(id)]); await t.Store.flush();
+  t.custom = async (m, p) => (m === 'PUT' ? [200, { version: 1 }] : undefined);
+  edit(t.Store, id, (c) => { c.values[key] = { hr: { low: 50 } }; }); await t.Store.flush();
+  t.custom = async (m, p) => (m === 'GET' && p === '/cases/' + id ? [200, srv(id, { narrative: 'v1', values: { [key]: { hr: { low: 60 } } }, valueVersions: { [key]: 4 } })] : m === 'PUT' && t.hold ? [409, { error: { code: 'conflict', message: 'x' }, current: {} }] : m === 'PUT' ? [200, { version: 5 }] : undefined);
+  t.hold = true; edit(t.Store, id, (c) => { c.values[key] = { hr: { low: 55 } }; }); await until(() => t.Store.status().state === 'conflict', 'conflict');
+  const rv = await t.Store.conflictReview(id); assert.deepEqual(Array.from(rv.items, (i) => i.key + ':' + i.state), ['v:' + key + ':conflict']);
+  t.hold = false; const before = t.writes().length; t.Store.resolveConflict(id, { ['v:' + key]: 'mine' }); await t.Store.flush();
+  const w = t.writes().slice(before); assert.equal(w.length, 1); assert.equal(w[0].method, 'PUT'); assert.equal(w[0].body.expectedVersion, 4); assert.deepEqual(w[0].body.value, { hr: { low: 55 } });
+});
+
+test('31c: a draft note edited by me while someone signed it keeps their signed version', async () => {
+  const id = crypto.randomUUID(), nid = crypto.randomUUID();
+  const t = await readyServerStore(); t.custom = async (m, p) => (m === 'POST' && /\/notes$/.test(p) ? [201, { version: 1 }] : undefined);
+  t.Store.setCases([mkCase(id, { notes: [{ id: nid, type: 'narrative', text: 'draft', status: 'draft' }] })]); await t.Store.flush();
+  t.custom = async (m, p) => (m === 'GET' && p === '/cases/' + id ? [200, srv(id, { notes: [{ id: nid, type: 'narrative', text: 'signed text', status: 'signed', version: 3, signedAt: '2026-01-02T00:00:00Z' }] })] : m === 'PATCH' && /\/notes\//.test(p) ? [409, { error: { code: 'signed', message: 'read-only' } }] : undefined);
+  edit(t.Store, id, (c) => { c.notes[0].text = 'my edit'; }); await until(() => t.Store.status().state === 'conflict', 'conflict');
+  const rv = await t.Store.conflictReview(id); assert.equal(rv.items.length, 1); assert.equal(rv.items[0].state, 'theirs'); assert.match(rv.items[0].why, /signed/);
+  const before = t.writes().length; t.Store.resolveConflict(id, {}); await t.Store.flush();
+  assert.equal(t.writes().length, before); assert.equal(t.Store.getCases()[0].notes[0].text, 'signed text'); assert.equal(t.Store.getCases()[0].notes[0].status, 'signed');
+});
+
+test('31c: reference-data conflicts are not patient conflicts and cannot be reviewed as one', async () => {
+  const t = await readyServerStore();
+  t.custom = async (m, p) => (m === 'POST' && p === '/element-sets' ? [409, { error: { code: 'conflict', message: 'newer version' }, current: {} }] : undefined);
+  t.Store.saveSet({ setId: 'x.y', kind: 'custom', version: 1, title: 'T' }); await until(() => t.Store.status().state === 'conflict', 'conflict');
+  assert.equal(t.Store.conflictInfo('x.y').isCase, false); await assert.rejects(t.Store.conflictReview('x.y'), /no patient conflict/);
+  assert.equal(t.Store.conflictInfo('nope'), null);
+});

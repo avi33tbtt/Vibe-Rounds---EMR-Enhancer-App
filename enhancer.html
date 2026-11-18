@@ -134,9 +134,11 @@ body.compact label{margin:7px 0 2px}
   .summary-list{font-size:12px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+#cfm{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}#cfm[hidden]{display:none}.cfmbox{background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:10px;max-width:760px;width:100%;padding:16px 18px}.cfmbox h2{margin:0 0 6px;font-size:17px}.cfmit{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:8px 0}.cfmit b{display:block;margin-bottom:4px}.cfmit label{display:flex;gap:8px;align-items:flex-start;margin:4px 0;font-weight:400;cursor:pointer}.cfmit pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;font-size:13px}.cfmbox ul{margin:4px 0 8px 18px;padding:0}.cfmbox .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.cfmbox .acts .b{margin:0}.cfmbox button[disabled]{opacity:.5;cursor:not-allowed}
 #boot{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}#boot[hidden]{display:none}.bootbox{max-width:460px;text-align:center}.bootbox .b{margin:8px 4px 0}#saveRetry[hidden],#demoBan[hidden],#wireBan[hidden]{display:none}#saveState.bad{color:var(--r);font-weight:600}
 </style></head><body>
 <div id="boot" role="status" aria-live="polite"><div class="bootbox"><b id="bootMsg">Loading…</b><div class="mu" id="bootWhy">Not for clinical use – synthetic data only.</div><button class="b" id="bootRetry" type="button" hidden>Retry</button><button class="b sm" id="bootDemo" type="button" hidden>Use Demo mode instead</button></div></div>
+<div id="cfm" role="dialog" aria-modal="true" aria-labelledby="cfmT" hidden><div class="cfmbox" id="cfmBox" tabindex="-1"></div></div>
 <div class="ban">Not for clinical use – synthetic data only. Codes from an LLM are unverified until checked.</div>
 <div class="ban" id="demoBan" hidden>Demo mode: data stays in this browser, synthetic data only</div>
 <div class="ban" id="conflictBan" role="alert" hidden style="background:#fde2e0;color:#7a1c14"></div>
@@ -1956,7 +1958,7 @@ function showBoot(msg,why,retry){$('boot').hidden=false;$('bootMsg').textContent
 function paintSave(st){
   const el=$('saveState');if(!el)return;el.textContent=st.text;
   const ids=Object.keys(st.conflicts||{}),cb=$('conflictBan');
-  if(cb){cb.hidden=!ids.length;cb.innerHTML=ids.length?'<b>NOT SAVED:</b> '+ids.map(id=>{const c=getC().find(x=>x.id===id),nm=c&&c.patient&&c.patient.name?c.patient.name:id.slice(0,8);return esc(nm)+' was changed by someone else. <button class="b sm" type="button" data-reload="'+esc(id)+'">Reload theirs</button>'}).join(' ')+' <span>Reloading discards your unsent edits to that patient.</span>':''}
+  if(cb){cb.hidden=!ids.length;cb.innerHTML=ids.length?'<b>NOT SAVED:</b> '+ids.map(id=>{const ci=Store.conflictInfo(id);if(ci&&!ci.isCase)return 'A shared setting ('+esc(id)+') was changed by someone else. <button class="b sm" type="button" data-pagereload="1">Reload the app</button>';const c=getC().find(x=>x.id===id),nm=c&&c.patient&&c.patient.name?c.patient.name:id.slice(0,8);return esc(nm)+' was changed by someone else. <button class="b sm" type="button" data-review="'+esc(id)+'">Review differences</button> <button class="b sm" type="button" data-reload="'+esc(id)+'">Reload theirs</button>'}).join(' ')+' <span>Nothing is overwritten until you choose. Reloading theirs discards your unsent edits to that patient.</span>':''}
   const bad=/^NOT SAVED/.test(st.text);el.classList.toggle('bad',bad);$('saveRetry').hidden=!(Store.mode==='server'&&bad);
 }
 function paintMode(){
@@ -2041,7 +2043,41 @@ Store.hooks.toast=toast;
 Store.hooks.onSetVersion=(id,n,ok)=>{if(ok&&CUR&&CASE_OPEN)renderCase()};
 Store.hooks.rowTime=(sid,gid,row)=>{const set=getSet(sid);if(!set)return null;const tc=tcol(grp(set,gid));if(!tc)return null;const t=rowT(row,tc);return Number.isFinite(t)?t:null};
 Store.hooks.onCaseReloaded=(id,c)=>{if(CUR&&CUR.id===id&&CASE_OPEN)enterCase(JSON.parse(JSON.stringify(c)),'ov');else renderPatients()};
-$('conflictBan').addEventListener('click',e=>{const b=e.target.closest('[data-reload]');if(!b)return;if(!confirm('Reload the other version? Your unsent edits to this patient will be discarded.'))return;Store.reloadCase(b.dataset.reload).catch(err=>toast('Reload failed: '+err.message))});
+/* chunk 31c: conflict screen. Store compares base / mine / theirs; only true conflicts need a choice. Nothing is sent until the person applies. */
+const CFM={id:null,rv:null},CFL={patient:'Patient details',narrative:'Case narrative',applied:'Applied forms and flowsheets',pathways:'Pathways',pinned:'Quick bar',alertLog:'Acknowledged alerts'};
+function cfmTxt(v){if(v==null||v==='')return '(empty)';if(typeof v=='string')return v.length>300?v.slice(0,300)+'…':v;
+  if(Array.isArray(v))return v.length?v.map(x=>x&&typeof x=='object'?(x.setId||x.pathwayId||x.ruleId||JSON.stringify(x)):String(x)).join(', '):'(none)';
+  const t=Object.entries(v).filter(([k])=>!k.startsWith('__')).map(([k,x])=>k+': '+(x&&typeof x=='object'?JSON.stringify(x):x)).join('\n');return t.length>400?t.slice(0,400)+'…':t||'(empty)'}
+function cfmLabel(it){if(it.kind==='field')return CFL[it.ref]||it.ref;if(it.kind==='value')return 'Saved value '+it.ref;if(it.kind==='note')return 'Note';
+  const set=getSet(it.setId);return 'Reading in '+(set&&set.title?set.title:it.setId)}
+function cfmClose(){$('cfm').hidden=true;CFM.id=null;CFM.rv=null}
+function cfmPaint(msg){
+  const box=$('cfmBox'),rv=CFM.rv;
+  if(!rv){box.innerHTML='<h2 id="cfmT">This patient was changed by someone else</h2><p>'+esc(msg||'Loading…')+'</p><div class="acts"><button class="b" type="button" data-cfm="close">Close</button></div>';return}
+  const cf=rv.items.filter(i=>i.state==='conflict'),mine=rv.items.filter(i=>i.state==='mine'),info=rv.items.filter(i=>i.state==='theirs');
+  const nm=(getC().find(x=>x.id===CFM.id)||{}).patient;
+  let h='<h2 id="cfmT">'+esc(nm&&nm.name?nm.name:'This patient')+' was changed by someone else</h2><p><b>Your changes are not saved yet.</b> Nothing is overwritten until you choose. Pick which version to keep for each item that differs.</p>';
+  if(cf.length)h+=cf.map(it=>'<div class="cfmit"><b>'+esc(cfmLabel(it))+'</b><label><input type="radio" name="cfm-'+esc(it.key)+'" value="mine"> <span><i>Keep mine</i><pre>'+esc(it.mine==null?'(removed by me)':cfmTxt(it.mine))+'</pre></span></label><label><input type="radio" name="cfm-'+esc(it.key)+'" value="theirs"> <span><i>Keep theirs</i><pre>'+esc(it.theirs==null?'(removed by them)':cfmTxt(it.theirs))+'</pre></span></label></div>').join('');
+  else h+='<p>Nothing you changed clashes with their changes.</p>';
+  if(mine.length)h+='<p><b>Your other changes (kept and saved when you apply):</b></p><ul>'+mine.map(it=>'<li>'+esc(cfmLabel(it))+'</li>').join('')+'</ul>';
+  if(info.length)h+='<p><b>Not kept:</b></p><ul>'+info.map(it=>'<li>'+esc(cfmLabel(it))+': '+esc(it.why)+'</li>').join('')+'</ul>';
+  h+='<div class="acts"><button class="b" type="button" id="cfmApply" data-cfm="apply"'+(cf.length?' disabled':'')+'>Apply my choices</button><button class="b sm" type="button" data-cfm="reload">Reload theirs (discard my unsent edits)</button><button class="b sm" type="button" data-cfm="close">Decide later</button></div><p class="mu">Deciding later keeps saving paused for this patient; your edits stay on screen.</p>';
+  box.innerHTML=h}
+async function cfmOpen(id){
+  CFM.id=id;CFM.rv=null;$('cfm').hidden=false;cfmPaint('Loading the other version…');$('cfmBox').focus();
+  try{const rv=await Store.conflictReview(id);if(CFM.id!==id)return;CFM.rv=rv;cfmPaint();$('cfmBox').focus()}
+  catch(e){if(CFM.id===id)cfmPaint('Could not load the other version: '+e.message+'. Your changes are still on screen and are not saved.')}}
+$('cfmBox').addEventListener('change',e=>{if(e.target.type!=='radio'||!CFM.rv)return;const need=CFM.rv.items.filter(i=>i.state==='conflict');$('cfmApply').disabled=!need.every(i=>document.querySelector('input[name="cfm-'+CSS.escape(i.key)+'"]:checked'))});
+$('cfmBox').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();cfmClose()}});
+$('cfmBox').addEventListener('click',async e=>{const b=e.target.closest('[data-cfm]');if(!b)return;const a=b.dataset.cfm,id=CFM.id;
+  if(a==='close')return cfmClose();
+  if(a==='reload'){if(!confirm('Reload the other version? Your unsent edits to this patient will be discarded.'))return;try{await Store.reloadCase(id);cfmClose()}catch(err){toast('Reload failed: '+err.message)}return}
+  if(a==='apply'&&CFM.rv){const picks={};CFM.rv.items.filter(i=>i.state==='conflict').forEach(i=>{const r=document.querySelector('input[name="cfm-'+CSS.escape(i.key)+'"]:checked');if(r)picks[i.key]=r.value});
+    try{Store.resolveConflict(id,picks);cfmClose();toast('Saving your choices…')}catch(err){toast(err.message)}}});
+$('conflictBan').addEventListener('click',e=>{const r=e.target.closest('[data-review]');if(r)return cfmOpen(r.dataset.review);
+  if(e.target.closest('[data-pagereload]')){if(confirm('Reload the app? Your unsaved change to that shared setting will be discarded.'))location.reload();return}
+  const b=e.target.closest('[data-reload]');if(!b)return;if(!confirm('Reload the other version? Your unsent edits to this patient will be discarded.'))return;Store.reloadCase(b.dataset.reload).catch(err=>toast('Reload failed: '+err.message))});
+Store.hooks.onConflict=(key,cur,info)=>{const id=String(key).slice(String(key).indexOf(':')+1).split('|')[0],ci=Store.conflictInfo(id);if(ci&&ci.isCase&&CUR&&CUR.id===id&&CASE_OPEN&&$('cfm').hidden)cfmOpen(id)};
 Store.hooks.onStatus=paintSave;
 $('bootRetry').addEventListener('click',()=>boot());
 $('bootDemo').addEventListener('click',()=>Store.setMode('local'));

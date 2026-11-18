@@ -112,27 +112,28 @@
   const findRow = (c, rid) => { for (const k of Object.keys(c.values || {})) { const i = k.indexOf('/@'); if (i > 0 && Array.isArray(c.values[k])) { const r = c.values[k].find((x) => x && x.__id === rid); if (r) return { setId: k.slice(0, i), groupId: k.slice(i + 2), row: r }; } } return null; };
   const caseById = (id) => S.cases.find((x) => x.id === id);
 
-  function fromServerCase(sc) {
+  function fromServerCase(sc, dry) {
+    const SN = dry ? {} : snap;                       // dry: build the case shape only, leave the confirmed-by-server snapshot alone
     const id = sc.id, c = { id, patient: sc.patient || { name: '', ageSex: '', bed: '', mrn: '' }, narrative: sc.narrative || '', applied: sc.applied || [],
       pathways: sc.pathways || [], alertLog: sc.alertLog || [], values: {}, notes: [], ns: true, rp: true, updatedAt: sc.updatedAt, saved: sc.updatedAt };
     if (Array.isArray(sc.pinned)) c.pinned = sc.pinned;
-    for (const k of Object.keys(snap)) if (grpOf(k) === id) delete snap[k];
-    snap['case:' + id] = { ver: sc.version, data: metaOf(c) };
+    if (!dry) for (const k of Object.keys(snap)) if (grpOf(k) === id) delete snap[k];
+    SN['case:' + id] = { ver: sc.version, data: metaOf(c) };
     for (const k of Object.keys(sc.values || {})) {
       const v = sc.values[k], i = k.indexOf('/@');
       if (i > 0 && Array.isArray(v)) {
         c.values[k] = v.map((r) => {
           const row = strip(r); row.__id = r.__id; row.__by = r.__by; row.__at = r.__at;
-          snap['row:' + id + '|' + r.__id] = { ver: r.__v, data: strip(r), time: r.__time || null, setId: k.slice(0, i), groupId: k.slice(i + 2) };
+          SN['row:' + id + '|' + r.__id] = { ver: r.__v, data: strip(r), time: r.__time || null, setId: k.slice(0, i), groupId: k.slice(i + 2) };
           return row;
         });
       } else {
-        snap['val:' + id + '|' + k] = { ver: (sc.valueVersions || {})[k] || 1, data: v };
+        SN['val:' + id + '|' + k] = { ver: (sc.valueVersions || {})[k] || 1, data: v };
         if (v !== null) c.values[k] = v;
       }
     }
     c.notes = (sc.notes || []).map((n) => {
-      snap['note:' + id + '|' + n.id] = { ver: n.version, data: noteData({ type: n.type, setId: n.setId, text: n.text, status: n.status, amends: n.amends, reason: n.reason }) };
+      SN['note:' + id + '|' + n.id] = { ver: n.version, data: noteData({ type: n.type, setId: n.setId, text: n.text, status: n.status, amends: n.amends, reason: n.reason }) };
       const o = { id: n.id, type: n.type, text: n.text || '', status: n.status, signedBy: n.signedByName || n.signedBy || '', signedAt: n.signedAt || '', createdAt: n.createdAt };
       if (n.setId) o.setId = n.setId;
       if (n.amends) { o.amends = n.amends; o.reason = n.reason || ''; }
@@ -266,10 +267,87 @@
   };
   Store.reloadCase = async function (id) {              // explicit "Reload theirs": drops this person's unsent edits for that case
     for (let i = Q.length - 1; i >= 0; i--) if (grpOf(Q[i].key) === id && !Q[i].started) Q.splice(i, 1);
-    delete conflicts[id];
+    delete conflicts[id]; delete REVIEW[id];
     const c = fromServerCase(await api('GET', '/cases/' + id));
     const i = S.cases.findIndex((x) => x.id === id); if (i >= 0) S.cases[i] = c; else S.cases.push(c);
     notify(); Store.hooks.onCaseReloaded(id, clone(c)); return clone(c);
+  };
+
+  // ---------------------------------------------------------------- conflict review (chunk 31c)
+  // Three-way compare per item: base = what the server last confirmed to this browser, mine = the cache, theirs = the server now.
+  // Only a true conflict (both sides changed the same item differently) needs a choice. Whatever only I changed is kept and re-sent,
+  // whatever only they changed is taken. Nothing is sent until the person resolves; then only items kept as "mine" go out, against
+  // the server's current version numbers. Never last-write-wins.
+  const REVIEW = {};
+  const CASE_KEY = /^(case|row|val|note|rowerr|notedel):/;
+  Store.conflictInfo = (id) => (conflicts[id] ? { entity: conflicts[id].entity, message: conflicts[id].message, isCase: CASE_KEY.test(conflicts[id].entity) } : null);
+  const decide = (it, b, m, t) => {
+    it.base = b; it.mine = m; it.theirs = t;
+    it.state = eq(m, t) ? 'same' : eq(m, b) ? 'theirs' : eq(t, b) ? 'mine' : 'conflict';
+    return it;
+  };
+  const rowsIn = (c) => { const o = {}; for (const k of Object.keys(c.values || {})) { const i = k.indexOf('/@'); if (i > 0 && Array.isArray(c.values[k])) c.values[k].forEach((r) => { if (r && r.__id) o[r.__id] = { setId: k.slice(0, i), groupId: k.slice(i + 2), data: strip(r) }; }); } return o; };
+  function diffCase(id, mine, theirs) {
+    const items = [], bs = (k) => (snap[k] ? snap[k].data : undefined);
+    const bm = bs('case:' + id) || {}, mm = metaOf(mine), tm = metaOf(theirs);
+    META.forEach((f) => items.push(decide({ kind: 'field', ref: f, key: 'f:' + f }, bm[f], mm[f], tm[f])));
+    const vk = new Set();                                              // single values (not repeat groups)
+    const addV = (o) => Object.keys(o || {}).forEach((k) => { if (k.indexOf('/@') < 0) vk.add(k); });
+    addV(mine.values); addV(theirs.values); Object.keys(snap).forEach((k) => { if (k.startsWith('val:' + id + '|')) vk.add(k.slice(k.indexOf('|') + 1)); });
+    const nz = (v) => (v === undefined ? null : v);
+    vk.forEach((k) => items.push(decide({ kind: 'value', ref: k, key: 'v:' + k }, nz(bs('val:' + id + '|' + k)), nz((mine.values || {})[k]), nz((theirs.values || {})[k]))));
+    const mr = rowsIn(mine), tr = rowsIn(theirs), ids = new Set(Object.keys(mr).concat(Object.keys(tr)));
+    Object.keys(snap).forEach((k) => { if (k.startsWith('row:' + id + '|')) ids.add(k.slice(k.indexOf('|') + 1)); });
+    ids.forEach((rid) => {
+      const sn = snap['row:' + id + '|' + rid], m = mr[rid], t = tr[rid], where = m || t || sn;
+      const it = { kind: 'row', setId: where.setId, groupId: where.groupId, ref: rid, key: 'r:' + rid };
+      const b = sn ? sn.data : undefined, md = m ? m.data : null, td = t ? t.data : null;
+      if (sn && !t) { if (m && !eq(md, b)) items.push(Object.assign(decide(it, b, md, null), { state: 'theirs', why: 'Someone marked this reading entered in error. Your edit to it is not kept.' })); return; }
+      if (!sn && !m) return;                                           // new from someone else: it simply arrives
+      items.push(decide(it, sn ? b : null, md, sn ? td : null));       // new reading of mine (no base): kept and sent
+    });
+    const nd = (n) => noteData(n), mn = {}, tn = {};
+    (mine.notes || []).forEach((n) => { mn[n.id] = n; }); (theirs.notes || []).forEach((n) => { tn[n.id] = n; });
+    new Set(Object.keys(mn).concat(Object.keys(tn), Object.keys(snap).filter((k) => k.startsWith('note:' + id + '|')).map((k) => k.slice(k.indexOf('|') + 1)))).forEach((nid) => {
+      const sn = snap['note:' + id + '|' + nid], m = mn[nid], t = tn[nid], it = { kind: 'note', ref: nid, key: 'n:' + nid };
+      if (sn && !t) { if (m && !eq(nd(m), sn.data)) items.push(Object.assign(decide(it, sn.data, nd(m), null), { state: 'theirs', why: 'Someone removed this note. Your edit to it is not kept.' })); return; }
+      if (!sn && !m) return;
+      decide(it, sn ? sn.data : null, m ? nd(m) : null, sn ? nd(t) : null);
+      if (it.state === 'conflict' && t && t.status === 'signed') { it.state = 'theirs'; it.why = 'This note was signed by someone else and is read-only. Your edit is not kept.'; }
+      items.push(it);
+    });
+    return items.filter((i) => i.state === 'conflict' || i.state === 'mine' || (i.state === 'theirs' && i.why));
+  }
+  Store.conflictReview = async function (id) {                         // fetches the server copy now; changes nothing
+    const info = conflicts[id]; if (!info || !CASE_KEY.test(info.entity)) throw new Error('There is no patient conflict to review');
+    const mine = caseById(id); if (!mine) throw new Error('This patient is no longer open here');
+    const sc = await api('GET', '/cases/' + id);
+    const items = diffCase(id, mine, fromServerCase(sc, true));
+    REVIEW[id] = { sc, items };
+    return clone({ message: info.message, theirsVersion: sc.version, items });
+  };
+  function takeMine(merged, mine, it) {
+    if (it.kind === 'field') { if (it.ref === 'pinned') { if (Array.isArray(mine.pinned)) merged.pinned = clone(mine.pinned); else delete merged.pinned; } else merged[it.ref] = clone(mine[it.ref]); }
+    else if (it.kind === 'value') { const v = (mine.values || {})[it.ref]; if (v === undefined) delete merged.values[it.ref]; else merged.values[it.ref] = clone(v); }
+    else if (it.kind === 'row') {
+      const key = it.setId + '/@' + it.groupId, arr = (merged.values[key] = merged.values[key] || []), i = arr.findIndex((r) => r.__id === it.ref);
+      const mr = ((mine.values || {})[key] || []).find((r) => r.__id === it.ref);
+      if (!mr) { if (i >= 0) arr.splice(i, 1); }                       // I removed it: the queue sends "entered in error" with the reason typed earlier
+      else { const c = clone(mr); if (i >= 0) { c.__by = arr[i].__by; c.__at = arr[i].__at; arr[i] = c; } else arr.push(c); }
+    } else if (it.kind === 'note') {
+      const mn = (mine.notes || []).find((n) => n.id === it.ref), i = merged.notes.findIndex((n) => n.id === it.ref);
+      if (!mn) { if (i >= 0) merged.notes.splice(i, 1); } else if (i >= 0) Object.assign(merged.notes[i], { text: mn.text, status: mn.status, signedBy: mn.signedBy, signedAt: mn.signedAt }); else merged.notes.push(clone(mn));
+    }
+  }
+  Store.resolveConflict = function (id, picks) {                       // picks: {item key: 'mine' | 'theirs'}; every true conflict needs one
+    const rv = REVIEW[id], mine = caseById(id); picks = picks || {};
+    if (!rv || !mine || !conflicts[id]) throw new Error('Review the differences first');
+    if (rv.items.some((i) => i.state === 'conflict' && picks[i.key] !== 'mine' && picks[i.key] !== 'theirs')) throw new Error('Choose mine or theirs for every item that differs');
+    const merged = fromServerCase(rv.sc);                              // the snapshot now holds the server's versions
+    rv.items.forEach((it) => { if (it.state === 'mine' || (it.state === 'conflict' && picks[it.key] === 'mine')) takeMine(merged, mine, it); });
+    const i = S.cases.findIndex((x) => x.id === id); if (i >= 0) S.cases[i] = merged; else S.cases.push(merged);
+    delete conflicts[id]; delete REVIEW[id]; Object.keys(failed).forEach((k) => { if (grpOf(k) === id) delete failed[k]; });
+    reconcile(merged); notify(); Store.hooks.onCaseReloaded(id, clone(merged)); return clone(merged);
   };
 
   // ---------------------------------------------------------------- reference data (sync reads, queued writes)

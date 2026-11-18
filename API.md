@@ -75,3 +75,18 @@ Seed sets (loaded by `node seed.js`) and any set with `readOnly: true` (marketpl
 - **Sets:** user sets keep their `version` (later `POST /element-sets` continues from it); an id already on the server is never replaced. **Codes** use the same format checks as `POST /codes`; imported codes join the verified table, so check them against SNOMED or LOINC.
 
 Roles and per-route permission checks arrive in chunk 32; audit rows in chunk 33.
+
+## Login, logout and session (chunk 32a)
+Mounted before the data routes. The data routes still use the development user until chunk 32b, so they do not require a login yet.
+| Route | Body | Answer |
+|---|---|---|
+| `POST /login` | `{username, password}` (strict) | 200 `{id, name, role, mustChangePassword}` and an `emr_sid` cookie. Wrong user or password: 401 `invalid_credentials` (same text for both). Locked account: 429 `account_locked` with `Retry-After`. Too many failures from one address: 429 `too_many_attempts`. |
+| `POST /logout` | none | 204; deletes the session on the server and clears the cookie (also 204 with no session). |
+| `GET /session` | none | 200 `{id, name, role}` for the logged-in user; 401 `unauthorized` or `session_expired` otherwise. |
+
+- **Cookie:** `emr_sid`, random 256-bit token, `HttpOnly`, `SameSite=Lax`, `Path=/`, `Secure` when `NODE_ENV=production`. Only the SHA-256 of the token is stored (`sessions.id`).
+- **Timeouts:** idle 30 min (`SESSION_IDLE_MINUTES`, slides forward on use, written at most every 30 s) and absolute 12 h (`SESSION_ABSOLUTE_HOURS`, never extended). Both use the database clock. An ended session is deleted and the cookie cleared.
+- **Lockout:** 5 wrong passwords lock that account for 15 minutes; no password check happens while locked and the count does not grow. A success resets the count. A limiter of 20 failures per address per 10 minutes (in memory, per server process) also covers usernames that do not exist.
+- **Passwords:** scrypt (N=32768, r=8, p=1) with a random salt, stored as `scrypt$N$r$p$salt$hash` so the cost can be raised later. Minimum 12 characters (`passwordProblem`, used when users are created in chunks 32c and 32e).
+- `requireAuth` (in `auth.js`) sets `req.user = {id, name, role, sessionId}`. Deactivating a user ends their open sessions at the next request.
+
