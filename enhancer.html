@@ -160,7 +160,11 @@ body.compact label{margin:7px 0 2px}
 </div>
 <div id="set" class="cd" style="margin:10px 16px"><div class="mu"><b>AI is available after the server AI step.</b> No API key is entered or stored in this browser.</div><div hidden><select id="prov"><option value="or">OpenRouter</option></select><input id="model"><input type="checkbox" id="demo" checked></div>
 <hr><button class="b" onclick="exp()">Export all data</button> <button class="b" onclick="resetRank()">Reset sidebar ranking</button> <label style="display:inline">Import <input type="file" id="imp" accept=".json" style="width:auto" onchange="imp(this.files[0])"></label> <button class="b" style="background:var(--r)" onclick="wipe()">Delete all data</button>
-<div class="mu">Export contains cases, generated sets, alert rules, your verified codes and set usage; the API key is never exported. Browser storage is not encrypted: use synthetic data only.</div></div>
+<div class="mu">Export contains cases, generated sets, alert rules, your verified codes and set usage; the API key is never exported. Browser storage is not encrypted: use synthetic data only.</div>
+<hr><div id="ib"><b>Import from this browser</b>
+<div class="mu">Moves the cases, sets, codes, rules, protocols and usage saved in this browser (Demo mode or an older version) to the server. The check changes nothing. Nothing is deleted from this browser unless you choose "Clear browser copy". Synthetic data only.</div>
+<button class="b" id="ibCheck" type="button">Check this browser's data</button>
+<div id="ibOut" aria-live="polite"></div></div></div>
 <nav id="oldnav" aria-hidden="true"></nav>
 <div id="shellnav" role="navigation" aria-label="Patient chart sections">
   <button class="on" data-shell-t="ov" aria-current="page">Summary</button><button data-shell-t="flw">Flowsheets</button><button data-shell-t="nt">Notes</button><button data-shell-t="pw">Pathway</button><button data-shell-t="al">Alerts</button><button data-shell-t="ex">Export</button>
@@ -1972,6 +1976,67 @@ async function boot(){
     showBoot('Could not load the record','Reason: '+((e&&e.message)||String(e))+'. Nothing was opened, so nothing can be overwritten.',true);
   }
 }
+/* chunk 31b: Import from this browser (server mode only). Reads localStorage without changing it, asks the server for a dry run, shows the report in plain words,
+   imports only after the person confirms, and removes the browser copy only when asked. Approvals are never imported (the server clears them). */
+const IB={arr:['cases','sets'],obj:['setUsage','codes','binds','rules','protocols'],lst:['pinned'],st:null};
+const ibOld=c=>!c||typeof c!='object'||Array.isArray(c)||!Array.isArray(c.applied)||c.ns!==true||c.rp!==true||!Array.isArray(c.pathways);
+const ibNothing=r=>!!r&&r.ok&&Object.values(r.counts||{}).every(n=>!n);
+function ibRead(){/* never throws; a damaged or odd key is reported and left untouched */
+  const d={},prob=[],keys=[];
+  IB.arr.concat(IB.obj,IB.lst).forEach(k=>{let raw=null;
+    try{raw=localStorage.getItem(k)}catch(e){prob.push('This browser did not let the app read "'+k+'". It was skipped.');return}
+    if(raw===null)return;let v;
+    try{v=JSON.parse(raw)}catch(e){prob.push('"'+k+'" is damaged and could not be read. It was skipped and left untouched.');return}
+    const ok=IB.arr.includes(k)?Array.isArray(v):IB.obj.includes(k)?(!!v&&typeof v=='object'&&!Array.isArray(v)):(v===null||Array.isArray(v));
+    if(!ok){prob.push('"'+k+'" has an unexpected shape. It was skipped and left untouched.');return}
+    if(v===null||(Array.isArray(v)?!v.length:!Object.keys(v).length))return;
+    d[k]=v;keys.push(k)});
+  return{d,prob,keys}}
+async function ibCheck(){
+  const out=$('ibOut');
+  if(Store.mode!=='server'){out.innerHTML='<p><b>Switch Demo mode off first.</b> The import sends this browser\'s data to the server, which is connected only when Demo mode is off.</p>';return}
+  const r=ibRead();
+  if(!r.keys.length&&!r.prob.length){IB.st=null;out.innerHTML='<p>This browser holds no saved data to import.</p>';return}
+  const cases=r.d.cases||[],old=cases.filter(ibOld),body={v:5,utcOffsetMinutes:-new Date().getTimezoneOffset()};
+  r.keys.forEach(k=>{body[k]=r.d[k]});
+  if(r.d.cases){body.cases=JSON.parse(JSON.stringify(cases.filter(c=>!ibOld(c))));body.cases.forEach(c=>{unverifyProtocols(c);cleanRefs(c);cleanPw(c);cleanLog(c);cleanRows(c)})}/* cleaned copies; the stored data is not touched */
+  out.textContent='Checking…';
+  let rep;try{rep=await Store.api('POST','/import/dry-run',body)}catch(e){out.innerHTML='<p><b>Could not check:</b> '+esc(e.message)+'. Nothing was changed.</p>';return}
+  IB.st={body,keys:r.keys,left:old.length,prob:r.prob,rep,done:false};ibPaint()}
+function ibPaint(){
+  const s=IB.st,out=$('ibOut');if(!s){out.innerHTML='';return}
+  const r=s.rep,c=r.counts||{},L=[],ul=a=>'<ul>'+a.map(x=>'<li>'+x+'</li>').join('')+'</ul>',nothing=ibNothing(r);
+  const parts=[[c.cases,'case(s)'+(c.cases?' ('+(c.rows||0)+' reading(s), '+(c.notes||0)+' note(s))':'')],[c.sets,'set(s)'],[c.binds,'code binding(s)'],[c.codes,'verified code(s)'],[c.rules,'rule(s)'],[c.protocols,'protocol(s)'],[c.usage,'usage entr'+(c.usage==1?'y':'ies')]].filter(x=>x[0]).map(x=>x[0]+' '+x[1]);
+  L.push('<p><b>'+(s.done?'Import finished.':!r.ok?'Cannot import yet.':nothing?'Nothing new to import.':(s.left||s.prob.length)?'Ready to import what could be read.':'Ready to import.')+'</b> '+(parts.length?(s.done?'Imported: ':'Will import: ')+parts.join(', ')+'.':'')+'</p>');
+  if(s.prob.length)L.push('<p><b>Not read:</b></p>'+ul(s.prob.map(esc)));
+  if(s.left)L.push('<p><b>'+s.left+' case(s) are in an older format and were left out.</b> Switch Demo mode on once (it upgrades them), switch it off again, then check again.</p>');
+  if(r.invalid&&r.invalid.length)L.push('<p><b>Problems (nothing is imported while any remain):</b></p>'+ul(r.invalid.map(x=>esc(x.kind)+' '+esc(x.ref)+': '+esc(x.reason)))+(r.invalidCounts&&Object.values(r.invalidCounts).reduce((a,b)=>a+b,0)>r.invalid.length?'<div class="mu">Only the first '+r.invalid.length+' are shown.</div>':''));
+  const cc=Object.entries(r.collisionCounts||{});
+  if(cc.length)L.push('<p>Already on the server, so skipped and not changed: '+cc.map(([k,n])=>n+' '+esc(k)+'(s)').join(', ')+'.</p>');
+  if(r.orphanedSets&&r.orphanedSets.length)L.push('<p>Used by this data but missing from the server: '+r.orphanedSets.map(x=>esc(x.setId)).join(', ')+'. The data is kept; those sets show as missing until they exist.</p>');
+  if(r.warnings&&r.warnings.length)L.push('<p><b>Please note:</b></p>'+ul(r.warnings.map(w=>esc(w.message))));
+  const btn=[];
+  if(r.ok&&!s.done&&!nothing)btn.push('<label style="display:block;margin:6px 0"><input type="checkbox" id="ibOk"> I have read this and want to import it</label><button class="b" id="ibRun" type="button" data-ib="run" disabled>Import</button>');
+  if((s.done||nothing)&&!s.left&&!s.prob.length)btn.push('<button class="b" type="button" data-ib="clear" style="background:var(--r)">Clear browser copy</button>');
+  btn.push('<button class="b" type="button" data-ib="again">Check again</button>');
+  out.innerHTML=L.join('')+'<div>'+btn.join(' ')+'</div>'}
+function ibRemap(list){/* the server gives imported cases new ids: keep the "My patients" pins pointing at them */
+  if(!Array.isArray(list)||!list.length)return;const m=new Map(list.map(x=>[x.legacyId,x.id]));
+  try{const a=JSON.parse(localStorage.getItem(MYPTS_KEY)||'[]');if(Array.isArray(a))localStorage.setItem(MYPTS_KEY,JSON.stringify([...new Set(a.filter(x=>typeof x==='string').map(x=>m.get(x)||x))]))}catch(e){toast('Imported, but the "My patients" pins could not be updated.')}}
+async function ibRun(){
+  const s=IB.st;if(!s||!s.rep.ok||s.done)return;const b=$('ibRun');if(b)b.disabled=true;let res;
+  try{res=await Store.api('POST','/import',s.body)}catch(e){
+    if(e.code==='import_invalid'&&e.body&&e.body.report){s.rep=e.body.report;ibPaint();toast('Nothing was imported: the check found problems.');return}
+    $('ibOut').insertAdjacentHTML('afterbegin','<p><b>'+(e.network?'The server did not confirm the import.':'Import failed: '+esc(e.message)+'. Nothing was imported.')+'</b> '+(e.network?'Press "Check again": if it went through, everything shows as already on the server.':'You can try again.')+'</p>');if(b)b.disabled=false;return}
+  ibRemap(res.cases);s.done=true;s.rep=res;ibPaint();
+  try{await Store.init();renderPatients();sidebar()}catch(e){toast('Imported, but the lists could not refresh. Reload the page.')}}
+function ibClear(){
+  const s=IB.st;if(!s||s.left||s.prob.length||!(s.done||ibNothing(s.rep)))return;
+  if(!confirm('Remove this browser\'s copy ('+s.keys.join(', ')+')? The same data is on the server; anything the server already had was not changed, so this browser\'s version of that is removed too. Backup copies (cases_backup_*), "My patients" pins and display settings are kept. Demo mode will then be empty. This cannot be undone.'))return;
+  s.keys.forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});IB.st=null;$('ibOut').innerHTML='<p>The copy saved in this browser was removed.</p>'}
+$('ibCheck').addEventListener('click',ibCheck);
+$('ibOut').addEventListener('change',e=>{if(e.target.id==='ibOk'&&$('ibRun'))$('ibRun').disabled=!e.target.checked});
+$('ibOut').addEventListener('click',e=>{const b=e.target.closest('[data-ib]');if(!b)return;const a=b.dataset.ib;if(a==='run'&&$('ibOk')&&$('ibOk').checked)ibRun();else if(a==='clear')ibClear();else if(a==='again')ibCheck()});
 Store.hooks.toast=toast;
 Store.hooks.onSetVersion=(id,n,ok)=>{if(ok&&CUR&&CASE_OPEN)renderCase()};
 Store.hooks.rowTime=(sid,gid,row)=>{const set=getSet(sid);if(!set)return null;const tc=tcol(grp(set,gid));if(!tc)return null;const t=rowT(row,tc);return Number.isFinite(t)?t:null};

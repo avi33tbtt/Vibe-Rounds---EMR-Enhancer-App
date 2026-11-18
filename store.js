@@ -39,7 +39,7 @@
     if (res.status !== 204) { try { data = await res.json(); } catch (e) { /* not JSON */ } }
     if (!res.ok) {
       const er = new Error((data && data.error && data.error.message) || 'HTTP ' + res.status);
-      er.status = res.status; er.code = data && data.error && data.error.code; er.current = data && data.current;
+      er.status = res.status; er.code = data && data.error && data.error.code; er.current = data && data.current; er.body = data;
       if (res.status === 401) Store.hooks.onUnauthorized();
       throw er;
     }
