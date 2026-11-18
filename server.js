@@ -23,7 +23,8 @@ function loadConfig(env = process.env) {
   const port = env.PORT ? Number(env.PORT) : 3000;
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('PORT must be an integer 0-65535');
   return {
-    databaseUrl: env.DATABASE_URL,
+    databaseUrl: env.DATABASE_URL,                                                    // owner: runs migrations
+    appDatabaseUrl: env.APP_DATABASE_URL && String(env.APP_DATABASE_URL).trim() ? env.APP_DATABASE_URL : env.DATABASE_URL,   // emr_app: serves requests (003_audit_grants.sql)
     port,
     nodeEnv: env.NODE_ENV || 'development',
     migrationsDir: env.MIGRATIONS_DIR || __dirname,
@@ -147,8 +148,11 @@ if (require.main === module) {
     const done = await migrate(db, cfg.migrationsDir);
     console.log(done.length ? `Applied migrations: ${done.join(', ')}` : 'Database is up to date.');
     if (process.argv.includes('--migrate')) return db.close();
-    const server = createApp({ db }).listen(cfg.port, () => console.log(`EMR Enhancer on http://localhost:${cfg.port}`));
-    const stop = () => server.close(() => db.close().then(() => process.exit(0)));
+    const appDb = cfg.appDatabaseUrl === cfg.databaseUrl ? db : createDb(cfg.appDatabaseUrl);   // requests use the restricted role when one is configured
+    if (appDb === db) console.warn('APP_DATABASE_URL is not set: serving with the owner database role. Development only.');
+    else await db.close();                                                                      // the owner connection is only for migrations
+    const server = createApp({ db: appDb }).listen(cfg.port, () => console.log(`EMR Enhancer on http://localhost:${cfg.port}`));
+    const stop = () => server.close(() => appDb.close().then(() => process.exit(0)));
     process.on('SIGINT', stop); process.on('SIGTERM', stop);
   })().catch((e) => { console.error(e.message); process.exit(1); });
 }

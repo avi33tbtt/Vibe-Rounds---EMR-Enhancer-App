@@ -78,7 +78,29 @@ Seed sets (loaded by `node seed.js`) and any set with `readOnly: true` (marketpl
 - **Approvals are never imported:** rules are saved disabled and unapproved (a doctor or admin must approve), protocols unverified, `verifiedBy` inside a case's `setId/__protocol` value is cleared. Rules stored inside a set body are dropped.
 - **Sets:** user sets keep their `version` (later `POST /element-sets` continues from it); an id already on the server is never replaced. **Codes** use the same format checks as `POST /codes`; imported codes join the verified table, so check them against SNOMED or LOINC.
 
-Roles and per-route permission checks arrive in chunk 32; audit rows in chunk 33.
+Roles and per-route permission checks: chunk 32 (see below). Audit rows: chunk 33a (next section).
+
+## Audit trail (chunk 33a)
+Every route that changes data writes **one** `audit_log` row on the same database transaction as the change, so both are saved or neither is: if the audit insert fails, the request fails (500) and nothing changes. Who (`user_id`, `role`) and from where (`ip`) come from the login session, never from a request body. `before` and `after` hold only what that request changed; `case_id` routes also record the case's `patient_id` when it has one. A request that is refused (401, 403, 400), conflicts (409) or only reads writes no audit row.
+
+| Route | Audit `action` |
+|---|---|
+| `POST /cases` / `PATCH /cases/:id` | `case.create` / `case.update` |
+| `POST /cases/:id/rows` / `PATCH …/rows/:rowId` / `POST …/rows/:rowId/error` | `row.add` / `row.amend` / `row.entered_in_error` (with `reason`) |
+| `PUT /cases/:id/values` | `value.set` |
+| `POST /cases/:id/notes` / `PATCH …/notes/:nid` / `POST …/sign` / `POST …/amend` | `note.create` / `note.edit` / `note.sign` / `note.amend` (with `reason`) |
+| `POST /element-sets` | `set.save` |
+| `POST /usage/:setId` / `DELETE /usage` | `usage.count` / `usage.clear` |
+| `POST /codes` / `POST /codes/:system/:code/live` | `code.add` / `code.verify_live` |
+| `PUT /bindings` / `DELETE /bindings/:setId/:fieldId` | `binding.set` / `binding.delete` |
+| `PUT /rules/:owner/:ruleId` / `POST …/approve` / `POST …/disable` / `DELETE …` | `rule.save` / `rule.approve` / `rule.disable` / `rule.delete` |
+| `PUT /protocols/:setId` / `POST …/approve` | `protocol.save` / `protocol.approve` |
+| `PUT /prefs/:key` | `pref.set` |
+| `POST /import` | `import.commit` (or `import.failed`, for the 422 attempt record) |
+
+`POST /import/dry-run` and the refused `PATCH`/`DELETE /element-sets/:setId` write nothing, so they write no audit row. `audit.test.js` fails if a new write route is added without an audit test. Login, logout and failed-login events are not audited yet (see the next chunk).
+
+**Database role.** The server serves requests as `emr_app` (created by `003_audit_grants.sql`), which has `INSERT` and `SELECT` only on `audit_log` and `review_events` (no `UPDATE`, `DELETE`, `TRUNCATE`; the append-only trigger is a second guard) and no access to `schema_migrations`. Migrations still run as the owner in `DATABASE_URL`. One-time setup by a database admin: `ALTER ROLE emr_app LOGIN PASSWORD '<long random value>';`, then set `APP_DATABASE_URL=postgres://emr_app:<password>@host:5432/dbname` for the server. Without `APP_DATABASE_URL` the server uses the owner role and warns (development only). A later migration that adds a table must also grant `emr_app` its rights on it.
 
 ## Login, logout and session (chunk 32a)
 Mounted before the data routes. The data routes still use the development user until chunk 32b, so they do not require a login yet.

@@ -11,6 +11,7 @@ const express = require('express');
 const { z } = require('zod');
 const crypto = require('node:crypto');
 const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied } = require('./permissions.js');
+const { audit, auditContext } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
 
 class ApiError extends Error {
   constructor(status, code, message, extra) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -361,6 +362,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   r.use(getActor
     ? (req, res, next) => { Promise.resolve(getActor(req)).then((a) => { req.actor = a; next(); }, next); }
     : (req, res, next) => requireAuth(req, res, (e) => { if (e) return next(e); req.actor = { id: req.user.id, name: req.user.name, role: req.user.role }; requireCsrf(req, res, next); }));
+  r.use(auditContext);                                // who/role/ip for audit(); every write below runs inside it
   const setKindOf = async (setId) => ((await db.query('SELECT kind FROM element_sets_latest WHERE set_id=$1', [setId])).rows[0] || {}).kind || null;
 
   // ================= who am I (the session user) =================
@@ -383,12 +385,16 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   }));
   r.post('/cases', wrap(async (req, res) => {
     const b = parse(S.caseCreate, req.body);
-    const ins = await db.query(`INSERT INTO cases (id,demo_patient,narrative,applied,pathways,pinned,created_by)
-      VALUES (COALESCE($1,gen_random_uuid()),$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING RETURNING id`,
-      [b.id || null, b.patient || { name: '', ageSex: '', bed: '', mrn: '' }, b.narrative || '', JSON.stringify(b.applied || []),
-        JSON.stringify(b.pathways || []), b.pinned === undefined ? null : JSON.stringify(b.pinned), req.actor.id]);
-    if (!ins.rows.length) throw new ApiError(409, 'conflict', 'A case with this id already exists', { current: await loadCase(db, b.id) });
-    res.status(201).json(await loadCase(db, ins.rows[0].id));
+    const id = await db.withTx(async (c) => {
+      const ins = await c.query(`INSERT INTO cases (id,demo_patient,narrative,applied,pathways,pinned,created_by)
+        VALUES (COALESCE($1,gen_random_uuid()),$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO NOTHING RETURNING id`,
+        [b.id || null, b.patient || { name: '', ageSex: '', bed: '', mrn: '' }, b.narrative || '', JSON.stringify(b.applied || []),
+          JSON.stringify(b.pathways || []), b.pinned === undefined ? null : JSON.stringify(b.pinned), req.actor.id]);
+      if (!ins.rows.length) throw new ApiError(409, 'conflict', 'A case with this id already exists', { current: await loadCase(db, b.id) });   // loadCase runs parallel queries: pool, not the tx client
+      await audit(c, { action: 'case.create', entity: 'case', entity_id: ins.rows[0].id, case_id: ins.rows[0].id, after: { patient: b.patient, narrative: b.narrative, applied: b.applied, pathways: b.pathways } });
+      return ins.rows[0].id;
+    });
+    res.status(201).json(await loadCase(db, id));
   }));
   r.patch('/cases/:id', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.casePatch, req.body), sets = [], p = [id, b.expectedVersion];
@@ -400,8 +406,14 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
     if (b.pathways !== undefined) add('pathways', b.pathways, true);
     if (b.pinned !== undefined) add('pinned', b.pinned, true);
     if (b.alertLog !== undefined) add('alert_log', b.alertLog, true);
-    const u = await db.query(`UPDATE cases SET ${sets.join(',')}, version=version+1, updated_at=now() WHERE id=$1 AND version=$2 RETURNING id`, p);
-    if (!u.rows.length) await conflict(db, id, 'This case');
+    await db.withTx(async (c) => {
+      const old = (await c.query('SELECT demo_patient AS patient, narrative, applied, pathways, pinned, alert_log AS "alertLog" FROM cases WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      const u = await c.query(`UPDATE cases SET ${sets.join(',')}, version=version+1, updated_at=now() WHERE id=$1 AND version=$2 RETURNING id`, p);
+      if (!u.rows.length) await conflict(db, id, 'This case');
+      const keys = Object.keys(b).filter((k) => k !== 'expectedVersion');              // before/after hold only the fields this request changed
+      await audit(c, { action: 'case.update', entity: 'case', entity_id: id, case_id: id,
+        before: Object.fromEntries(keys.map((k) => [k, old[k]])), after: Object.fromEntries(keys.map((k) => [k, b[k]])) });
+    });
     res.json(await loadCase(db, id));
   }));
 
@@ -417,6 +429,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
       const ins = await c.query(`INSERT INTO case_rows (case_id,set_id,group_id,row,row_time,entered_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
         [id, b.setId, b.groupId, JSON.stringify(b.row), b.rowTime || null, req.actor.id]);
       await touch(c, id);
+      await audit(c, { action: 'row.add', entity: 'case_row', entity_id: ins.rows[0].id, case_id: id, after: { setId: b.setId, groupId: b.groupId, row: b.row, rowTime: b.rowTime || null } });
       return ins.rows[0];
     });
     res.status(201).json(rowOut(out));
@@ -432,48 +445,58 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
     const sets = [], p = [rid, id, b.expectedVersion];
     if (b.row !== undefined) { p.push(JSON.stringify(b.row)); sets.push(`row=$${p.length}`); }
     if (b.rowTime !== undefined) { p.push(b.rowTime); sets.push(`row_time=$${p.length}`); }
-    const u = await db.query(`UPDATE case_rows SET ${sets.join(',')}, version=version+1 WHERE id=$1 AND case_id=$2 AND version=$3 AND status='active' RETURNING *`, p);
-    if (!u.rows.length) {
-      const cur = (await db.query('SELECT * FROM case_rows WHERE id=$1 AND case_id=$2', [rid, id])).rows[0];
-      if (!cur) throw new ApiError(404, 'not_found', 'Row not found');
-      if (cur.status !== 'active') throw new ApiError(422, 'entered_in_error', 'This row was entered in error and cannot be edited', { current: rowOut(cur) });
-      throw new ApiError(409, 'conflict', 'This row was changed by someone else', { current: rowOut(cur) });
-    }
-    await touch(db, id);
-    res.json(rowOut(u.rows[0]));
+    const out = await db.withTx(async (c) => {
+      const old = (await c.query('SELECT row, row_time, version FROM case_rows WHERE id=$1 AND case_id=$2 FOR UPDATE', [rid, id])).rows[0];
+      const u = await c.query(`UPDATE case_rows SET ${sets.join(',')}, version=version+1 WHERE id=$1 AND case_id=$2 AND version=$3 AND status='active' RETURNING *`, p);
+      if (!u.rows.length) {
+        const cur = (await c.query('SELECT * FROM case_rows WHERE id=$1 AND case_id=$2', [rid, id])).rows[0];
+        if (!cur) throw new ApiError(404, 'not_found', 'Row not found');
+        if (cur.status !== 'active') throw new ApiError(422, 'entered_in_error', 'This row was entered in error and cannot be edited', { current: rowOut(cur) });
+        throw new ApiError(409, 'conflict', 'This row was changed by someone else', { current: rowOut(cur) });
+      }
+      await touch(c, id);
+      await audit(c, { action: 'row.amend', entity: 'case_row', entity_id: rid, case_id: id,
+        before: { row: old.row, rowTime: iso(old.row_time), version: old.version }, after: { row: u.rows[0].row, rowTime: iso(u.rows[0].row_time), version: u.rows[0].version } });
+      return u.rows[0];
+    });
+    res.json(rowOut(out));
   }));
   r.post('/cases/:id/rows/:rowId/error', wrap(async (req, res) => {
     const id = idParam(req.params.id), rid = idParam(req.params.rowId), b = parse(S.rowError, req.body);
     await assertRowAmend(req, id, rid);
-    const u = await db.query(`UPDATE case_rows SET status='entered_in_error', error_reason=$4, version=version+1
-      WHERE id=$1 AND case_id=$2 AND version=$3 AND status='active' RETURNING *`, [rid, id, b.expectedVersion, b.reason]);
-    if (!u.rows.length) {
-      const cur = (await db.query('SELECT * FROM case_rows WHERE id=$1 AND case_id=$2', [rid, id])).rows[0];
-      if (!cur) throw new ApiError(404, 'not_found', 'Row not found');
-      throw new ApiError(409, 'conflict', 'This row was changed by someone else', { current: rowOut(cur) });
-    }
-    await touch(db, id);
-    res.json(rowOut(u.rows[0]));
+    const out = await db.withTx(async (c) => {
+      const u = await c.query(`UPDATE case_rows SET status='entered_in_error', error_reason=$4, version=version+1
+        WHERE id=$1 AND case_id=$2 AND version=$3 AND status='active' RETURNING *`, [rid, id, b.expectedVersion, b.reason]);
+      if (!u.rows.length) {
+        const cur = (await c.query('SELECT * FROM case_rows WHERE id=$1 AND case_id=$2', [rid, id])).rows[0];
+        if (!cur) throw new ApiError(404, 'not_found', 'Row not found');
+        throw new ApiError(409, 'conflict', 'This row was changed by someone else', { current: rowOut(cur) });
+      }
+      await touch(c, id);
+      await audit(c, { action: 'row.entered_in_error', entity: 'case_row', entity_id: rid, case_id: id, reason: b.reason,
+        before: { status: 'active', version: b.expectedVersion }, after: { status: 'entered_in_error', version: u.rows[0].version } });
+      return u.rows[0];
+    });
+    res.json(rowOut(out));
   }));
 
   // ================= values =================
   r.put('/cases/:id/values', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.valuePut, req.body);
-    let out;
     if (!(await db.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
-    if (b.expectedVersion === 0) {
-      out = await db.query(`INSERT INTO case_values (case_id,key,value,updated_by) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING key,value,version`,
-        [id, b.key, JSON.stringify(b.value), req.actor.id]);
-    } else {
-      out = await db.query(`UPDATE case_values SET value=$3, version=version+1, updated_by=$4, updated_at=now() WHERE case_id=$1 AND key=$2 AND version=$5 RETURNING key,value,version`,
-        [id, b.key, JSON.stringify(b.value), req.actor.id, b.expectedVersion]);
-    }
-    if (!out.rows.length) {
-      const cur = (await db.query('SELECT key,value,version FROM case_values WHERE case_id=$1 AND key=$2', [id, b.key])).rows[0] || null;
-      throw new ApiError(409, 'conflict', 'This value was changed by someone else', { current: cur });
-    }
-    await touch(db, id);
-    res.json(out.rows[0]);
+    const out = await db.withTx(async (c) => {
+      const old = (await c.query('SELECT value, version FROM case_values WHERE case_id=$1 AND key=$2 FOR UPDATE', [id, b.key])).rows[0] || null;
+      const q = b.expectedVersion === 0
+        ? await c.query(`INSERT INTO case_values (case_id,key,value,updated_by) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING key,value,version`,
+          [id, b.key, JSON.stringify(b.value), req.actor.id])
+        : await c.query(`UPDATE case_values SET value=$3, version=version+1, updated_by=$4, updated_at=now() WHERE case_id=$1 AND key=$2 AND version=$5 RETURNING key,value,version`,
+          [id, b.key, JSON.stringify(b.value), req.actor.id, b.expectedVersion]);
+      if (!q.rows.length) throw new ApiError(409, 'conflict', 'This value was changed by someone else', { current: old && { key: b.key, ...old } });
+      await touch(c, id);
+      await audit(c, { action: 'value.set', entity: 'case_value', entity_id: b.key, case_id: id, before: old, after: { value: q.rows[0].value, version: q.rows[0].version } });
+      return q.rows[0];
+    });
+    res.json(out);
   }));
 
   // ================= notes (draft -> signed; amend creates a new note) =================
@@ -482,11 +505,15 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   r.post('/cases/:id/notes', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.noteCreate, req.body);
     if (!(await db.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
-    const n = await db.query(`INSERT INTO case_notes (id,case_id,type,set_id,text,created_by) VALUES (COALESCE($1,gen_random_uuid()),$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING RETURNING *`,
-      [b.id || null, id, b.type, b.setId || null, b.text || '', req.actor.id]);
-    if (!n.rows.length) throw new ApiError(409, 'conflict', 'A note with this id already exists');
-    await touch(db, id);
-    res.status(201).json(noteOut(n.rows[0]));
+    const n = await db.withTx(async (c) => {
+      const ins = await c.query(`INSERT INTO case_notes (id,case_id,type,set_id,text,created_by) VALUES (COALESCE($1,gen_random_uuid()),$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING RETURNING *`,
+        [b.id || null, id, b.type, b.setId || null, b.text || '', req.actor.id]);
+      if (!ins.rows.length) throw new ApiError(409, 'conflict', 'A note with this id already exists');
+      await touch(c, id);
+      await audit(c, { action: 'note.create', entity: 'case_note', entity_id: ins.rows[0].id, case_id: id, after: { type: b.type, setId: b.setId || null, text: b.text || '' } });
+      return ins.rows[0];
+    });
+    res.status(201).json(noteOut(n));
   }));
   const noteAct = async (req, res, fn) => { res.json(noteOut(await fn(idParam(req.params.id), idParam(req.params.nid)))); };
   async function noteConflict(q, cid, nid) {
@@ -497,26 +524,39 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   }
   r.patch('/cases/:id/notes/:nid', wrap((req, res) => noteAct(req, res, async (cid, nid) => {
     const b = parse(S.notePatch, req.body);
-    const u = await db.query(`UPDATE case_notes SET text=$4, version=version+1 WHERE id=$1 AND case_id=$2 AND version=$3 AND status='draft' RETURNING *`, [nid, cid, b.expectedVersion, b.text]);
-    if (!u.rows.length) await noteConflict(db, cid, nid);
-    await touch(db, cid); return u.rows[0];
+    return db.withTx(async (c) => {
+      const old = (await c.query('SELECT text, version FROM case_notes WHERE id=$1 AND case_id=$2 FOR UPDATE', [nid, cid])).rows[0];
+      const u = await c.query(`UPDATE case_notes SET text=$4, version=version+1 WHERE id=$1 AND case_id=$2 AND version=$3 AND status='draft' RETURNING *`, [nid, cid, b.expectedVersion, b.text]);
+      if (!u.rows.length) await noteConflict(c, cid, nid);
+      await touch(c, cid);
+      await audit(c, { action: 'note.edit', entity: 'case_note', entity_id: nid, case_id: cid, before: { text: old.text, version: old.version }, after: { text: b.text, version: u.rows[0].version } });
+      return u.rows[0];
+    });
   })));
   r.post('/cases/:id/notes/:nid/sign', wrap((req, res) => noteAct(req, res, async (cid, nid) => {
     const b = parse(S.noteSign, req.body);                // signer comes from the session, never the body
-    const u = await db.query(`UPDATE case_notes SET status='signed', signed_by=$4, signed_at=now(), version=version+1
-      WHERE id=$1 AND case_id=$2 AND version=$3 AND status='draft' RETURNING *`, [nid, cid, b.expectedVersion, req.actor.id]);
-    if (!u.rows.length) await noteConflict(db, cid, nid);
-    await touch(db, cid); return u.rows[0];
+    return db.withTx(async (c) => {
+      const u = await c.query(`UPDATE case_notes SET status='signed', signed_by=$4, signed_at=now(), version=version+1
+        WHERE id=$1 AND case_id=$2 AND version=$3 AND status='draft' RETURNING *`, [nid, cid, b.expectedVersion, req.actor.id]);
+      if (!u.rows.length) await noteConflict(c, cid, nid);
+      await touch(c, cid);
+      await audit(c, { action: 'note.sign', entity: 'case_note', entity_id: nid, case_id: cid, before: { status: 'draft', version: b.expectedVersion }, after: { status: 'signed', version: u.rows[0].version } });
+      return u.rows[0];
+    });
   })));
   r.post('/cases/:id/notes/:nid/amend', wrap(async (req, res) => {
     const cid = idParam(req.params.id), nid = idParam(req.params.nid), b = parse(S.noteAmend, req.body);
-    const orig = (await db.query('SELECT * FROM case_notes WHERE id=$1 AND case_id=$2', [nid, cid])).rows[0];
-    if (!orig) throw new ApiError(404, 'not_found', 'Note not found');
-    if (orig.status !== 'signed') throw new ApiError(422, 'not_signed', 'Only a signed note can be amended');
-    const n = await db.query(`INSERT INTO case_notes (case_id,type,set_id,text,amends_id,reason,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [cid, orig.type, orig.set_id, b.text, nid, b.reason, req.actor.id]);
-    await touch(db, cid);
-    res.status(201).json(noteOut(n.rows[0]));
+    const n = await db.withTx(async (c) => {
+      const orig = (await c.query('SELECT * FROM case_notes WHERE id=$1 AND case_id=$2', [nid, cid])).rows[0];
+      if (!orig) throw new ApiError(404, 'not_found', 'Note not found');
+      if (orig.status !== 'signed') throw new ApiError(422, 'not_signed', 'Only a signed note can be amended');
+      const ins = await c.query(`INSERT INTO case_notes (case_id,type,set_id,text,amends_id,reason,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+        [cid, orig.type, orig.set_id, b.text, nid, b.reason, req.actor.id]);
+      await touch(c, cid);
+      await audit(c, { action: 'note.amend', entity: 'case_note', entity_id: ins.rows[0].id, case_id: cid, reason: b.reason, before: { amends: nid, text: orig.text }, after: { text: b.text } });
+      return ins.rows[0];
+    });
+    res.status(201).json(noteOut(n));
   }));
 
   // ================= element sets (seed / read-only sets cannot be changed) =================
@@ -550,8 +590,10 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
       if (!cur && b.expectedVersion) throw new ApiError(409, 'conflict', 'This set does not exist yet');
       const v = cur ? cur.version + 1 : 1;
       const body = { ...b.body, setId: b.setId, kind: b.kind, version: v };
-      return (await c.query(`INSERT INTO element_sets (set_id,version,kind,body,source,read_only,tier,content_hash,created_by) VALUES ($1,$2,$3,$4,'user',false,'local-draft',$5,$6) RETURNING *`,
+      const saved = (await c.query(`INSERT INTO element_sets (set_id,version,kind,body,source,read_only,tier,content_hash,created_by) VALUES ($1,$2,$3,$4,'user',false,'local-draft',$5,$6) RETURNING *`,
         [b.setId, v, b.kind, JSON.stringify(body), hashOf(body), req.actor.id])).rows[0];
+      await audit(c, { action: 'set.save', entity: 'element_set', entity_id: b.setId, before: cur ? { version: cur.version, contentHash: cur.content_hash } : null, after: { version: v, kind: b.kind, contentHash: saved.content_hash } });
+      return saved;
     });
     res.status(201).json(setOut(out));
   }));
@@ -580,11 +622,18 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
         u = (await c.query(`UPDATE set_usage SET with_dx = jsonb_set(with_dx, ARRAY[$3::text], to_jsonb(COALESCE((with_dx->>$3::text)::int,0)+1))
           WHERE user_id=$1 AND set_id=$2 RETURNING count,last_used,with_dx`, [req.actor.id, sid, k])).rows[0];
       }
+      await audit(c, { action: 'usage.count', entity: 'set_usage', entity_id: sid, after: { count: u.count, dx: dl } });
       return u;
     });
     res.json({ count: out.count, lastUsed: iso(out.last_used), withDx: out.with_dx });
   }));
-  r.delete('/usage', wrap(async (req, res) => { await db.query('DELETE FROM set_usage WHERE user_id=$1', [req.actor.id]); res.status(204).end(); }));
+  r.delete('/usage', wrap(async (req, res) => {
+    await db.withTx(async (c) => {
+      const d = await c.query('DELETE FROM set_usage WHERE user_id=$1', [req.actor.id]);
+      await audit(c, { action: 'usage.clear', entity: 'set_usage', entity_id: req.actor.id, before: { rows: d.rowCount } });
+    });
+    res.status(204).end();
+  }));
 
   // ================= codes and bindings (reference data) =================
   const codeOut = (c) => ({ system: c.system, code: c.code, display: c.display, verifiedLive: c.verified_live, addedBy: c.added_by, addedAt: iso(c.added_at) });
@@ -599,20 +648,29 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   // Adding never overwrites: a code already in the table returns 409 with the existing row (display and who added it stay as they were).
   r.post('/codes', wrap(async (req, res) => {
     const b = parse(S.codePost, req.body);
-    const u = await db.query('INSERT INTO verified_codes (system,code,display,added_by) VALUES ($1,$2,$3,$4) ON CONFLICT (system,code) DO NOTHING RETURNING *', [b.system, b.code, b.display, req.actor.id]);
-    if (!u.rows.length) {
-      const cur = (await db.query('SELECT * FROM verified_codes WHERE system=$1 AND code=$2', [b.system, b.code])).rows[0];
-      throw new ApiError(409, 'conflict', 'This code is already in the verified table', { current: cur && codeOut(cur) });
-    }
-    res.status(201).json(codeOut(u.rows[0]));
+    const row = await db.withTx(async (c) => {
+      const u = await c.query('INSERT INTO verified_codes (system,code,display,added_by) VALUES ($1,$2,$3,$4) ON CONFLICT (system,code) DO NOTHING RETURNING *', [b.system, b.code, b.display, req.actor.id]);
+      if (!u.rows.length) {
+        const cur = (await c.query('SELECT * FROM verified_codes WHERE system=$1 AND code=$2', [b.system, b.code])).rows[0];
+        throw new ApiError(409, 'conflict', 'This code is already in the verified table', { current: cur && codeOut(cur) });
+      }
+      await audit(c, { action: 'code.add', entity: 'verified_code', entity_id: `${b.system}/${b.code}`, after: { display: b.display } });
+      return u.rows[0];
+    });
+    res.status(201).json(codeOut(row));
   }));
   // Result of the live lookup. The client sends only ok (and the display it saw); the server stamps who and when.
   r.post('/codes/:system/:code/live', wrap(async (req, res) => {
     const [system, code] = codeKey(req), b = parse(S.codeLive, req.body);
     const live = { ok: b.ok, checkedAt: new Date().toISOString(), checkedBy: req.actor.id }; if (b.display) live.display = b.display;
-    const u = await db.query('UPDATE verified_codes SET verified_live=$3::jsonb WHERE system=$1 AND code=$2 RETURNING *', [system, code, JSON.stringify(live)]);
-    if (!u.rows.length) throw new ApiError(404, 'not_found', 'This code is not in the verified table');
-    res.json(codeOut(u.rows[0]));
+    const row = await db.withTx(async (c) => {
+      const old = (await c.query('SELECT verified_live FROM verified_codes WHERE system=$1 AND code=$2 FOR UPDATE', [system, code])).rows[0];
+      if (!old) throw new ApiError(404, 'not_found', 'This code is not in the verified table');
+      const u = await c.query('UPDATE verified_codes SET verified_live=$3::jsonb WHERE system=$1 AND code=$2 RETURNING *', [system, code, JSON.stringify(live)]);
+      await audit(c, { action: 'code.verify_live', entity: 'verified_code', entity_id: `${system}/${code}`, before: old.verified_live, after: live });
+      return u.rows[0];
+    });
+    res.json(codeOut(row));
   }));
   r.get('/bindings', wrap(async (req, res) => {
     res.json((await db.query('SELECT set_id,field_id,system,code,display FROM code_bindings ORDER BY set_id,field_id')).rows
@@ -620,12 +678,20 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   }));
   r.put('/bindings', wrap(async (req, res) => {
     const b = parse(S.bindPut, req.body);
-    await db.query(`INSERT INTO code_bindings (set_id,field_id,system,code,display) VALUES ($1,$2,$3,$4,$5)
-      ON CONFLICT (set_id,field_id) DO UPDATE SET system=EXCLUDED.system, code=EXCLUDED.code, display=EXCLUDED.display`, [b.setId, b.fieldId, b.system, b.code, b.display]);
+    await db.withTx(async (c) => {
+      const old = (await c.query('SELECT system,code,display FROM code_bindings WHERE set_id=$1 AND field_id=$2 FOR UPDATE', [b.setId, b.fieldId])).rows[0] || null;
+      await c.query(`INSERT INTO code_bindings (set_id,field_id,system,code,display) VALUES ($1,$2,$3,$4,$5)
+        ON CONFLICT (set_id,field_id) DO UPDATE SET system=EXCLUDED.system, code=EXCLUDED.code, display=EXCLUDED.display`, [b.setId, b.fieldId, b.system, b.code, b.display]);
+      await audit(c, { action: 'binding.set', entity: 'code_binding', entity_id: `${b.setId}/${b.fieldId}`, before: old, after: { system: b.system, code: b.code, display: b.display } });
+    });
     res.json(b);
   }));
   r.delete('/bindings/:setId/:fieldId', wrap(async (req, res) => {
-    await db.query('DELETE FROM code_bindings WHERE set_id=$1 AND field_id=$2', [identParam(req.params.setId), identParam(req.params.fieldId)]);
+    const sid = identParam(req.params.setId), fid = identParam(req.params.fieldId);
+    await db.withTx(async (c) => {
+      const d = await c.query('DELETE FROM code_bindings WHERE set_id=$1 AND field_id=$2 RETURNING system,code,display', [sid, fid]);
+      await audit(c, { action: 'binding.delete', entity: 'code_binding', entity_id: `${sid}/${fid}`, before: d.rows[0] || null });
+    });
     res.status(204).end();
   }));
 
@@ -644,28 +710,42 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   r.put('/rules/:owner/:ruleId', wrap(async (req, res) => {
     const owner = identParam(req.params.owner), rid = identParam(req.params.ruleId), b = parse(S.rulePut, req.body);
     const src = b.body.provenance && b.body.provenance.source === 'ai-drafted' ? 'ai-drafted' : 'manual';
-    const q = b.expectedVersion === 0
-      ? await db.query(`INSERT INTO cds_rules (owner_set_id,rule_id,body,source,created_by) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING *`, [owner, rid, JSON.stringify(b.body), src, req.actor.id])
-      : await db.query(`UPDATE cds_rules SET body=$3, source=$4, enabled=false, verified_by_user=NULL, verified_at=NULL, version=version+1, updated_at=now()
-          WHERE owner_set_id=$1 AND rule_id=$2 AND version=$5 RETURNING *`, [owner, rid, JSON.stringify(b.body), src, b.expectedVersion]);
-    if (!q.rows.length) await ruleConflict(owner, rid);
-    res.json(ruleOut(q.rows[0]));
+    const row = await db.withTx(async (c) => {
+      const old = (await c.query('SELECT body,enabled,version FROM cds_rules WHERE owner_set_id=$1 AND rule_id=$2 FOR UPDATE', [owner, rid])).rows[0] || null;
+      const q = b.expectedVersion === 0
+        ? await c.query(`INSERT INTO cds_rules (owner_set_id,rule_id,body,source,created_by) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING *`, [owner, rid, JSON.stringify(b.body), src, req.actor.id])
+        : await c.query(`UPDATE cds_rules SET body=$3, source=$4, enabled=false, verified_by_user=NULL, verified_at=NULL, version=version+1, updated_at=now()
+            WHERE owner_set_id=$1 AND rule_id=$2 AND version=$5 RETURNING *`, [owner, rid, JSON.stringify(b.body), src, b.expectedVersion]);
+      if (!q.rows.length) await ruleConflict(owner, rid);
+      await audit(c, { action: 'rule.save', entity: 'cds_rule', entity_id: `${owner}/${rid}`, before: old, after: { body: b.body, enabled: false, version: q.rows[0].version } });
+      return q.rows[0];
+    });
+    res.json(ruleOut(row));
   }));
   const ruleToggle = (enable) => wrap(async (req, res) => {
     const owner = identParam(req.params.owner), rid = identParam(req.params.ruleId), b = parse(S.ruleAct, req.body);
-    const q = enable
-      ? await db.query(`UPDATE cds_rules SET enabled=true, verified_by_user=$4, verified_at=now(), version=version+1, updated_at=now() WHERE owner_set_id=$1 AND rule_id=$2 AND version=$3 RETURNING *`, [owner, rid, b.expectedVersion, req.actor.id])
-      : await db.query(`UPDATE cds_rules SET enabled=false, version=version+1, updated_at=now() WHERE owner_set_id=$1 AND rule_id=$2 AND version=$3 RETURNING *`, [owner, rid, b.expectedVersion]);
-    if (!q.rows.length) await ruleConflict(owner, rid);
-    res.json(ruleOut(q.rows[0]));
+    const row = await db.withTx(async (c) => {
+      const q = enable
+        ? await c.query(`UPDATE cds_rules SET enabled=true, verified_by_user=$4, verified_at=now(), version=version+1, updated_at=now() WHERE owner_set_id=$1 AND rule_id=$2 AND version=$3 RETURNING *`, [owner, rid, b.expectedVersion, req.actor.id])
+        : await c.query(`UPDATE cds_rules SET enabled=false, version=version+1, updated_at=now() WHERE owner_set_id=$1 AND rule_id=$2 AND version=$3 RETURNING *`, [owner, rid, b.expectedVersion]);
+      if (!q.rows.length) await ruleConflict(owner, rid);
+      await audit(c, { action: enable ? 'rule.approve' : 'rule.disable', entity: 'cds_rule', entity_id: `${owner}/${rid}`,
+        before: { enabled: !enable, version: b.expectedVersion }, after: { enabled: enable, version: q.rows[0].version } });
+      return q.rows[0];
+    });
+    res.json(ruleOut(row));
   });
   r.post('/rules/:owner/:ruleId/approve', ruleToggle(true));
   r.post('/rules/:owner/:ruleId/disable', ruleToggle(false));
   r.delete('/rules/:owner/:ruleId', wrap(async (req, res) => {
     const v = Number(req.query.expectedVersion);
     if (!Number.isInteger(v) || v < 1) throw new ApiError(400, 'validation', 'expectedVersion query parameter required');
-    const d = await db.query('DELETE FROM cds_rules WHERE owner_set_id=$1 AND rule_id=$2 AND version=$3 RETURNING 1', [identParam(req.params.owner), identParam(req.params.ruleId), v]);
-    if (!d.rows.length) await ruleConflict(req.params.owner, req.params.ruleId);
+    const owner = identParam(req.params.owner), rid = identParam(req.params.ruleId);
+    await db.withTx(async (c) => {
+      const d = await c.query('DELETE FROM cds_rules WHERE owner_set_id=$1 AND rule_id=$2 AND version=$3 RETURNING body,enabled,version', [owner, rid, v]);
+      if (!d.rows.length) await ruleConflict(owner, rid);
+      await audit(c, { action: 'rule.delete', entity: 'cds_rule', entity_id: `${owner}/${rid}`, before: d.rows[0] });
+    });
     res.status(204).end();
   }));
 
@@ -679,24 +759,37 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   r.get('/protocols', wrap(async (req, res) => { const o = {}; for (const x of (await db.query('SELECT * FROM protocols')).rows) o[x.set_id] = protoOut(x); res.json(o); }));
   r.put('/protocols/:setId', wrap(async (req, res) => {
     const sid = identParam(req.params.setId), b = parse(S.protoPut, req.body);
-    const q = b.expectedVersion === 0
-      ? await db.query('INSERT INTO protocols (set_id,body) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING *', [sid, JSON.stringify(b.body)])
-      : await db.query(`UPDATE protocols SET body=$2, verified_by_user=NULL, verified_at=NULL, version=version+1, updated_at=now() WHERE set_id=$1 AND version=$3 RETURNING *`, [sid, JSON.stringify(b.body), b.expectedVersion]);
-    if (!q.rows.length) await protoConflict(sid);
-    res.json(protoOut(q.rows[0]));
+    const row = await db.withTx(async (c) => {
+      const old = (await c.query('SELECT body,version FROM protocols WHERE set_id=$1 FOR UPDATE', [sid])).rows[0] || null;
+      const q = b.expectedVersion === 0
+        ? await c.query('INSERT INTO protocols (set_id,body) VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING *', [sid, JSON.stringify(b.body)])
+        : await c.query(`UPDATE protocols SET body=$2, verified_by_user=NULL, verified_at=NULL, version=version+1, updated_at=now() WHERE set_id=$1 AND version=$3 RETURNING *`, [sid, JSON.stringify(b.body), b.expectedVersion]);
+      if (!q.rows.length) await protoConflict(sid);
+      await audit(c, { action: 'protocol.save', entity: 'protocol', entity_id: sid, before: old, after: { body: b.body, version: q.rows[0].version } });
+      return q.rows[0];
+    });
+    res.json(protoOut(row));
   }));
   r.post('/protocols/:setId/approve', wrap(async (req, res) => {
     const sid = identParam(req.params.setId), b = parse(S.ruleAct, req.body);
-    const q = await db.query(`UPDATE protocols SET verified_by_user=$3, verified_at=now(), version=version+1, updated_at=now() WHERE set_id=$1 AND version=$2 RETURNING *`, [sid, b.expectedVersion, req.actor.id]);
-    if (!q.rows.length) await protoConflict(sid);
-    res.json(protoOut(q.rows[0]));
+    const row = await db.withTx(async (c) => {
+      const q = await c.query(`UPDATE protocols SET verified_by_user=$3, verified_at=now(), version=version+1, updated_at=now() WHERE set_id=$1 AND version=$2 RETURNING *`, [sid, b.expectedVersion, req.actor.id]);
+      if (!q.rows.length) await protoConflict(sid);
+      await audit(c, { action: 'protocol.approve', entity: 'protocol', entity_id: sid, before: { version: b.expectedVersion }, after: { version: q.rows[0].version } });
+      return q.rows[0];
+    });
+    res.json(protoOut(row));
   }));
 
   // ================= prefs (per user) =================
   r.get('/prefs', wrap(async (req, res) => { const o = {}; for (const x of (await db.query('SELECT key,value FROM user_prefs WHERE user_id=$1', [req.actor.id])).rows) o[x.key] = x.value; res.json(o); }));
   r.put('/prefs/:key', wrap(async (req, res) => {
     const k = identParam(req.params.key), b = parse(S.prefPut, req.body);
-    await db.query('INSERT INTO user_prefs (user_id,key,value) VALUES ($1,$2,$3) ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value', [req.actor.id, k, JSON.stringify(b.value)]);
+    await db.withTx(async (c) => {
+      const old = (await c.query('SELECT value FROM user_prefs WHERE user_id=$1 AND key=$2 FOR UPDATE', [req.actor.id, k])).rows[0];
+      await c.query('INSERT INTO user_prefs (user_id,key,value) VALUES ($1,$2,$3) ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value', [req.actor.id, k, JSON.stringify(b.value)]);
+      await audit(c, { action: 'pref.set', entity: 'user_pref', entity_id: k, before: old ? { value: old.value } : null, after: { value: b.value } });
+    });
     res.json({ key: k, value: b.value });
   }));
 
@@ -714,11 +807,15 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
       const idMap = await commitImport(c, plan.out, req.actor.id), full = reportOut(plan.rep);
       const rec = (await c.query(`INSERT INTO imports (user_id,source,status,counts,report) VALUES ($1,'browser','committed',$2,$3) RETURNING id`,
         [req.actor.id, JSON.stringify(plan.rep.counts), JSON.stringify({ ...full, signers: plan.rep.signers })])).rows[0].id;
+      await audit(c, { action: 'import.commit', entity: 'import', entity_id: rec, after: { counts: plan.rep.counts } });
       return { rep: plan.rep, idMap, importId: rec };
     });
-    if (!done.idMap) {                                                       // refused: nothing was written except this record of the attempt
+    if (!done.idMap) {                                                       // refused: nothing was written except this record of the attempt (and its audit row)
       const full = reportOut(done.rep);
-      await db.query(`INSERT INTO imports (user_id,source,status,counts,report) VALUES ($1,'browser','failed',$2,$3)`, [req.actor.id, JSON.stringify(done.rep.counts), JSON.stringify(full)]);
+      await db.withTx(async (c) => {
+        const rec = (await c.query(`INSERT INTO imports (user_id,source,status,counts,report) VALUES ($1,'browser','failed',$2,$3) RETURNING id`, [req.actor.id, JSON.stringify(done.rep.counts), JSON.stringify(full)])).rows[0].id;
+        await audit(c, { action: 'import.failed', entity: 'import', entity_id: rec, after: { counts: done.rep.counts, invalid: done.rep.invalid.length } });
+      });
       throw new ApiError(422, 'import_invalid', `Nothing was imported: ${done.rep.invalid.length} problem(s) found. Fix them or remove those items and try again.`, { report: full });
     }
     res.status(201).json({ status: 'committed', importId: done.importId, cases: done.idMap, ...reportOut(done.rep) });
