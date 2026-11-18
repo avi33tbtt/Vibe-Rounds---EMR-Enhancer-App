@@ -10,6 +10,7 @@ const request = require('supertest');
 const { Client } = require('pg');
 const { createDb, migrate, createApp } = require('./server.js');
 const { ROUTE_ACTIONS } = require('./permissions.js');
+const { hashPassword } = require('./auth.js');
 
 try { fs.existsSync('.env') && process.loadEnvFile('.env'); } catch (_) {}
 const base = new URL(process.env.DATABASE_URL || 'postgres://x@127.0.0.1/x');
@@ -77,6 +78,15 @@ test('every write route writes exactly one audit row, attributed to the logged-i
     ['PUT /protocols/:setId', 'protocol.save', 200, () => api().put('/api/protocols/care.t').send({ body: {}, expectedVersion: 0 })],
     ['POST /protocols/:setId/approve', 'protocol.approve', 200, () => P('/api/protocols/care.t/approve', { expectedVersion: 1 })],
     ['PUT /prefs/:key', 'pref.set', 200, () => api().put('/api/prefs/theme').send({ value: 'dark' })],
+    ['POST /users', 'user.create', 201, async () => { const r = await P('/api/users', { username: 'aud-new-' + imp, name: 'Aud New', role: 'nurse' }); st.u = r.body.user; return r; }],
+    ['POST /users/:id/role', 'user.role', 200, () => P(`/api/users/${st.u.id}/role`, { role: 'viewer' })],
+    ['POST /users/:id/reset-password', 'user.reset_password', 200, () => P(`/api/users/${st.u.id}/reset-password`, {})],
+    ['POST /users/:id/deactivate', 'user.deactivate', 200, () => P(`/api/users/${st.u.id}/deactivate`, {})],
+    ['POST /users/:id/reactivate', 'user.reactivate', 200, () => P(`/api/users/${st.u.id}/reactivate`, {})],
+    ['POST /password', 'password.change', 204, async () => {          // the test actor has no password: give it one, then change it through the route
+      await owner.query('UPDATE users SET password_hash=$2 WHERE id=$1', [actors.admin.id, await hashPassword('old test passphrase 1')]);
+      return P('/api/password', { currentPassword: 'old test passphrase 1', newPassword: 'new test passphrase 2' });
+    }],
     ['POST /import', 'import.commit', 201, () => P('/api/import', { cases: [mkCase(imp)] })],
     ['POST /import', 'import.failed', 422, () => P('/api/import', { cases: [mkCase(imp + '-bad', { values: { 'bad key with spaces': 1 } })] })],
   ];

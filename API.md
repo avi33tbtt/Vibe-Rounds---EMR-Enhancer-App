@@ -97,6 +97,8 @@ Every route that changes data writes **one** `audit_log` row on the same databas
 | `PUT /protocols/:setId` / `POST …/approve` | `protocol.save` / `protocol.approve` |
 | `PUT /prefs/:key` | `pref.set` |
 | `POST /import` | `import.commit` (or `import.failed`, for the 422 attempt record) |
+| `POST /users` / `…/deactivate` / `…/reactivate` / `…/reset-password` / `…/role` | `user.create` / `user.deactivate` / `user.reactivate` / `user.reset_password` / `user.role` |
+| `POST /password` | `password.change` |
 
 `POST /import/dry-run` and the refused `PATCH`/`DELETE /element-sets/:setId` write nothing, so they write no audit row. `audit.test.js` fails if a new write route is added without an audit test. Login, logout and failed-login events are not audited yet (see the next chunk).
 
@@ -120,7 +122,7 @@ Mounted before the data routes. The data routes still use the development user u
 - **Timeouts:** idle 30 min (`SESSION_IDLE_MINUTES`, slides forward on use, written at most every 30 s) and absolute 12 h (`SESSION_ABSOLUTE_HOURS`, never extended). Both use the database clock. An ended session is deleted and the cookie cleared.
 - **Lockout:** 5 wrong passwords lock that account for 15 minutes; no password check happens while locked and the count does not grow. A success resets the count. A limiter of 20 failures per address per 10 minutes (in memory, per server process) also covers usernames that do not exist.
 - **Passwords:** scrypt (N=32768, r=8, p=1) with a random salt, stored as `scrypt$N$r$p$salt$hash` so the cost can be raised later. Minimum 12 characters (`passwordProblem`, used when users are created in chunks 32c and 32e).
-- `requireAuth` (in `auth.js`) sets `req.user = {id, name, role, sessionId}`. Deactivating a user ends their open sessions at the next request.
+- `requireAuth` (in `auth.js`) sets `req.user = {id, name, role, sessionId}`. Deactivating a user now also deletes their sessions at once (chunk 32e1); `requireAuth` still refuses an inactive user as a second guard.
 
 ## Routes and permissions (chunk 32b)
 One table, `permissions.js`: action -> roles. Each route maps to exactly one action in `ROUTE_ACTIONS`, and the server refuses to start if a route has none. Paths are under `/api`. `POST /login`, `POST /logout` and `GET /session` are the login itself and `GET /health` is public.
@@ -168,13 +170,21 @@ One table, `permissions.js`: action -> roles. Each route maps to exactly one act
 | `PUT /prefs/:key` | `pref.write` | all |
 | `POST /import/dry-run` | `import.run` | admin |
 | `POST /import` | `import.run` | admin |
+| `GET /audit`, `GET /audit.csv` | `audit.read` | admin |
+| `GET /users` | `user.manage` | admin |
+| `POST /users` | `user.manage` | admin |
+| `POST /users/:id/deactivate` | `user.manage` | admin |
+| `POST /users/:id/reactivate` | `user.manage` | admin |
+| `POST /users/:id/reset-password` | `user.manage` | admin |
+| `POST /users/:id/role` | `user.manage` | admin |
+| `POST /password` | `password.change` | all |
 
 **Finer rules inside a route**
 - `PATCH /cases/:id` needs the right for *every* field in the body (`narrative` -> `case.narrative`, `applied` and `pathways` -> `case.apply`, `patient` -> `case.patient`, `pinned` -> `case.pin`, `alertLog` -> `alert.ack`). One forbidden field refuses the whole change.
 - A **nurse** adds readings, and amends or marks "entered in error" only **her own** readings, and only in sets of kind `care`. A set the server cannot find counts as not care. Doctors and admins amend any row.
 - Only a **doctor or admin** can approve a rule or protocol. Editing an approved rule or protocol resets approval (unchanged from 30c). The approver is the session user.
 - `usage` and `prefs` are the caller's own display data, so every role (including viewer) may write them.
-- Defined for later chunks, no routes yet: `user.manage` (admin), `content.review` and `package.install` (informatician, admin).
+- `user.manage` (admin) and `password.change` (every role) have routes since chunk 32e1. Defined for Phase 6, no routes yet: `content.review` and `package.install` (informatician, admin).
 
 **Decisions to confirm:** admin holds every action; a nurse cannot apply sets or pathways, write notes or save non-repeating values (so a nurse cannot start a new flowsheet; a doctor applies it first); informatician may author sets, pathways and codes but not chart.
 
@@ -187,3 +197,24 @@ Admin only (action `audit.read`; every other role gets 403, logged out gets 401)
 | `GET /audit.csv` | The same filters (no `limit`/`before`) as a CSV download, up to 50,000 rows; `X-Audit-Rows` and `X-Audit-Truncated` say what was sent. Columns: `id, at, user_id, username, role, action, entity, entity_id, patient_id, reason, ip`. Record contents (`before`/`after`) are **not** exported. Cells starting with `=`, `+`, `-`, `@`, tab or CR get a leading `'` so a spreadsheet cannot run them as formulas. The export writes its own `audit_export` row (the filter, the row count, whether it was cut off) in the same transaction as the read: if that row cannot be written, nothing is exported (500). The export is not in its own file, but is in the next one. |
 
 Decisions to confirm: viewing the screen is not logged (only exports are); `before`/`after` are on screen but not in the CSV; the 50,000-row cap is reported, not silent.
+
+## Users and passwords (chunk 32e1)
+Admin only (action `user.manage`), except `POST /password`, which every signed-in role may call for **its own** account. All user routes are under `/api`, need the CSRF header like every write, and write one audit row in the same transaction. **No password and no hash is ever written to an audit row or to a log, and no hash is ever returned.**
+
+A user in answers: `{id, username, name, role, active, lastLoginAt, mustChangePassword, locked, createdAt}`.
+
+| Route | Body | What it does |
+|---|---|---|
+| `GET /users` | | All users, sorted by username (case-insensitive). |
+| `POST /users` | `{username, name, role, password?}` | `201 {user, temporaryPassword?}`. Username: letters, digits and `. _ @ -`, 1 to 100 characters, unique ignoring case (`409 username_taken`). Without `password` the server generates a 16-character temporary password and returns it **once** in `temporaryPassword`; a typed `password` (12 to 200 characters) is never echoed. The new user is active and `mustChangePassword` is true. Unknown fields (for example `active`, `mustChangePassword`) are rejected (400). |
+| `POST /users/:id/deactivate` | `{}` | Sets `active=false` and deletes all that user's sessions in the same transaction. Never deletes the user. `409 already_inactive`. |
+| `POST /users/:id/reactivate` | `{}` | Sets `active=true` and clears the failed-login count and lock. `409 already_active`. |
+| `POST /users/:id/reset-password` | `{password?}` | Same password rules as create (generated temporary password returned once, or a typed one). Sets `mustChangePassword`, ends all that user's sessions, clears the lock. Refused for your own account (`400 use_password_change`). |
+| `POST /users/:id/role` | `{role}` | Changes the role; effective on that user's next request (the role is read from the database on every request, so open sessions follow it). `409 no_change` if unchanged. |
+| `POST /password` | `{currentPassword, newPassword}` | Changes the caller's own password: the current one must be right (`422 wrong_password`, deliberately not 401, which means "signed out"), the new one 12 to 200 characters and different from the current one. Clears `mustChangePassword`, ends the caller's **other** sessions and keeps this one. `204`. |
+
+**Last-admin rule.** `deactivate` and a `role` change away from admin are refused with `409 last_admin` when the target is the only *active admin with a password*, including an admin acting on themselves. The check runs inside the transaction under an advisory lock, so two admins removing each other at the same moment cannot both succeed.
+
+**Audit actions:** `user.create`, `user.deactivate` (with `sessionsEnded`), `user.reactivate`, `user.reset_password` (with `generated: true|false`, `sessionsEnded`), `user.role` (before and after role), `password.change` (with `otherSessionsEnded`). Only username, name, role and active are recorded about the user.
+
+**Decisions to confirm:** (1) a server-generated temporary password is returned once in the response, because the admin has to hand it over; it is the only place a password leaves the server; (2) resetting a password signs that user out everywhere and clears a lock; (3) the temporary password lets the user sign in, and `mustChangePassword` is reported by login, `/me` and the users list, but **the server does not yet block other routes until the password is changed** (the screen enforces it in 32e2; a server-side block is listed as left to do).

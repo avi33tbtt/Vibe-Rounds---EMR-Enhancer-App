@@ -11,6 +11,7 @@ const express = require('express');
 const { z } = require('zod');
 const crypto = require('node:crypto');
 const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied, allowedActions, ACTION_LABELS } = require('./permissions.js');
+const { hashPassword, verifyPassword, passwordProblem } = require('./auth.js');   // chunk 32e1: admin users routes and own-password change
 const { audit, auditContext, auditPage, auditOut, csvLine, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
 
 class ApiError extends Error {
@@ -47,6 +48,11 @@ const auditFilter = {
 };
 const reasonText = z.string().trim().min(3).max(1000);
 const S = {
+  userCreate: z.object({ username: z.string().regex(/^[A-Za-z0-9._@-]{1,100}$/, 'letters, digits and . _ @ - only, 1 to 100 characters'), name: z.string().trim().min(1).max(200),
+    role: z.enum(['admin', 'doctor', 'nurse', 'informatician', 'viewer']), password: z.string().max(200).optional() }).strict(),
+  userReset: z.object({ password: z.string().max(200).optional() }).strict(),
+  userRole: z.object({ role: z.enum(['admin', 'doctor', 'nurse', 'informatician', 'viewer']) }).strict(),
+  passwordChange: z.object({ currentPassword: z.string().min(1).max(200), newPassword: z.string().max(200) }).strict(),
   auditQuery: z.object({ ...auditFilter, before: z.string().regex(/^\d{1,18}$/).optional(), limit: z.string().regex(/^\d{1,3}$/).optional() }).strict(),
   auditCsv: z.object(auditFilter).strict(),
   caseCreate: z.object({ id: uuid.optional(), patient: patientObj.optional(), narrative: z.string().max(200000).optional(),
@@ -841,6 +847,110 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
       throw new ApiError(422, 'import_invalid', `Nothing was imported: ${done.rep.invalid.length} problem(s) found. Fix them or remove those items and try again.`, { report: full });
     }
     res.status(201).json({ status: 'committed', importId: done.importId, cases: done.idMap, ...reportOut(done.rep) });
+  }));
+
+  // ================= users: admin only (chunk 32e1) =================
+  // No password or hash is ever stored in an audit row, logged, or returned, with ONE exception that cannot be avoided: a temporary password the SERVER
+  // generated is returned once in the create / reset response so the admin can hand it over. A password the admin typed is never echoed back.
+  const USER_COLS = `id, username, name, role, active, last_login_at, must_change_password, created_at, (locked_until IS NOT NULL AND locked_until > now()) AS locked`;
+  const userOut = (u) => ({ id: u.id, username: u.username, name: u.name, role: u.role, active: u.active, lastLoginAt: iso(u.last_login_at),
+    mustChangePassword: u.must_change_password, locked: !!u.locked, createdAt: iso(u.created_at) });
+  const userAudit = (u) => ({ username: u.username, name: u.name, role: u.role, active: u.active });   // the only user fields that go into audit rows
+  const TEMP_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';                       // no look-alike characters
+  const tempPassword = () => Array.from(crypto.randomBytes(16), (b) => TEMP_ALPHABET[b % TEMP_ALPHABET.length]).join('');   // 16 characters
+  /** The password to set: the one typed (checked against the policy) or a generated one (generated = true, to be shown once). */
+  const chosenPassword = (typed) => {
+    if (typed === undefined) return { pw: tempPassword(), generated: true };
+    const bad = passwordProblem(typed); if (bad) throw new ApiError(400, 'validation', 'password: ' + bad);
+    return { pw: typed, generated: false };
+  };
+  /** Inside the transaction: lock, then refuse if `userId` is the only active admin with a password (it is about to stop being one). */
+  async function keepOneAdmin(c, userId, what) {
+    await c.query('SELECT pg_advisory_xact_lock(727276)');                                          // two admins acting at once cannot both pass the check
+    const n = (await c.query(`SELECT count(*)::int AS n FROM users WHERE role='admin' AND active AND password_hash IS NOT NULL AND id <> $1`, [userId])).rows[0].n;
+    if (!n) throw new ApiError(409, 'last_admin', `You cannot ${what} the last active administrator. Make another user an administrator first.`);
+  }
+  const userForUpdate = async (c, id) => {
+    const u = (await c.query(`SELECT ${USER_COLS} FROM users WHERE id=$1 FOR UPDATE`, [idParam(id)])).rows[0];
+    if (!u) throw new ApiError(404, 'not_found', 'No such user');
+    return u;
+  };
+
+  r.get('/users', wrap(async (req, res) => {
+    res.json((await db.query(`SELECT ${USER_COLS} FROM users ORDER BY lower(username)`)).rows.map(userOut));
+  }));
+  r.post('/users', wrap(async (req, res) => {
+    const b = parse(S.userCreate, req.body), { pw, generated } = chosenPassword(b.password), hash = await hashPassword(pw);   // slow hash before the transaction
+    const u = await db.withTx(async (c) => {
+      const ins = await c.query(`INSERT INTO users (username,name,role,password_hash,active,must_change_password) VALUES ($1,$2,$3,$4,true,true)
+        ON CONFLICT DO NOTHING RETURNING ${USER_COLS}`, [b.username, b.name, b.role, hash]);
+      if (!ins.rows.length) throw new ApiError(409, 'username_taken', 'That username is already taken');
+      await audit(c, { action: 'user.create', entity: 'user', entity_id: ins.rows[0].id, after: userAudit(ins.rows[0]) });
+      return ins.rows[0];
+    });
+    res.status(201).json({ user: userOut(u), ...(generated ? { temporaryPassword: pw } : {}) });
+  }));
+  r.post('/users/:id/deactivate', wrap(async (req, res) => {
+    const out = await db.withTx(async (c) => {
+      const u = await userForUpdate(c, req.params.id);
+      if (!u.active) throw new ApiError(409, 'already_inactive', 'That user is already deactivated');
+      if (u.role === 'admin') await keepOneAdmin(c, u.id, 'deactivate');
+      const n = (await c.query('DELETE FROM sessions WHERE user_id=$1', [u.id])).rowCount;           // they are signed out everywhere now
+      const w = (await c.query(`UPDATE users SET active=false WHERE id=$1 RETURNING ${USER_COLS}`, [u.id])).rows[0];
+      await audit(c, { action: 'user.deactivate', entity: 'user', entity_id: u.id, before: userAudit(u), after: { ...userAudit(w), sessionsEnded: n } });
+      return w;
+    });
+    res.json(userOut(out));
+  }));
+  r.post('/users/:id/reactivate', wrap(async (req, res) => {
+    const out = await db.withTx(async (c) => {
+      const u = await userForUpdate(c, req.params.id);
+      if (u.active) throw new ApiError(409, 'already_active', 'That user is already active');
+      const w = (await c.query(`UPDATE users SET active=true, failed_logins=0, locked_until=NULL WHERE id=$1 RETURNING ${USER_COLS}`, [u.id])).rows[0];
+      await audit(c, { action: 'user.reactivate', entity: 'user', entity_id: u.id, before: userAudit(u), after: userAudit(w) });
+      return w;
+    });
+    res.json(userOut(out));
+  }));
+  r.post('/users/:id/reset-password', wrap(async (req, res) => {
+    const b = parse(S.userReset, req.body), { pw, generated } = chosenPassword(b.password);
+    if (idParam(req.params.id) === req.actor.id) throw new ApiError(400, 'use_password_change', 'Use "change my password" for your own account.');
+    const hash = await hashPassword(pw);
+    const out = await db.withTx(async (c) => {
+      const u = await userForUpdate(c, req.params.id);
+      const n = (await c.query('DELETE FROM sessions WHERE user_id=$1', [u.id])).rowCount;           // whoever held the old password is signed out
+      const w = (await c.query(`UPDATE users SET password_hash=$2, must_change_password=true, failed_logins=0, locked_until=NULL WHERE id=$1 RETURNING ${USER_COLS}`, [u.id, hash])).rows[0];
+      await audit(c, { action: 'user.reset_password', entity: 'user', entity_id: u.id, after: { ...userAudit(w), mustChangePassword: true, sessionsEnded: n, generated } });   // no password, no hash
+      return w;
+    });
+    res.json({ user: userOut(out), ...(generated ? { temporaryPassword: pw } : {}) });
+  }));
+  r.post('/users/:id/role', wrap(async (req, res) => {
+    const b = parse(S.userRole, req.body);
+    const out = await db.withTx(async (c) => {
+      const u = await userForUpdate(c, req.params.id);
+      if (u.role === b.role) throw new ApiError(409, 'no_change', 'That user already has this role');
+      if (u.role === 'admin' && u.active) await keepOneAdmin(c, u.id, 'demote');
+      const w = (await c.query(`UPDATE users SET role=$2 WHERE id=$1 RETURNING ${USER_COLS}`, [u.id, b.role])).rows[0];   // the role is read from this row on every request: effective at once
+      await audit(c, { action: 'user.role', entity: 'user', entity_id: u.id, before: userAudit(u), after: userAudit(w) });
+      return w;
+    });
+    res.json(userOut(out));
+  }));
+  // Your own password (any role). Also the first-login change after an admin-set temporary password.
+  r.post('/password', wrap(async (req, res) => {
+    const b = parse(S.passwordChange, req.body), bad = passwordProblem(b.newPassword);
+    if (bad) throw new ApiError(400, 'validation', 'newPassword: ' + bad);
+    const cur = (await db.query('SELECT password_hash FROM users WHERE id=$1', [req.actor.id])).rows[0];
+    if (!cur || !(await verifyPassword(b.currentPassword, cur.password_hash))) throw new ApiError(422, 'wrong_password', 'The current password is not correct');   // not 401: that means "signed out"
+    if (b.newPassword === b.currentPassword) throw new ApiError(400, 'validation', 'newPassword: Choose a password different from the current one');
+    const hash = await hashPassword(b.newPassword);
+    await db.withTx(async (c) => {
+      const n = (await c.query('DELETE FROM sessions WHERE user_id=$1 AND ($2::text IS NULL OR id <> $2)', [req.actor.id, (req.user && req.user.sessionId) || null])).rowCount;   // other devices are signed out; this one stays
+      await c.query('UPDATE users SET password_hash=$2, must_change_password=false WHERE id=$1', [req.actor.id, hash]);
+      await audit(c, { action: 'password.change', entity: 'user', entity_id: req.actor.id, after: { mustChangePassword: false, otherSessionsEnded: n } });
+    });
+    res.status(204).end();
   }));
 
   // ================= audit log: admin only (chunk 33d) =================

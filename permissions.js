@@ -40,8 +40,10 @@ const ACTIONS = {
   'usage.write': ALL, 'pref.write': ALL,             // the caller's own ranking and display settings only
   'import.run': ['admin'],
   'audit.read': ['admin'],                           // GET /audit and /audit.csv: the log itself is admin only (chunk 33d)
-  // defined now, routes arrive later (admin screen chunk 32e, Phase 6)
-  'user.manage': ['admin'], 'content.review': ['admin', 'informatician'], 'package.install': ['admin', 'informatician'],
+  // user.manage and password.change have routes since chunk 32e1; content.review and package.install arrive with Phase 6
+  'user.manage': ['admin'],                          // admin users routes (chunk 32e1)
+  'password.change': ALL,                            // your own password only (chunk 32e1); the first-login change uses this too
+  'content.review': ['admin', 'informatician'], 'package.install': ['admin', 'informatician'],
 };
 // PATCH /cases/:id changes several things; the route needs any of them, and api.js then checks each field the body touches.
 const CASE_FIELD_ACTION = { patient: 'case.patient', narrative: 'case.narrative', applied: 'case.apply', pathways: 'case.apply', pinned: 'case.pin', alertLog: 'alert.ack' };
@@ -54,7 +56,7 @@ const ACTION_LABELS = {
   'row.add': 'add readings', 'row.amend_own': 'amend readings', 'row.amend_any': 'amend other people\'s readings', 'value.write': 'save these values',
   'note.write': 'write notes', 'note.sign': 'sign notes', 'set.write': 'edit element sets and pathways', 'code.write': 'edit verified codes', 'binding.write': 'edit code bindings',
   'rule.write': 'edit alert rules', 'rule.approve': 'approve alert rules', 'protocol.write': 'edit protocols', 'protocol.approve': 'verify protocols',
-  'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'audit.read': 'read the audit log', 'user.manage': 'manage users',
+  'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'audit.read': 'read the audit log', 'user.manage': 'manage users', 'password.change': 'change this password',
   'content.review': 'review content', 'package.install': 'install packages',
 };
 /** The actions a user may take, in the order of ACTIONS. Sent with GET /me so the screen can hide controls; the server stays the control. */
@@ -80,6 +82,9 @@ const ROUTE_ACTIONS = {
   'GET /prefs': 'ref.read', 'PUT /prefs/:key': 'pref.write',
   'POST /import/dry-run': 'import.run', 'POST /import': 'import.run',
   'GET /audit': 'audit.read', 'GET /audit.csv': 'audit.read',
+  'GET /users': 'user.manage', 'POST /users': 'user.manage', 'POST /users/:id/deactivate': 'user.manage', 'POST /users/:id/reactivate': 'user.manage',
+  'POST /users/:id/reset-password': 'user.manage', 'POST /users/:id/role': 'user.manage',
+  'POST /password': 'password.change',
 };
 
 function can(user, action) {
