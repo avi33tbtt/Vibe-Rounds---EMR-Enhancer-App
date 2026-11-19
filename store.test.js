@@ -581,3 +581,114 @@ test('32e2: Store.users calls the right routes with the right bodies; a typed pa
     'POST /users/id1/reset-password {}', 'POST /users/id1/reset-password {"password":"typed password 12"}', 'POST /users/id1/role {"role":"doctor"}']);
   assert.ok(!JSON.stringify(t.Store._test.S).includes('AbCdEfGhJkLmNpQr'), 'a temporary password is not kept by Store');
 });
+
+// ---------------------------------------------------------------- chunk 34b1: Store.patients
+const PID = '11111111-1111-4111-8111-111111111111', EID = '22222222-2222-4222-8222-222222222222', CID = 'case-34b1';
+const err = (status, code, message, extra) => [status, Object.assign({ error: { code, message } }, extra || {})];
+
+test('34b1: search asks the server with an encoded query, clamps limit, and asks nothing under 2 characters', async () => {
+  const t = await readyServerStore(); const P = t.Store.patients;
+  t.custom = async (m, p) => (m === 'GET' && p.startsWith('/patients?')) ? [200, [{ id: PID, name: 'Asha Rai' }]] : null;
+  assert.equal(JSON.stringify(await P.search('  a ')), '[]'); assert.equal(JSON.stringify(await P.search(null)), '[]');   // JSON compare: the [] is made inside the vm sandbox
+  assert.equal(t.calls.filter((c) => c.path.startsWith('/patients')).length, 0, 'no request for short text');
+  assert.deepEqual(await P.search('Asha & 100%'), [{ id: PID, name: 'Asha Rai' }]);
+  await P.search('1234567', 500); await P.search('1234567', 0);
+  const paths = t.calls.filter((c) => c.path.startsWith('/patients')).map((c) => c.path);
+  assert.deepEqual(paths, ['/patients?q=Asha%20%26%20100%25', '/patients?q=1234567&limit=50', '/patients?q=1234567&limit=1']);
+  await assert.rejects(P.search('x'.repeat(101)), (e) => e.code === 'query_too_long');
+});
+
+test('34b1: get encodes the id and rejects a bad id before any request', async () => {
+  const t = await readyServerStore(); const P = t.Store.patients;
+  t.custom = async (m, p) => (m === 'GET' && p === '/patients/' + PID) ? [200, { id: PID, mrn: '12345674' }] : null;
+  assert.equal((await P.get(PID)).mrn, '12345674');
+  for (const bad of ['', '../cases', 'a/b', null, 5]) await assert.rejects(P.get(bad), (e) => e.code === 'bad_id');
+  assert.equal(t.calls.filter((c) => c.path.startsWith('/patients')).length, 1);
+});
+
+test('34b1: create sends only known fields; a 409 possible_duplicate carries candidates; confirmDifferent is sent only when exactly true', async () => {
+  const t = await readyServerStore(); const P = t.Store.patients; const cands = [{ id: PID, name: 'Asha Rai', matchedOn: ['name_and_birth'] }];
+  t.custom = async (m, p, b) => (m === 'POST' && p === '/patients') ? (b.confirmDifferent ? [201, { id: EID, mrn: '7654321', name: b.name }] : err(409, 'possible_duplicate', 'Possible duplicate', { candidates: cands })) : null;
+  const body = { name: 'Asha Rai', sex: 'female', ageYears: 30, mrn: 'HACK', id: 'x', confirmDifferent: 'yes' };
+  await assert.rejects(P.create(body), (e) => e.status === 409 && e.code === 'possible_duplicate' && e.candidates.length === 1 && e.candidates[0].id === PID);
+  let w = t.writes().filter((c) => c.path === '/patients'); assert.deepEqual(w[0].body, { name: 'Asha Rai', sex: 'female', ageYears: 30 }, 'mrn, id and a non-true confirmDifferent are dropped');
+  const made = await P.create(Object.assign({}, body, { confirmDifferent: true }));
+  assert.equal(made.id, EID); w = t.writes().filter((c) => c.path === '/patients');
+  assert.deepEqual(w[1].body, { name: 'Asha Rai', sex: 'female', ageYears: 30, confirmDifferent: true });
+});
+
+test('34b1: update needs a version and a reason, keeps null (clear) values, and a stale version is a 409 with current', async () => {
+  const t = await readyServerStore(); const P = t.Store.patients;
+  t.custom = async (m, p, b) => (m === 'PATCH' && p === '/patients/' + PID) ? (b.expectedVersion === 1 ? [200, { id: PID, version: 2, phone: null }] : err(409, 'conflict', 'Changed by someone else', { current: { id: PID, version: 5 } })) : null;
+  await assert.rejects(P.update(PID, { name: 'X' }), (e) => e.code === 'version_required');
+  await assert.rejects(P.update(PID, { expectedVersion: 1, name: 'X', reason: '   ' }), (e) => e.code === 'reason_required');
+  assert.equal(t.writes().length, 0, 'nothing sent for either');
+  const r = await P.update(PID, { expectedVersion: 1, reason: 'Wrong phone', phone: null, bogus: 1 });
+  assert.equal(r.version, 2); assert.deepEqual(t.writes()[0].body, { expectedVersion: 1, reason: 'Wrong phone', phone: null });
+  await assert.rejects(P.update(PID, { expectedVersion: 9, reason: 'again', name: 'Y' }), (e) => e.status === 409 && e.code === 'conflict' && e.current.version === 5);
+});
+
+test('34b1: encounter routes use the right paths and bodies', async () => {
+  const t = await readyServerStore(); const P = t.Store.patients;
+  t.custom = async (m, p) => (m === 'GET' && p === '/patients/' + PID + '/encounters') ? [200, [{ id: EID }]] : (m !== 'GET' && /^\/(patients|encounters)\//.test(p)) ? [200, { id: EID, version: 2 }] : null;
+  assert.deepEqual(await P.encounters(PID), [{ id: EID }]);
+  await P.createEncounter(PID, { type: 'admission', ward: 'A', bed: '4', attendingId: PID, extra: 1 });
+  await P.updateEncounter(EID, { expectedVersion: 1, bed: null }); await P.closeEncounter(EID, { expectedVersion: 2 }); await P.cancelEncounter(EID, { expectedVersion: 3, reason: 'Opened by mistake' });
+  assert.deepEqual(t.writes().map((c) => c.method + ' ' + c.path + ' ' + JSON.stringify(c.body)), [
+    'POST /patients/' + PID + '/encounters {"type":"admission","ward":"A","bed":"4","attendingId":"' + PID + '"}',
+    'PATCH /encounters/' + EID + ' {"expectedVersion":1,"bed":null}', 'POST /encounters/' + EID + '/close {"expectedVersion":2}',
+    'POST /encounters/' + EID + '/cancel {"expectedVersion":3,"reason":"Opened by mistake"}']);
+  await assert.rejects(P.cancelEncounter(EID, { expectedVersion: 3 }), (e) => e.code === 'reason_required');
+  await assert.rejects(P.closeEncounter(EID, {}), (e) => e.code === 'version_required');
+});
+
+test('34b1: link defaults to the confirmed case version, records the new version, and the next save of the chart does not conflict', async () => {
+  const h = happy(); let caseVer = 1;
+  const t = boot(async (m, p, b) => {
+    if (m === 'POST' && p === '/cases') { caseVer = 1; return [201, { version: 1 }]; }
+    if (m === 'POST' && p === '/cases/' + CID + '/link') { if (b.expectedVersion !== caseVer) return err(409, 'conflict', 'Changed', { current: {} }); caseVer++; return [200, { id: CID, patientId: b.patientId, encounterId: b.encounterId || null, version: caseVer }]; }
+    if (m === 'PATCH' && p === '/cases/' + CID) { if (b.expectedVersion !== caseVer) return err(409, 'conflict', 'Stale version', { current: { id: CID } }); return [200, { version: ++caseVer }]; }
+    return h(m, p, b);
+  });
+  await t.Store.init(); t.Store.setCases([mkCase(CID)]); await t.Store.flush();
+  const r = await t.Store.patients.link(CID, { patientId: PID, encounterId: EID });
+  assert.equal(r.version, 2); const lw = t.writes().find((c) => c.path.endsWith('/link')); assert.deepEqual(lw.body, { expectedVersion: 1, patientId: PID, encounterId: EID });
+  const c = t.Store.getCases()[0]; assert.equal(c.patientId, PID); assert.equal(c.encounterId, EID);
+  edit(t.Store, CID, (x) => { x.narrative = 'after link'; }); await t.Store.flush();
+  assert.equal(Object.keys(t.Store._test.failed).length + Object.keys(t.Store._test.conflicts).length, 0, 'the save after linking used version 2, so no conflict');
+  assert.equal(t.Store.status().state, 'saved');
+  assert.equal(t.writes().filter((x) => x.method === 'PATCH' && x.path === '/cases/' + CID).pop().body.expectedVersion, 2);
+});
+
+test('34b1: link refuses while the chart is unsaved, has unsent changes or a conflict; an explicit expectedVersion is respected; patient_locked is passed on', async () => {
+  const t = await readyServerStore(); const P = t.Store.patients;
+  await assert.rejects(P.link('missing-case', { patientId: PID }), (e) => e.code === 'case_not_saved');
+  t.Store.setCases([mkCase(CID)]); await t.Store.flush();
+  t.custom = async (m, p, b) => (p === '/cases/' + CID + '/link') ? err(409, 'patient_locked', 'This case already belongs to another patient', {}) : (m === 'PATCH' ? [200, { version: 2 }] : null);
+  await assert.rejects(P.link(CID, { patientId: PID, expectedVersion: 7 }), (e) => e.status === 409 && e.code === 'patient_locked');
+  assert.equal(t.writes().find((c) => c.path.endsWith('/link')).body.expectedVersion, 7);
+  let release; const gate = new Promise((r) => { release = r; });
+  t.custom = async (m, p) => (m === 'PATCH' && p === '/cases/' + CID) ? (await gate, [200, { version: 2 }]) : null;
+  edit(t.Store, CID, (x) => { x.narrative = 'typing'; }); await tick(20);
+  await assert.rejects(P.link(CID, { patientId: PID }), (e) => e.code === 'case_unsent'); release(); await t.Store.flush();
+  t.custom = async (m, p) => (m === 'PATCH' && p === '/cases/' + CID) ? err(409, 'conflict', 'Changed by someone else', { current: { id: CID, version: 9 } }) : null;
+  edit(t.Store, CID, (x) => { x.narrative = 'again'; }); await until(() => t.Store.conflictInfo(CID), 'conflict');
+  await assert.rejects(P.link(CID, { patientId: PID }), (e) => e.code === 'case_conflict');
+});
+
+test('34b1: Demo mode: every method says it is not available, calls no server and writes no patient data', async () => {
+  const t = boot(happy(), { mode: 'local' }); await t.Store.init(); const P = t.Store.patients;
+  const all = [() => P.search('Asha'), () => P.get(PID), () => P.create({ name: 'A' }), () => P.update(PID, { expectedVersion: 1, reason: 'r' }), () => P.encounters(PID),
+    () => P.createEncounter(PID, {}), () => P.updateEncounter(EID, { expectedVersion: 1 }), () => P.closeEncounter(EID, { expectedVersion: 1 }),
+    () => P.cancelEncounter(EID, { expectedVersion: 1, reason: 'r' }), () => P.link(CID, { patientId: PID })];
+  for (const f of all) await assert.rejects(f(), (e) => e.code === 'demo_mode' && /not available in demo mode/.test(e.message));
+  assert.equal(t.calls.length, 0); assert.ok(![...t.ls.keys()].some((k) => /patient|encounter/i.test(k)), 'nothing patient-related in localStorage');
+});
+
+test('34b1: a server 403 for a role is passed on unchanged and nothing is cached', async () => {
+  const t = await readyServerStore();
+  t.custom = async (m, p) => p.startsWith('/patients') ? err(403, 'forbidden', 'Your role (informatician) may not open patient records.') : null;
+  await assert.rejects(t.Store.patients.search('Asha'), (e) => e.status === 403 && /may not open patient records/.test(e.message));
+  assert.equal(t.Store.status().state, 'saved'); assert.equal(Object.keys(t.Store._test.failed).length, 0);
+  assert.ok(!JSON.stringify([t.Store._test.S, [...t.ls.entries()]]).includes('Asha'), 'the search text is not stored');
+});

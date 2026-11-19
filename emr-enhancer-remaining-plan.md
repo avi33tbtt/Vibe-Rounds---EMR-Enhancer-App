@@ -19,12 +19,13 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 
 ## 1. Where the project stands
 
-**Built (chunks 1-34a):**
+**Built (chunks 1-34a, 34b1):**
 - Single-file prototype `enhancer.html`: quick bar, fever chart, insulin grid, flowsheets, notes (draft/sign/amend), pathways, rules and alerts, EMR shell, FHIR export.
 - Server in the repo root: PostgreSQL schema, REST API, `store.js` cache-first client layer, import from browser, conflict screen, login and sessions, roles and permissions, CSRF, users screen, forced password change, audit log with admin screen and CSV export, entered-in-error history drawer, sign-in audit events, patients/encounters/merge/duplicate-check API (`patients.js`).
-- **187 tests pass** on PostgreSQL 16.
+- **187 server tests pass** on PostgreSQL 16, plus 9 new store tests (47 in `store.test.js`).
+- 34b1 added `Store.patients` (search, get, create, update, encounters, link) to `store.js`; server mode only, nothing cached, Demo mode rejects with `demo_mode`.
 
-**Next up:** 34b1, then 34b2, 34b3, 34c, 34d, then 35a onward in the order below.
+**Next up:** 34b2, then 34b3, 34c, 34d, then 35a onward in the order below.
 
 **Manual work that is not a chunk (do soon, needs two real browsers):**
 - [ ] (a) Force a conflict on one row and confirm the side-by-side screen appears.
@@ -132,7 +133,7 @@ Turns the prototype into a real multi-user system. Each chunk assumes the earlie
 | 40-41 | Security hardening; deployment, encrypted backups, tested restore, go-live |
 
 
-### [ ] 34b1. Patients 2a: Store.patients in store.js (no screen)
+### [x] 34b1. Patients 2a: Store.patients in store.js (no screen)
 
 **Goal:** Browser data layer for patients and encounters. Server mode only, tests included.
 

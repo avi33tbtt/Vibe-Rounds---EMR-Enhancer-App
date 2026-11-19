@@ -146,6 +146,7 @@
     const id = sc.id, c = { id, patient: sc.patient || { name: '', ageSex: '', bed: '', mrn: '' }, narrative: sc.narrative || '', applied: sc.applied || [],
       pathways: sc.pathways || [], alertLog: sc.alertLog || [], values: {}, notes: [], ns: true, rp: true, updatedAt: sc.updatedAt, saved: sc.updatedAt };
     if (Array.isArray(sc.pinned)) c.pinned = sc.pinned;
+    c.patientId = sc.patientId || null; c.encounterId = sc.encounterId || null;     // chunk 34b1: set by the server's link route, never typed
     if (!dry) for (const k of Object.keys(snap)) if (grpOf(k) === id) delete snap[k];
     SN['case:' + id] = { ver: sc.version, data: metaOf(c) };
     for (const k of Object.keys(sc.values || {})) {
@@ -617,6 +618,57 @@
     reactivate: (id) => api('POST', '/users/' + encodeURIComponent(id) + '/reactivate', {}),
     resetPassword: (id, password) => api('POST', '/users/' + encodeURIComponent(id) + '/reset-password', password ? { password } : {}),
     setRole: (id, role) => api('POST', '/users/' + encodeURIComponent(id) + '/role', { role }),
+  };
+
+  // ---------------------------------------------------------------- patients and encounters (chunk 34b1)
+  // Browser side of the 34a routes (API.md: 'Patients, encounters and linking a case'). Server mode only. Nothing here is cached in the
+  // cache, in the write queue or in localStorage: every call goes straight to the server and the caller shows the answer. Demo mode keeps the
+  // typed demo fields, so every method rejects with code 'demo_mode'. The server decides what a role may see or do (a 403 is shown as written).
+  const pfail = (code, msg) => { const er = new Error(msg); er.code = code; return er; };
+  const pid = (id, what) => { if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(id)) throw pfail('bad_id', 'A valid ' + what + ' id is required'); return encodeURIComponent(id); };
+  const pick = (o, keys) => { const r = {}; keys.forEach((k) => { if (o && o[k] !== undefined) r[k] = o[k]; }); return r; };
+  const PAT_FIELDS = ['name', 'sex', 'dateOfBirth', 'ageYears', 'phone', 'nationalId'];
+  const serverOnly = (fn) => async (...a) => {
+    if (Store.mode !== 'server') throw pfail('demo_mode', 'Patient records are not available in demo mode');
+    try { return await fn(...a); } catch (er) { if (er && er.body && er.body.candidates) er.candidates = er.body.candidates; throw er; }   // a 409 possible_duplicate carries the matches
+  };
+  const needVer = (b, what) => { if (!b || !Number.isInteger(b.expectedVersion) || b.expectedVersion < 1) throw pfail('version_required', 'The version you last saw of this ' + what + ' is required'); return b.expectedVersion; };
+  const needReason = (b) => { const r = b && typeof b.reason === 'string' ? b.reason.trim() : ''; if (!r) throw pfail('reason_required', 'A reason is required'); return r; };
+  const busyCase = (id) => Q.some((o) => grpOf(o.key) === id);
+
+  Store.patients = {
+    /** Name, MRN or phone. Under 2 characters nothing is asked and [] is returned (the server needs at least 2). */
+    search: serverOnly(async (q, limit) => {
+      q = String(q == null ? '' : q).trim(); if (q.length < 2) return [];
+      if (q.length > 100) throw pfail('query_too_long', 'Search text can be at most 100 characters');
+      const n = Number.isInteger(limit) ? Math.max(1, Math.min(50, limit)) : null;
+      return api('GET', '/patients?q=' + encodeURIComponent(q) + (n ? '&limit=' + n : ''));
+    }),
+    get: serverOnly((id) => api('GET', '/patients/' + pid(id, 'patient'))),
+    /** Register. A 409 possible_duplicate has error.candidates. Send the same body again with confirmDifferent:true, but only after the person confirms. */
+    create: serverOnly((b) => api('POST', '/patients', Object.assign(pick(b, PAT_FIELDS), b && b.confirmDifferent === true ? { confirmDifferent: true } : {}))),
+    /** A correction: expectedVersion and a reason are always required. A null phone or nationalId clears it. */
+    update: serverOnly((id, b) => { const body = Object.assign({ expectedVersion: needVer(b, 'patient'), reason: needReason(b) }, pick(b, PAT_FIELDS)); return api('PATCH', '/patients/' + pid(id, 'patient'), body); }),
+    encounters: serverOnly((patientId) => api('GET', '/patients/' + pid(patientId, 'patient') + '/encounters')),
+    createEncounter: serverOnly((patientId, b) => api('POST', '/patients/' + pid(patientId, 'patient') + '/encounters', pick(b, ['type', 'startAt', 'ward', 'bed', 'attendingId']))),
+    updateEncounter: serverOnly((id, b) => api('PATCH', '/encounters/' + pid(id, 'encounter'), Object.assign({ expectedVersion: needVer(b, 'encounter') }, pick(b, ['ward', 'bed', 'attendingId'])))),
+    closeEncounter: serverOnly((id, b) => api('POST', '/encounters/' + pid(id, 'encounter') + '/close', Object.assign({ expectedVersion: needVer(b, 'encounter') }, pick(b, ['endAt'])))),
+    cancelEncounter: serverOnly((id, b) => api('POST', '/encounters/' + pid(id, 'encounter') + '/cancel', { expectedVersion: needVer(b, 'encounter'), reason: needReason(b) })),
+    /** Attach an open chart to a patient (and one of that patient's open encounters). expectedVersion is optional: it defaults to the version this
+     *  browser last confirmed. The server moves the case version by one; Store records it so the next save of the chart does not conflict. */
+    link: serverOnly(async (caseId, b) => {
+      const cid = pid(caseId, 'case'); b = b || {};
+      const sn = snap['case:' + caseId];
+      if (!sn || !caseById(caseId)) throw pfail('case_not_saved', 'This chart has not been saved to the server yet. Wait for "Saved", then try again.');
+      if (conflicts[caseId]) throw pfail('case_conflict', 'This chart has a conflict to resolve first.');
+      if (busyCase(caseId)) throw pfail('case_unsent', 'This chart still has unsent changes. Wait for "Saved", then try again.');   // a queued save and the link would otherwise race on the version
+      const ver = b.expectedVersion !== undefined ? b.expectedVersion : sn.ver;
+      if (!Number.isInteger(ver) || ver < 1) throw pfail('version_required', 'The version you last saw of this chart is required');
+      const r = await api('POST', '/cases/' + cid + '/link', Object.assign({ expectedVersion: ver, patientId: b.patientId }, b.encounterId ? { encounterId: b.encounterId } : {}));
+      const s2 = snap['case:' + caseId]; if (s2) s2.ver = r.version;
+      const c = caseById(caseId); if (c) { c.patientId = r.patientId || null; c.encounterId = r.encounterId || null; }
+      notify(); return r;
+    }),
   };
 
   Store.setMode = function (m) { try { g.localStorage.setItem('storeMode', m === 'local' ? 'local' : 'server'); } catch (e) { /* ignore */ } g.location && g.location.reload(); };
