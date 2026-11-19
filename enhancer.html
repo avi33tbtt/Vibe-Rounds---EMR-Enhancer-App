@@ -144,6 +144,7 @@ body.compact label{margin:7px 0 2px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 #cfm{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}#cfm[hidden]{display:none}.cfmbox{background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:10px;max-width:760px;width:100%;padding:16px 18px}.cfmbox h2{margin:0 0 6px;font-size:17px}.cfmit{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:8px 0}.cfmit b{display:block;margin-bottom:4px}.cfmit label{display:flex;gap:8px;align-items:flex-start;margin:4px 0;font-weight:400;cursor:pointer}.cfmit pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;font-size:13px}.cfmbox ul{margin:4px 0 8px 18px;padding:0}.cfmbox .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.cfmbox .acts .b{margin:0}.cfmbox button[disabled]{opacity:.5;cursor:not-allowed}
 #login,#pwChange,#tmpPw{position:fixed;inset:0;z-index:110;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}#login[hidden],#pwChange[hidden],#tmpPw[hidden]{display:none}#login form,#pwChange form,#tmpPw .tmpbox{width:100%;max-width:340px;display:flex;flex-direction:column;gap:8px}#login label,#pwChange label{font-size:13px;font-weight:600}#login input,#pwChange input,#tmpPw input{width:100%}#loginMsg,#pwMsg{min-height:1.3em;color:#7a1c14;font-size:13px}#tmpPw input{font:600 17px ui-monospace,monospace;letter-spacing:.04em}#tmpPw{z-index:120}.us-tbl{width:100%;border-collapse:collapse;font-size:13px}.us-tbl th,.us-tbl td{border-bottom:1px solid var(--bd);padding:6px;text-align:left;vertical-align:middle}.us-tbl .off{opacity:.6}.us-add{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:10px 0}.us-add label{margin:0}.us-wrap{overflow-x:auto}#who[hidden],#logoutBtn[hidden]{display:none}
+#ptFind{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}#ptFind[hidden]{display:none}#ptFind .cfmbox{max-width:640px}#pfMsg{min-height:1.3em;color:#7a1c14;font-size:13px;margin:4px 0}.pfrow{display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:6px 0}.pfrow .b{margin:0}.pfgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}.pfgrid label{margin:0}#pfDup{border:1px solid #c9a227;border-radius:8px;padding:8px 10px;margin:10px 0}#pfChosen .pfchosen{border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:15px}
 #boot{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}#boot[hidden]{display:none}.bootbox{max-width:460px;text-align:center}.bootbox .b{margin:8px 4px 0}#saveRetry[hidden],#demoBan[hidden],#wireBan[hidden]{display:none}#saveState.bad{color:var(--r);font-weight:600}
 </style></head><body>
 <div id="boot" role="status" aria-live="polite"><div class="bootbox"><b id="bootMsg">Loading…</b><div class="mu" id="bootWhy">Not for clinical use – synthetic data only.</div><button class="b" id="bootRetry" type="button" hidden>Retry</button><button class="b sm" id="bootDemo" type="button" hidden>Use Demo mode instead</button></div></div>
@@ -151,6 +152,7 @@ body.compact label{margin:7px 0 2px}
 <div id="pwChange" role="dialog" aria-modal="true" aria-labelledby="pwT" hidden><form id="pwForm" autocomplete="off" novalidate><b id="pwT" style="font-size:18px">Change your password</b><div class="mu" id="pwWhy"></div><div id="pwMsg" role="alert"></div><label for="pwCur">Current password</label><input id="pwCur" name="emr-cur" type="password" autocomplete="off" maxlength="200"><label for="pwNew">New password (12 characters or more)</label><input id="pwNew" name="emr-new" type="password" autocomplete="off" maxlength="200"><label for="pwNew2">New password again</label><input id="pwNew2" name="emr-new2" type="password" autocomplete="off" maxlength="200"><button class="b" id="pwGo" type="submit">Change password</button><button class="b sm" id="pwCancel" type="button">Cancel</button><button class="b sm" id="pwOut" type="button">Sign out</button></form></div>
 <div id="tmpPw" role="dialog" aria-modal="true" aria-labelledby="tmpT" hidden><div class="tmpbox"><b id="tmpT" style="font-size:18px">Temporary password</b><div class="mu" id="tmpFor"></div><input id="tmpVal" type="text" readonly autocomplete="off" aria-label="Temporary password"><div class="mu">Shown this one time only. Give it to the person privately; they must change it when they sign in. After you close this box it cannot be shown again (reset the password to make a new one).</div><button class="b" id="tmpCopy" type="button">Copy</button><span class="mu" id="tmpMsg" role="status"></span><button class="b sm" id="tmpClose" type="button">Close</button></div></div>
 <div id="cfm" role="dialog" aria-modal="true" aria-labelledby="cfmT" hidden><div class="cfmbox" id="cfmBox" tabindex="-1"></div></div>
+<div id="ptFind" role="dialog" aria-modal="true" aria-labelledby="pfT" hidden><div class="cfmbox" id="pfBox" tabindex="-1"><h2 id="pfT">Find or register a patient</h2><div class="mu">Not for clinical use – synthetic data only.</div><div id="pfChosen" role="status" hidden></div><div id="pfMain"><label for="pfQ">Search by name, MRN or phone</label><input id="pfQ" type="search" autocomplete="off" maxlength="100" placeholder="At least 2 characters"><div id="pfMsg" role="alert"></div><div id="pfRes" aria-live="polite"></div><div class="acts"><button class="b" id="pfNewBtn" type="button" aria-expanded="false" aria-controls="pfForm">Register new patient</button></div><form id="pfForm" autocomplete="off" novalidate hidden><div class="pfgrid"><div><label for="pfName">Full name *</label><input id="pfName" type="text" maxlength="200" autocomplete="off"></div><div><label for="pfSex">Sex *</label><select id="pfSex"><option value="">Choose…</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option><option value="unknown">Unknown</option></select></div><div><label for="pfAgeMode">Age *</label><select id="pfAgeMode"><option value="dob">Date of birth</option><option value="age">Estimated age (years)</option></select></div><div><label for="pfAge" id="pfAgeL">Date of birth</label><input id="pfAge" type="date" autocomplete="off"></div><div><label for="pfPhone">Phone (optional)</label><input id="pfPhone" type="text" maxlength="40" autocomplete="off"></div><div><label for="pfNid">National ID (optional)</label><input id="pfNid" type="text" maxlength="40" autocomplete="off"></div></div><div id="pfDup" hidden></div><div class="acts"><button class="b" id="pfSave" type="submit">Register patient</button><button class="b sm" id="pfFormCancel" type="button">Cancel</button></div></form></div><div class="acts"><button class="b sm" id="pfClose" type="button">Close</button></div></div></div>
 <div class="ban">Not for clinical use – synthetic data only. Codes from an LLM are unverified until checked.</div>
 <div class="ban" id="demoBan" hidden>Demo mode: data stays in this browser, synthetic data only</div>
 <div class="ban" id="conflictBan" role="alert" hidden style="background:#fde2e0;color:#7a1c14"></div>
@@ -978,11 +980,12 @@ try{setDensity(localStorage.getItem('emrDensity')==='compact')}catch(e){setDensi
 document.addEventListener('keydown',e=>{
   const t=e.target,editing=t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
   if(e.key==='Escape'){
+    if(!$('ptFind').hidden){pfClose();return}
     if($('patientedit')?.classList.contains('open')){$('patientedit').classList.remove('open');$('ptEditBtn').focus();return}
     if($('addPanel')?.classList.contains('open')){$('addPanel').classList.remove('open');$('ptAddBtn').focus();return}
     if($('tools')?.open){$('tools').open=false;return}
   }
-  if(editing)return;
+  if(editing||!$('ptFind').hidden)return;
   if(e.altKey&&e.key.toLowerCase()==='p'){e.preventDefault();persist();showNoCase();$('patientsSearch')?.focus();return}
   if(e.altKey&&/^[1-6]$/.test(e.key)){
     const ids=['ov','flw','nt','pw','al','ex'];if(CASE_OPEN){e.preventDefault();showShellTab(ids[Number(e.key)-1]);}return;
@@ -1813,12 +1816,110 @@ function renderPatients(){
   host.innerHTML=rows.length?`<table class="patients-table"><thead><tr><th scope="col">My</th><th scope="col">Ward / bed</th><th scope="col">Patient</th><th scope="col">Diagnosis</th><th scope="col">Active pathway</th><th scope="col">Latest pinned readings</th><th scope="col">Alerts</th><th scope="col">Next due</th></tr></thead><tbody>${rows.map(renderPatientRow).join('')}</tbody></table>`:'<div class="patient-empty">No patients match these filters. Create a new patient or adjust the search.</div>';
 }
 function openPatientFromList(id){const c=getC().find(x=>x.id===id);if(!c)return;persist();enterCase(JSON.parse(JSON.stringify(c)),'ov')}
-function createPatientFromList(){persist();const c=newCase();c.patient.name='New patient';enterCase(c,'ov');persist();$('patientedit').classList.add('open');$('pt_name').focus()}
+function createPatientFromList(){if(SRV()){openPtFind($('patientsNew'));return}persist();const c=newCase();c.patient.name='New patient';enterCase(c,'ov');persist();$('patientedit').classList.add('open');$('pt_name').focus()}
 function toggleMyPatient(id){const a=myPatientIds(),i=a.indexOf(id);if(i>=0)a.splice(i,1);else a.push(id);try{localStorage.setItem(MYPTS_KEY,JSON.stringify(a))}catch(e){toast('Could not save My patients pin.')}renderPatients()}
 $('patientsRows').addEventListener('click',e=>{const pin=e.target.closest('[data-my-pin]');if(pin){e.stopPropagation();toggleMyPatient(pin.dataset.myPin);return}const row=e.target.closest('[data-patient-open]');if(row)openPatientFromList(row.dataset.patientOpen)});
 $('patientsRows').addEventListener('keydown',e=>{if(e.target.closest('[data-my-pin]'))return;if(e.key!=='Enter'&&e.key!==' ')return;const row=e.target.closest('[data-patient-open]');if(row){e.preventDefault();openPatientFromList(row.dataset.patientOpen)}});
 ['patientsSearch','patientsWard','patientsSort','myPatients'].forEach(id=>$(id).addEventListener(id==='patientsSearch'?'input':'change',renderPatients));
 $('patientsNew').addEventListener('click',createPatientFromList);
+/* Chunk 34b2: find or register a patient (server mode only; Demo mode keeps the typed fields). Step one: it ends with a chosen patient.
+   onPatientChosen() only shows the name and MRN for now; chunk 34b3 starts the encounter, links the chart and opens Summary. */
+let PF_TOKEN=0,PF_TIMER=null,PF_OPENER=null,PF_DUP=null,PF_BUSY=false;
+function pfAge(p){if(!p||!p.dateOfBirth)return'';const d=new Date(p.dateOfBirth+'T00:00:00Z');if(isNaN(d))return'';const n=new Date();let y=n.getUTCFullYear()-d.getUTCFullYear();if(n.getUTCMonth()<d.getUTCMonth()||(n.getUTCMonth()===d.getUTCMonth()&&n.getUTCDate()<d.getUTCDate()))y--;return(p.ageEstimated?'about ':'')+Math.max(0,y)+' y'}
+function pfLine(p){return esc([pfAge(p),p.sex,p.mrn?'MRN '+p.mrn:''].filter(Boolean).join(' · '))}
+function pfMsgOf(er){const c=er&&er.code;
+  if(c==='patient_merged')return'This record was merged into another one. Search again and choose the record that was kept.';
+  if(c==='patient_inactive')return'This patient record is inactive.';
+  if(c==='patient_locked')return'This chart already belongs to another patient. A duplicate is fixed by merging the two patient records, not by moving the chart.';
+  if(c==='conflict')return'Someone else changed this record. Search again to see the latest.';
+  if(er&&er.network)return'Cannot reach the server. What you typed is still here; try again.';
+  if(er&&er.status===401)return'You are signed out. Sign in and try again.';
+  return(er&&er.message)||'Something went wrong. Try again.'}
+const pfSay=m=>{$('pfMsg').textContent=m||''};
+function pfBusy(b){PF_BUSY=b;['pfSave','pfNewBtn'].forEach(id=>{$(id).disabled=b})}
+function openPtFind(opener){
+  if(!mayDo('patient.read'))return toast('Your role ('+Store.me.role+') may not open patient records.');
+  PF_OPENER=opener||null;pfReset();$('ptFind').hidden=false;
+  const w=mayDo('patient.write');$('pfNewBtn').disabled=!w;$('pfNewBtn').title=w?'':'Your role ('+Store.me.role+') may not register patients.';
+  $('pfQ').focus();
+}
+function pfReset(){
+  PF_TOKEN++;clearTimeout(PF_TIMER);PF_DUP=null;PF_BUSY=false;
+  ['pfQ','pfName','pfPhone','pfNid','pfAge'].forEach(id=>{$(id).value=''});$('pfSex').value='';$('pfAgeMode').value='dob';pfAgeMode();
+  $('pfRes').innerHTML='';pfSay('');$('pfDup').hidden=true;$('pfDup').innerHTML='';$('pfForm').hidden=true;$('pfNewBtn').setAttribute('aria-expanded','false');$('pfNewBtn').disabled=false;
+  $('pfMain').hidden=false;$('pfChosen').hidden=true;$('pfChosen').innerHTML='';
+}
+function pfClose(){clearTimeout(PF_TIMER);PF_TOKEN++;pfReset();$('ptFind').hidden=true;if(PF_OPENER&&PF_OPENER.focus)PF_OPENER.focus();PF_OPENER=null}
+function pfAgeMode(){const dob=$('pfAgeMode').value==='dob',a=$('pfAge');a.type=dob?'date':'number';a.value='';if(dob){a.max=new Date().toISOString().slice(0,10);a.removeAttribute('min')}else{a.min='0';a.max='120';a.step='1'}$('pfAgeL').textContent=dob?'Date of birth':'Estimated age (years)'}
+function pfSearchSoon(){
+  clearTimeout(PF_TIMER);const q=$('pfQ').value.trim();pfSay('');
+  if(q.length<2){PF_TOKEN++;$('pfRes').innerHTML=q?'<div class="mu">Type at least 2 characters.</div>':'';return}
+  PF_TIMER=setTimeout(()=>pfSearch(q),300);
+}
+async function pfSearch(q){
+  const tok=++PF_TOKEN;$('pfRes').innerHTML='<div class="mu">Searching…</div>';
+  try{
+    const list=await Store.patients.search(q);if(tok!==PF_TOKEN)return;      // a newer search started: ignore this answer
+    $('pfRes').innerHTML=list.length?list.map(p=>`<div class="pfrow"><div><b>${esc(p.name)}</b><div class="mu">${pfLine(p)}</div></div><button class="b sm" type="button" data-pf-pick="${esc(p.id)}">Choose</button></div>`).join(''):'<div class="mu">No patient found. Check the spelling, or register a new patient.</div>';
+  }catch(er){if(tok!==PF_TOKEN)return;$('pfRes').innerHTML='';pfSay(pfMsgOf(er))}
+}
+async function pfPick(id){
+  if(PF_BUSY)return;pfBusy(true);pfSay('');
+  try{
+    let p=await Store.patients.get(id),hops=0,merged=false;
+    while(p.mergedInto&&hops<3){p=await Store.patients.get(p.mergedInto);merged=true;hops++}   // a merged record answers with the one that was kept
+    if(p.mergedInto)throw{code:'patient_merged'};
+    if(p.active===false)throw{code:'patient_inactive'};
+    pfBusy(false);onPatientChosen(p,{merged});
+  }catch(er){pfBusy(false);pfSay(pfMsgOf(er))}
+}
+function onPatientChosen(p,info){
+  $('pfMain').hidden=true;$('pfChosen').hidden=false;
+  $('pfChosen').innerHTML=`<div class="pfchosen"><b>${esc(p.name)}</b><div>MRN ${esc(p.mrn||'')}</div>${info&&info.merged?'<div class="mu">The record you picked was merged into this one, so this one is shown.</div>':''}${info&&info.created?'<div class="mu">New patient registered.</div>':''}<div class="mu">Starting the encounter and opening the chart comes in the next update.</div></div><div class="acts"><button class="b sm" id="pfAgain" type="button">Choose a different patient</button></div>`;
+  $('pfAgain').focus();
+}
+function pfBody(){
+  const name=$('pfName').value.trim(),sex=$('pfSex').value,mode=$('pfAgeMode').value,av=$('pfAge').value.trim(),phone=$('pfPhone').value.trim(),nid=$('pfNid').value.trim();
+  if(name.length<2)throw{message:'Enter the patient\'s full name (at least 2 characters).'};
+  if(!sex)throw{message:'Choose the sex.'};
+  const b={name,sex};
+  if(mode==='dob'){if(!/^\d{4}-\d{2}-\d{2}$/.test(av))throw{message:'Enter a date of birth.'};if(av>new Date().toISOString().slice(0,10))throw{message:'The date of birth cannot be in the future.'};b.dateOfBirth=av}
+  else{const n=Number(av);if(av===''||!Number.isInteger(n)||n<0||n>120)throw{message:'Enter an estimated age between 0 and 120 years.'};b.ageYears=n}
+  if(phone)b.phone=phone;if(nid)b.nationalId=nid;return b;
+}
+function pfShowDup(cands){
+  const why={name_and_birth:'same name and birth date',phone:'same phone number'};
+  $('pfDup').innerHTML='<b>A similar patient already exists.</b><div class="mu">Open that record if it is the same person.</div>'+cands.map(p=>`<div class="pfrow"><div><b>${esc(p.name)}</b><div class="mu">${pfLine(p)}${p.matchedOn&&p.matchedOn.length?' · '+esc(p.matchedOn.map(k=>why[k]||k).join(', ')):''}</div></div><button class="b sm" type="button" data-pf-pick="${esc(p.id)}">This is the same person</button></div>`).join('')+
+    '<label style="font-weight:400;display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="pfDiff" style="width:auto"> This is a different person</label><div class="acts"><button class="b" id="pfAnyway" type="button" disabled>Register as a new patient anyway</button></div>';
+  $('pfDup').hidden=false;
+}
+async function pfRegister(confirmed){
+  if(PF_BUSY)return;pfSay('');let body;
+  try{body=confirmed&&PF_DUP?PF_DUP.body:pfBody()}catch(er){return pfSay(er.message)}
+  if(!mayDo('patient.write'))return pfSay('Your role ('+Store.me.role+') may not register patients.');
+  pfBusy(true);
+  try{
+    const p=await Store.patients.create(confirmed?Object.assign({},body,{confirmDifferent:true}):body);
+    PF_DUP=null;pfBusy(false);onPatientChosen(p,{created:true});
+  }catch(er){
+    pfBusy(false);
+    if(er&&er.code==='possible_duplicate'&&Array.isArray(er.candidates)){PF_DUP={body};pfShowDup(er.candidates);pfSay('');return}
+    pfSay(pfMsgOf(er));
+  }
+}
+$('pfQ').addEventListener('input',pfSearchSoon);
+$('pfRes').addEventListener('click',e=>{const b=e.target.closest('[data-pf-pick]');if(b)pfPick(b.dataset.pfPick)});
+$('pfDup').addEventListener('click',e=>{const b=e.target.closest('[data-pf-pick]');if(b)pfPick(b.dataset.pfPick);if(e.target.id==='pfAnyway')pfRegister(true)});
+$('pfDup').addEventListener('change',e=>{if(e.target.id==='pfDiff')$('pfAnyway').disabled=!e.target.checked});
+$('pfNewBtn').addEventListener('click',()=>{const f=$('pfForm');f.hidden=!f.hidden;$('pfNewBtn').setAttribute('aria-expanded',String(!f.hidden));if(!f.hidden){if(!$('pfName').value)$('pfName').value=$('pfQ').value.trim().replace(/^\d+$/,'');$('pfName').focus()}});
+$('pfFormCancel').addEventListener('click',()=>{$('pfForm').hidden=true;$('pfNewBtn').setAttribute('aria-expanded','false');PF_DUP=null;$('pfDup').hidden=true;$('pfDup').innerHTML='';pfSay('');$('pfNewBtn').focus()});
+$('pfForm').addEventListener('input',()=>{if(PF_DUP){PF_DUP=null;$('pfDup').hidden=true;$('pfDup').innerHTML=''}});   // an edited form must be checked for duplicates again
+$('pfForm').addEventListener('submit',e=>{e.preventDefault();pfRegister(false)});
+$('pfAgeMode').addEventListener('change',pfAgeMode);
+$('pfBox').addEventListener('click',e=>{if(e.target.id==='pfAgain'){$('pfChosen').hidden=true;$('pfMain').hidden=false;$('pfQ').focus()}});
+$('pfClose').addEventListener('click',pfClose);
+$('ptFind').addEventListener('mousedown',e=>{if(e.target===$('ptFind'))pfClose()});
+$('ptFind').addEventListener('keydown',e=>{if(e.key!=='Tab')return;const f=[...$('pfBox').querySelectorAll('button,input,select')].filter(x=>!x.disabled&&!x.closest('[hidden]'));if(!f.length)return;const a=f[0],z=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}});
 $('patientsLink').addEventListener('click',()=>{persist();showNoCase()});
 
 function showNoCase(){
