@@ -22,7 +22,7 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 **Built (chunks 1-34a, 34b1-34b3, 34c, 34d):**
 - Single-file prototype `enhancer.html`: quick bar, fever chart, insulin grid, flowsheets, notes (draft/sign/amend), pathways, rules and alerts, EMR shell, FHIR export.
 - Server in the repo root: PostgreSQL schema, REST API, `store.js` cache-first client layer, import from browser, conflict screen, login and sessions, roles and permissions, CSRF, users screen, forced password change, audit log with admin screen and CSV export, entered-in-error history drawer, sign-in audit events, patients/encounters/merge/duplicate-check API (`patients.js`).
-- **212 tests pass** (258 after 36b) on PostgreSQL 16 (`npm test`): the server tests, the store tests (52 in `store.test.js`), and the 34c and 34d tests.
+- **212 tests pass** (258 after 36b, 280 after 37a) on PostgreSQL 16 (`npm test`): the server tests, the store tests (52 in `store.test.js`), and the 34c and 34d tests.
 - 34b3 filled in `onPatientChosen`: list open encounters or start one (type, ward, bed), create the chart, link it with `Store.patients.link`, open Summary; the case picker shows name and MRN. The chart's typed `patient` fields are a display copy of the real patient until 34c reads the real record.
 - 34b2 added the Find or register a patient dialog (`#ptFind`) in `enhancer.html`, opened by + New patient in server mode; it ends at `onPatientChosen(patient)`, which 34b3 fills in. Demo mode keeps the typed flow.
 - 34b1 added `Store.patients` (search, get, create, update, encounters, link) to `store.js`; server mode only, nothing cached, Demo mode rejects with `demo_mode`.
@@ -39,7 +39,9 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 
 - 36b: `deidentify()` and `knownIdentifiers()` in `llm.js` (server): every free-text AI input is cleaned before the provider sees it; for `suggest` the case's real patient, its merged-into record and a typed demo patient are removed by value as well as by pattern. `preview:true` on the three routes returns the exact text to be sent and calls nothing (no allowance used, no audit row). `/api/me` carries `ai` (switch on and a model configured). `Store.ai` in `store.js` (`available`, `preview`, `run`, `status`, `setEnabled`). `enhancer.html`: the three AI buttons call the server, show a Send / Cancel dialog with the exact text and what was removed, and follow `/me`; the old browser prompts, `callLLM` and demo drafts are gone; a generated set is saved only after a second click (Save draft set); Settings has the admin switch and the data-processing-agreement note. Demo mode has no AI. See API.md.
 
-**Next up:** 37a onward in the order below. Keep AI switched off for real patient data until a data processing agreement is in place.
+- 37a: `GET /cases/:id/changes?since=&caseVersion=` (action `case.read`, all roles, writes no audit row): rows, values, notes, acknowledgements and the case record changed after `since`, plus `cursor` (database time minus 5 s) and `latest` (newest change by someone else). `GET /cases/:id` now returns `asOf`. Rows entered in error come back without content unless the caller holds `case.read_errors`. `008_changes.sql` adds `case_notes.updated_at`. `Store.live.start/stop/now` and `Store.applyChanges` in `store.js`: poll every 10-15 s, not while the tab is hidden, never during a conflict; an item with an unsent edit, or one the person has open, is skipped and its confirmed version is not advanced (their save meets the usual 409). `enhancer.html` merges into the screen copy and the cache together, holds merging while a field has focus or a new reading is being typed, redraws the open tab after a merge and shows "Updated by <name> at <time>". **Also fixed:** `POST /cases/:id/rows` refused the `id` the browser sends, so a new row could not be saved against the real server; it now accepts an optional UUID and a re-sent request returns the stored row. 280 tests pass (`changes.test.js`, `store-live.test.js`).
+
+**Next up:** 37b onward in the order below. Keep AI switched off for real patient data until a data processing agreement is in place.
 
 **Manual work that is not a chunk (do soon, needs two real browsers):**
 - [ ] (a) Force a conflict on one row and confirm the side-by-side screen appears.
@@ -277,7 +279,7 @@ Server only. (1) Routes /api/llm/schema, /api/llm/suggest, /api/llm/rule-draft; 
 **Done when:** No identifiers leave the server; confirm dialog appears; AI buttons follow the admin switch.
 
 
-### [ ] 37a. Ward 1: live refresh via /changes
+### [x] 37a. Ward 1: live refresh via /changes
 
 **Goal:** Polling endpoint and a merge that never overwrites what someone is typing.
 

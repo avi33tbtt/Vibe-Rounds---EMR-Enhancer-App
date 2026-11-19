@@ -46,7 +46,7 @@ Case shape: `{id, patient, patientId, encounterId, narrative, applied[{setId,add
 ## Rows (append-only)
 | Route | Body |
 |---|---|
-| `POST /cases/:id/rows` | `{setId, groupId, row:{...}, rowTime?}` → 201. No version needed; parallel appends all succeed. |
+| `POST /cases/:id/rows` | `{id?, setId, groupId, row:{...}, rowTime?}` → 201. No version needed; parallel appends all succeed. `id` (a UUID, chunk 37a) is the id the browser made for the row: sending the same request again (a lost reply) answers `200` with the stored row and writes nothing, not even an audit row; an id that belongs to another case or group is `409`. Before 37a the field was refused, so a row made in the browser could not be saved. |
 | `PATCH /cases/:id/rows/:rowId` | `{expectedVersion, row?, rowTime?, reason?}` (`reason` optional, 3 to 1000 characters); 422 if the row is entered in error; the replaced version is kept (see Versions) |
 | `POST /cases/:id/rows/:rowId/error` | `{expectedVersion, reason}` (reason required); the row is hidden, kept, and cannot be edited |
 
@@ -163,6 +163,7 @@ One table, `permissions.js`: action -> roles. Each route maps to exactly one act
 | `GET /cases` | `case.read` | all |
 | `GET /cases/:id` | `case.read` | all |
 | `GET /cases/:id/alert-acks` | `case.read` | all |
+| `GET /cases/:id/changes` | `case.read` | all |
 | `POST /cases/:id/alert-acks` | `alert.ack` | admin, doctor, nurse |
 | `GET /admin/ai`, `PUT /admin/ai` | `ai.admin` | admin |
 | `POST /llm/schema` | `ai.schema` | admin, doctor, informatician |
@@ -322,3 +323,19 @@ Rules:
 - Analytics already show "Case N" and never a name or MRN; the shared analytics export (chunk 38b) must keep that.
 
 **Decisions to confirm:** (1) only admin and doctor may export (the plan did not say; a nurse could be added in `permissions.js`); (2) building the bundle is the audited event, not the later Copy or Download of the same text; (3) an unlinked chart cannot be exported in server mode (run the 34c migration or link it first).
+
+
+## Live refresh: what changed in a case (chunk 37a)
+| Route | Action | Roles | Answer |
+|---|---|---|---|
+| `GET /cases/:id/changes?since=<ISO time>&caseVersion=<n>` | `case.read` | all | `{cursor, truncated, case, rows, values, notes, acks, latest}` |
+
+- `since` is required: the `asOf` of the last `GET /cases/:id`, or the `cursor` of the previous call. `caseVersion` is optional: the case record is sent in `case` only when its version differs (or when `caseVersion` is left out); otherwise `case` is `null`. Unknown fields, a bad time or a bad version are `400`; an unknown or malformed case is `404`.
+- `rows`: rows added or changed after `since`, in the shape of `POST /rows` answers plus `byName` (who wrote that version) and `changedAt`. `values`: `{key, value, version, byName, changedAt}`. `notes`: notes created, edited or signed after `since`, with `signedByName`. `acks`: acknowledgements after `since`, as in `GET /alert-acks`. `case`: `{version, narrative, applied, pathways, pinned, patient, patientId, encounterId, patientRecord, encounterRecord, updatedAt}`; an informatician gets no patient or encounter record, as in `GET /cases/:id`.
+- `latest`: `{byName, at}` of the newest change **by someone other than the caller**, or `null`. The screen shows "Updated by <name> at <time>".
+- **Entered in error:** a row marked entered in error comes back as `{id, setId, groupId, status, version, changedAt}` with no content, so every screen can drop it; roles with `case.read_errors` (doctor, admin) get the whole row and the reason.
+- **`cursor`** is the database time minus 5 seconds. The five seconds cover a write whose transaction began just before this call and committed just after it (`updated_at` is the transaction's start time). Because of the overlap the same change can come twice with the same version; the browser ignores a version it already has. A write transaction that stays open longer than 5 seconds could still be missed until the case is next reloaded.
+- **`truncated`**: more than 5000 changed items would be returned. Nothing else is sent; the browser reads the whole case instead.
+- **No audit row** is written (opening the case already wrote its `view` row, and a poll every 10 to 15 seconds would bury the log). `GET /cases/:id` now also returns `asOf`, read from the database clock **before** the case is read.
+- `008_changes.sql` adds `case_notes.updated_at` (set on create, edit and sign; existing notes are filled from `created_at` and `signed_at`) and indexes for the three lookups.
+- Browser: `Store.live.start(caseId, {live, editing, onMerged})`, `Store.live.stop()`, `Store.live.now(caseId)`, `Store.applyChanges(caseId, changes, live, opts)`. Polls every 10 to 15 seconds, not while the tab is hidden (it polls at once when the tab is shown again), and never while a conflict is open. **Nothing the person has typed is overwritten**: an item whose working copy differs from what the server last confirmed, or that `editing(kind, ref)` reports as open, is skipped and the confirmed version is not advanced, so their own save meets the usual `409` and the conflict screen. `enhancer.html` merges into the screen's copy and the cache together, holds all merging while a field has focus or a new reading is being typed, and redraws the open tab only after a merge that changed something.

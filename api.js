@@ -61,10 +61,11 @@ const S = {
   caseCreate: z.object({ id: uuid.optional(), patient: patientObj.optional(), narrative: z.string().max(200000).optional(),
     applied: appliedArr.optional(), pathways: pathwaysArr.optional(), pinned: pinnedArr.optional() }).strict(),
   alertAck: z.object({ ruleId: ident, setId: ident, sig: z.string().min(1).max(500) }).strict(),
+  changesQuery: z.object({ since: isoTime, caseVersion: z.string().regex(/^\d{1,9}$/).optional() }).strict(),
   casePatch: z.object({ expectedVersion: ver, patient: patientObj.optional(), narrative: z.string().max(200000).optional(),
     applied: appliedArr.optional(), pathways: pathwaysArr.optional(), pinned: pinnedArr.optional() }).strict()
     .refine((o) => Object.keys(o).length > 1, 'nothing to change'),
-  rowCreate: z.object({ setId: ident, groupId: ident, row: rowObj, rowTime: isoTime.nullable().optional() }).strict(),
+  rowCreate: z.object({ id: uuid.optional(), setId: ident, groupId: ident, row: rowObj, rowTime: isoTime.nullable().optional() }).strict(),
   rowPatch: z.object({ expectedVersion: ver, row: rowObj.optional(), rowTime: isoTime.nullable().optional(), reason: reasonText.optional() }).strict()
     .refine((o) => o.row !== undefined || o.rowTime !== undefined, 'nothing to change'),
   rowError: z.object({ expectedVersion: ver, reason: reasonText }).strict(),       // a reason is always required to mark a row entered in error
@@ -148,6 +149,11 @@ async function conflict(q, id, what) {
   if (!cur) throw new ApiError(404, 'not_found', 'Case not found');
   throw new ApiError(409, 'conflict', `${what} was changed by someone else`, { current: cur });
 }
+// chunk 37a: the time a client passes back as ?since=. The database clock minus CHANGE_OVERLAP_S, because updated_at is the START time of the writing
+// transaction: one that began just before this call and commits just after it would otherwise be missed. The client skips anything it already has (same version).
+const CHANGE_OVERLAP_S = 5;
+const changeCursor = async (q) => iso((await q.query(`SELECT clock_timestamp() - ($1 * interval '1 second') AS t`, [CHANGE_OVERLAP_S])).rows[0].t);
+const MAX_CHANGES = 5000;
 const touch = (q, id) => q.query('UPDATE cases SET updated_at=now() WHERE id=$1', [id]);
 // chunk 33b: copy the version being replaced into row_versions / value_versions. Call on the SAME transaction client, after the change succeeded.
 const saveRowVersion = (q, old, by, reason) => q.query(`INSERT INTO row_versions (row_id,case_id,version,row,row_time,status,error_reason,written_by,written_at,replaced_by,reason)
@@ -445,8 +451,10 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   r.get('/cases/:id', wrap(async (req, res) => {
     const wantErrors = req.query.include_errors === 'true' || req.query.includeErrors === '1';            // rows marked entered in error: hidden unless asked for
     if (wantErrors && !can(req.actor, 'case.read_errors')) return denied(res, req.actor, 'see rows entered in error', 'case.read_errors');   // doctors and admins only
+    const asOf = await changeCursor(db);                                            // chunk 37a: taken BEFORE the read, so a change made while loading is seen by the first /changes call
     const c = await loadCase(db, idParam(req.params.id), { includeErrors: wantErrors });
     if (!c) throw new ApiError(404, 'not_found', 'Case not found');
+    c.asOf = asOf;
     if (!can(req.actor, 'patient.read')) { c.patientRecord = null; c.encounterRecord = null; }      // chunk 34c: real identities only for roles that may read patients (an informatician may not)
     // Chunk 33c1: opening a case is logged (who, which patient, which case; never any content), at most once per user per case per VIEW_THROTTLE_MIN minutes
     // on the database clock. A refused or missing case never reaches this line. DECISION: if the view row cannot be written the read FAILS (500, no case data
@@ -485,6 +493,45 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
         versions: [{ version: v.version, current: true, value: v.value, writtenBy: v.updated_by, writtenByName: v.w_name, writtenAt: iso(v.updated_at),
           replacedBy: null, replacedByName: null, replacedAt: null, reason: null }, ...(byKey.get(v.key) || [])] })),
     });
+  }));
+  // Chunk 37a: what changed in one case after `since` (the `asOf` of GET /cases/:id, or the `cursor` of the previous call). Read-only and writes NO audit row:
+  // the case view row is written when the case is opened, and a poll every 10 to 15 seconds would bury the log. Same visibility as GET /cases/:id: rows entered in
+  // error come back WITHOUT their content (just id and status, so a screen can drop them) unless the caller holds case.read_errors. `case` is present when the
+  // case record itself (narrative, applied sets, pathways, link to patient) moved past ?caseVersion. More than MAX_CHANGES rows: `truncated`, the client reloads.
+  r.get('/cases/:id/changes', wrap(async (req, res) => {
+    const id = idParam(req.params.id), q = parse(S.changesQuery, req.query), seeErrors = can(req.actor, 'case.read_errors');
+    const cursor = await changeCursor(db);
+    const c = (await db.query('SELECT id, version, narrative, applied, pathways, pinned, patient_id, encounter_id, demo_patient, updated_at FROM cases WHERE id=$1', [id])).rows[0];
+    if (!c) throw new ApiError(404, 'not_found', 'Case not found');
+    const [rows, vals, notes, acks] = await Promise.all([
+      db.query(`SELECT cr.*, u.name AS by_name, COALESCE(cr.updated_at, cr.entered_at) AS changed_at FROM case_rows cr LEFT JOIN users u ON u.id = COALESCE(cr.updated_by, cr.entered_by)
+                 WHERE cr.case_id=$1 AND COALESCE(cr.updated_at, cr.entered_at) > $2 ORDER BY changed_at, cr.id LIMIT ${MAX_CHANGES + 1}`, [id, q.since]),
+      db.query(`SELECT v.key, v.value, v.version, v.updated_at AS changed_at, v.updated_by AS by_id, u.name AS by_name FROM case_values v LEFT JOIN users u ON u.id=v.updated_by
+                 WHERE v.case_id=$1 AND v.updated_at > $2 ORDER BY v.updated_at, v.key LIMIT ${MAX_CHANGES + 1}`, [id, q.since]),
+      db.query(`SELECT n.*, s.name AS signed_by_name, u.name AS by_name FROM case_notes n LEFT JOIN users s ON s.id=n.signed_by LEFT JOIN users u ON u.id=COALESCE(n.signed_by, n.created_by)
+                 WHERE n.case_id=$1 AND n.updated_at > $2 ORDER BY n.updated_at, n.id LIMIT ${MAX_CHANGES + 1}`, [id, q.since]),
+      db.query(`SELECT a.id, a.set_id, a.rule_id, a.sig, a.user_id, a.source, a.acked_at, u.name AS user_name FROM alert_acks a LEFT JOIN users u ON u.id=a.user_id
+                 WHERE a.case_id=$1 AND a.acked_at > $2 ORDER BY a.acked_at, a.id LIMIT ${MAX_CHANGES + 1}`, [id, q.since]),
+    ]);
+    if ([rows, vals, notes, acks].some((x) => x.rows.length > MAX_CHANGES)) return res.json({ cursor, truncated: true, rows: [], values: [], notes: [], acks: [], case: null, latest: null });
+    const hidden = (r) => r.status !== 'active' && !seeErrors;
+    const out = {
+      cursor, truncated: false,
+      case: q.caseVersion !== undefined && +q.caseVersion === c.version ? null : {
+        version: c.version, narrative: c.narrative, applied: c.applied, pathways: c.pathways, pinned: c.pinned, patient: c.demo_patient, patientId: c.patient_id, encounterId: c.encounter_id,
+        updatedAt: iso(c.updated_at), ...(can(req.actor, 'patient.read') ? await recordsOf(db, c.patient_id, c.encounter_id) : { patientRecord: null, encounterRecord: null }) },
+      rows: rows.rows.map((r) => (hidden(r) ? { id: r.id, setId: r.set_id, groupId: r.group_id, status: r.status, version: r.version, changedAt: iso(r.changed_at) }
+        : { ...rowOut(r), byName: r.by_name, changedAt: iso(r.changed_at) })),
+      values: vals.rows.map((v) => ({ key: v.key, value: v.value, version: v.version, byName: v.by_name, changedAt: iso(v.changed_at) })),
+      notes: notes.rows.map((n) => ({ id: n.id, caseId: n.case_id, type: n.type, setId: n.set_id, text: n.text, status: n.status, signedBy: n.signed_by, signedByName: n.signed_by_name,
+        signedAt: iso(n.signed_at), amends: n.amends_id, reason: n.reason, createdAt: iso(n.created_at), version: n.version, byName: n.by_name, changedAt: iso(n.updated_at) })),
+      acks: acks.rows.map(ackOut),
+    };
+    const who = [...rows.rows.map((r) => [r.updated_by || r.entered_by, r.by_name, r.changed_at]), ...vals.rows.map((v) => [v.by_id, v.by_name, v.changed_at]),
+      ...notes.rows.map((n) => [n.signed_by || n.created_by, n.by_name, n.updated_at]), ...acks.rows.map((x) => [x.user_id, x.user_name, x.acked_at])]
+      .filter((w) => w[0] && w[0] !== req.actor.id && w[1]).sort((x, y) => new Date(y[2]) - new Date(x[2]));   // the newest change by someone else: the screen says 'updated by <name> at <time>'
+    out.latest = who.length ? { byName: who[0][1], at: iso(who[0][2]) } : null;
+    res.json(out);
   }));
   r.post('/cases', wrap(async (req, res) => {
     const b = parse(S.caseCreate, req.body);
@@ -547,16 +594,23 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     if (!canAddRow(req.actor, await setKindOf(b.setId))) throw new ApiError(403, 'forbidden', 'Your role may add readings to care flowsheets only');
     const out = await db.withTx(async (c) => {
       if (!(await c.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
+      if (b.id) {                                    // chunk 37a: the browser makes the row id, so a re-sent request (lost reply) finds the stored row instead of adding a second one
+        const same = (await c.query('SELECT * FROM case_rows WHERE id=$1', [b.id])).rows[0];
+        if (same) {
+          if (same.case_id !== id || same.set_id !== b.setId || same.group_id !== b.groupId) throw new ApiError(409, 'conflict', 'A row with this id already exists');
+          return { ...same, replay: true };
+        }
+      }
       await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${id}|${b.setId}|${b.groupId}`]);   // serialises the row COUNT only, appends never conflict
       const n = (await c.query('SELECT count(*)::int n FROM case_rows WHERE case_id=$1 AND set_id=$2 AND group_id=$3', [id, b.setId, b.groupId])).rows[0].n;
       if (n >= MAX_ROWS_PER_GROUP) throw new ApiError(422, 'too_many_rows', `A repeat group holds at most ${MAX_ROWS_PER_GROUP} rows`);
-      const ins = await c.query(`INSERT INTO case_rows (case_id,set_id,group_id,row,row_time,entered_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [id, b.setId, b.groupId, JSON.stringify(b.row), b.rowTime || null, req.actor.id]);
+      const ins = await c.query(`INSERT INTO case_rows (id,case_id,set_id,group_id,row,row_time,entered_by) VALUES (COALESCE($7::uuid,gen_random_uuid()),$1,$2,$3,$4,$5,$6) RETURNING *`,
+        [id, b.setId, b.groupId, JSON.stringify(b.row), b.rowTime || null, req.actor.id, b.id || null]);
       await touch(c, id);
       await audit(c, { action: 'row.add', entity: 'case_row', entity_id: ins.rows[0].id, case_id: id, after: { setId: b.setId, groupId: b.groupId, row: b.row, rowTime: b.rowTime || null } });
       return ins.rows[0];
     });
-    res.status(201).json(rowOut(out));
+    res.status(out.replay ? 200 : 201).json(rowOut(out));
   }));
   async function assertRowAmend(req, id, rid) {           // doctors and admins amend any row; a nurse only her own readings in care sets
     if (can(req.actor, 'row.amend_any')) return;
@@ -656,7 +710,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     const b = parse(S.notePatch, req.body);
     return db.withTx(async (c) => {
       const old = (await c.query('SELECT text, version FROM case_notes WHERE id=$1 AND case_id=$2 FOR UPDATE', [nid, cid])).rows[0];
-      const u = await c.query(`UPDATE case_notes SET text=$4, version=version+1 WHERE id=$1 AND case_id=$2 AND version=$3 AND status='draft' RETURNING *`, [nid, cid, b.expectedVersion, b.text]);
+      const u = await c.query(`UPDATE case_notes SET text=$4, version=version+1, updated_at=now() WHERE id=$1 AND case_id=$2 AND version=$3 AND status='draft' RETURNING *`, [nid, cid, b.expectedVersion, b.text]);
       if (!u.rows.length) await noteConflict(c, cid, nid);
       await touch(c, cid);
       await audit(c, { action: 'note.edit', entity: 'case_note', entity_id: nid, case_id: cid, before: { text: old.text, version: old.version }, after: { text: b.text, version: u.rows[0].version } });
@@ -666,7 +720,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   r.post('/cases/:id/notes/:nid/sign', wrap((req, res) => noteAct(req, res, async (cid, nid) => {
     const b = parse(S.noteSign, req.body);                // signer comes from the session, never the body
     return db.withTx(async (c) => {
-      const u = await c.query(`UPDATE case_notes SET status='signed', signed_by=$4, signed_at=now(), version=version+1
+      const u = await c.query(`UPDATE case_notes SET status='signed', signed_by=$4, signed_at=now(), version=version+1, updated_at=now()
         WHERE id=$1 AND case_id=$2 AND version=$3 AND status='draft' RETURNING *`, [nid, cid, b.expectedVersion, req.actor.id]);
       if (!u.rows.length) await noteConflict(c, cid, nid);
       await touch(c, cid);

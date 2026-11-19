@@ -158,7 +158,7 @@ body.compact label{margin:7px 0 2px}
 <div class="ban" id="demoBan" hidden>Demo mode: data stays in this browser, synthetic data only</div>
 <div class="ban" id="conflictBan" role="alert" hidden style="background:#fde2e0;color:#7a1c14"></div>
 <div class="ban" id="wireBan" hidden>Interim build (chunks 29c–29d pending): the app still saves cases and settings in this browser only, not on the server.</div>
-<header><b>EMR Enhancer</b><span class="mu">standalone clinical record</span><button class="b sm" id="patientsLink" type="button" title="Open the patient list (Alt+P)">Patients</button><button class="b sm" id="densityToggle" type="button" aria-pressed="false" title="Switch between comfortable and compact spacing">Compact view</button><span style="flex:1"></span><button class="b sm" id="modeToggle" type="button" aria-pressed="false" title="Demo mode keeps data in this browser only">Demo mode: off</button><span class="mu" id="who" hidden></span><button class="b sm" id="logoutBtn" type="button" hidden>Sign out</button><span class="mu" id="saveState" aria-live="polite">Not loaded</span><button class="b sm" id="saveRetry" type="button" hidden>Retry</button></header>
+<header><b>EMR Enhancer</b><span class="mu">standalone clinical record</span><button class="b sm" id="patientsLink" type="button" title="Open the patient list (Alt+P)">Patients</button><button class="b sm" id="densityToggle" type="button" aria-pressed="false" title="Switch between comfortable and compact spacing">Compact view</button><span style="flex:1"></span><button class="b sm" id="modeToggle" type="button" aria-pressed="false" title="Demo mode keeps data in this browser only">Demo mode: off</button><span class="mu" id="who" hidden></span><button class="b sm" id="logoutBtn" type="button" hidden>Sign out</button><span class="mu" id="saveState" aria-live="polite">Not loaded</span><button class="b sm" id="saveRetry" type="button" hidden>Retry</button><span class="mu" id="liveNote" aria-live="polite"></span></header>
 <div id="patientbar">
   <div class="ptmain"><b id="ptName">No patient</b><div class="ptmeta" id="ptMeta"></div></div>
   <div class="ptchips" id="ptDiagnosis"></div><div class="ptchips" id="ptPathways"></div>
@@ -2025,7 +2025,7 @@ $('ptFind').addEventListener('keydown',e=>{if(e.key!=='Tab')return;const f=[...$
 $('patientsLink').addEventListener('click',()=>{persist();showNoCase()});
 
 function showNoCase(){
-  histClose();CASE_OPEN=false;histBtnUpdate();
+  histClose();CASE_OPEN=false;liveStop();histBtnUpdate();
   $('noCase').classList.add('show');
   $('chartbar').classList.remove('open');$('addPanel').classList.remove('open');
   $('patientbar').classList.remove('open');document.documentElement.style.setProperty('--patientbar-height','0px');
@@ -2037,7 +2037,7 @@ function showNoCase(){
 function enterCase(c,tab){
   histClose();CUR=c;cleanRows(CUR);cleanPw(CUR);patientOf(CUR);CASE_OPEN=true;
   $('noCase').classList.remove('show');$('shellnav').style.display='flex';$('chartbar').classList.add('open');
-  renderPatientBanner();renderCase();renderChartBar();showShellTab(tab||'ov');if((tab||'ov')==='nt')renderNotes();picker();
+  renderPatientBanner();renderCase();renderChartBar();showShellTab(tab||'ov');if((tab||'ov')==='nt')renderNotes();picker();liveStart();
 }
 $('ptEditBtn').addEventListener('click',()=>{if(CASE_OPEN)$('patientedit').classList.toggle('open')});
 $('ptCancel').addEventListener('click',()=>$('patientedit').classList.remove('open'));
@@ -2570,6 +2570,29 @@ function ibClear(){
 $('ibCheck').addEventListener('click',ibCheck);
 $('ibOut').addEventListener('change',e=>{if(e.target.id==='ibOk'&&$('ibRun'))$('ibRun').disabled=!e.target.checked});
 $('ibOut').addEventListener('click',e=>{const b=e.target.closest('[data-ib]');if(!b)return;const a=b.dataset.ib;if(a==='run'&&$('ibOk')&&$('ibOk').checked)ibRun();else if(a==='clear')ibClear();else if(a==='again')ibCheck()});
+/* Chunk 37a: live refresh. While a case is open (server mode) the Store polls what others changed and merges it into CUR and the cache; the rules that keep
+   typing safe are in store.js (an item with an unsent edit is never replaced). Here: nothing is merged while a field is being edited or a new reading is being
+   typed (those drafts live only in the page), and the open tab is redrawn only after a merge that changed something. */
+function liveBusy(){
+  const a=document.activeElement;
+  if(a&&a!==document.body&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&!/^(button|submit|reset)$/.test(a.type||'')&&a.closest('.pane,#addPanel,#patientedit'))return true;
+  if(FLW&&FLW.newOpen&&$('flw')&&$('flw').classList.contains('on'))return true;
+  const cf=$('cfm');return !!(cf&&!cf.hidden);
+}
+function liveStart(){
+  if(Store.mode!=='server'||!CUR)return;
+  const id=CUR.id;
+  Store.live.start(id,{live:()=>(CUR&&CUR.id===id&&CASE_OPEN?CUR:null),editing:()=>liveBusy(),onMerged:liveMerged});
+}
+function liveStop(){Store.live.stop();const n=$('liveNote');if(n)n.textContent=''}
+function liveMerged(id,sum){
+  if(!CUR||CUR.id!==id||!CASE_OPEN||!sum.changed)return;
+  renderPatientBanner();renderChartBar();alertsRender();picker();
+  const pane=document.querySelector('.pane.on'),tid=pane&&pane.id;
+  if(['ov','flw','nt','pw','al','cp'].includes(tid))showShellTab(tid);
+  const n=$('liveNote'),L=sum.latest;
+  if(n)n.textContent='Updated by '+(L&&L.byName?L.byName:'another user')+' at '+new Date(L&&L.at?L.at:Date.now()).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+}
 Store.hooks.toast=toast;
 Store.hooks.onSetVersion=(id,n,ok)=>{if(ok&&CUR&&CASE_OPEN)renderCase()};
 Store.hooks.rowTime=(sid,gid,row)=>{const set=getSet(sid);if(!set)return null;const tc=tcol(grp(set,gid));if(!tc)return null;const t=rowT(row,tc);return Number.isFinite(t)?t:null};

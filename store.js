@@ -19,13 +19,14 @@
     mode: (function () { try { return g.localStorage.getItem('storeMode') === 'local' ? 'local' : 'server'; } catch (e) { return 'server'; } })(),
     base: '', ready: false, me: null,
     reasons: {},                                   // rowId -> reason typed when a reading is removed ("entered in error")
-    hooks: { onStatus() {}, onConflict() {}, onUnauthorized() {}, onCaseReloaded() {}, onSetVersion() {}, toast() {}, rowTime() { return null; } },
+    hooks: { onStatus() {}, onConflict() {}, onUnauthorized() {}, onCaseReloaded() {}, onChanges() {}, onSetVersion() {}, toast() {}, rowTime() { return null; } },
   };
   const S = { cases: [], sets: [], usage: {}, codes: {}, codeMeta: {}, binds: {}, rules: {}, protocols: {}, prefs: {}, setHist: {} };
   const snap = {};                                  // entity key -> what the server last confirmed
   const Q = []; let running = false, timer = null, delay = 2000, savedAt = null, retrying = false;
   const failed = {}, conflicts = {};
   const warned = {};
+  const ASOF = {};                                  // caseId -> the server time that case was last read at (chunk 37a: where /changes starts)
   const grpOf = (key) => key.slice(key.indexOf(':') + 1).split('|')[0];
 
   // ---------------------------------------------------------------- API client (chunk 32d1: session, CSRF, 401)
@@ -148,7 +149,7 @@
     if (Array.isArray(sc.pinned)) c.pinned = sc.pinned;
     c.patientId = sc.patientId || null; c.encounterId = sc.encounterId || null;     // chunk 34b1: set by the server's link route, never typed
     c.patientRecord = sc.patientRecord || null; c.encounterRecord = sc.encounterRecord || null;   // chunk 34c: read-only display copies of the real patient and encounter; never diffed or sent back
-    if (!dry) for (const k of Object.keys(snap)) if (grpOf(k) === id) delete snap[k];
+    if (!dry) { ASOF[id] = sc.asOf || null; for (const k of Object.keys(snap)) if (grpOf(k) === id) delete snap[k]; }
     SN['case:' + id] = { ver: sc.version, data: metaOf(c) };
     for (const k of Object.keys(sc.values || {})) {
       const v = sc.values[k], i = k.indexOf('/@');
@@ -298,7 +299,7 @@
   };
   Store.reloadCase = async function (id) {              // explicit "Reload theirs": drops this person's unsent edits for that case
     for (let i = Q.length - 1; i >= 0; i--) if (grpOf(Q[i].key) === id && !Q[i].started) Q.splice(i, 1);
-    delete conflicts[id]; delete REVIEW[id];
+    delete conflicts[id]; delete REVIEW[id]; if (LIVE && LIVE.id === id) LIVE.since = null;
     const c = fromServerCase(await api('GET', '/cases/' + id));
     const i = S.cases.findIndex((x) => x.id === id); if (i >= 0) S.cases[i] = c; else S.cases.push(c);
     notify(); Store.hooks.onCaseReloaded(id, clone(c)); return clone(c);
@@ -715,7 +716,133 @@
     }),
   };
 
+
+  // ---------------------------------------------------------------- live refresh (chunk 37a)
+  // While a case is open, GET /cases/:id/changes?since= is polled every 10 to 15 seconds (not while the tab is hidden) and what others changed is merged in.
+  // The rule that matters: NOTHING the person has typed is overwritten. Per item, "mine" is the screen's working copy (`live`, else the cache) compared with
+  // the server-confirmed snapshot. If they differ (an unsent edit, a reading still being sent) or opts.editing(kind, ref) says the person has that field
+  // open, the item is skipped and their later save meets the usual 409 and the conflict screen; the version in the snapshot is NOT advanced past what they saw.
+  // An item whose snapshot version is already the same or newer is skipped (own writes echo back, and the cursor overlaps by a few seconds).
+  // Both the cache and the working copy are changed: the screen's persist() writes its copy over the cache, and a row missing there would be sent as "entered in error".
+  let LIVE = null;
+  const fieldsOfCase = ['patient', 'narrative', 'applied', 'pathways', 'pinned'];
+  function applyChanges(id, ch, live, opts) {
+    const cache = caseById(id); if (!cache || !ch) return null;
+    const cur = live || cache, targets = live && live !== cache ? [cache, live] : [cache], editing = (opts && opts.editing) || (() => false);
+    const sum = { rows: 0, values: 0, notes: 0, acks: 0, case: false, skipped: 0, changed: false, latest: ch.latest || null };
+    const skip = () => { sum.skipped++; };
+    for (const r of ch.rows || []) {
+      const key = 'row:' + id + '|' + r.id, sn = snap[key], gk = r.setId + '/@' + r.groupId;
+      if (sn && sn.ver >= r.version) continue;
+      const local = findRow(cur, r.id);
+      if (local && (!sn || !eq(sn.data, strip(local.row)) || sn.time !== timeOf(local.setId, local.groupId, local.row)) || (local && editing('row', r.id))) { skip(); continue; }
+      if (r.status !== 'active') {                                   // entered in error: drop it from the screen, and from the snapshot so no write is made for it
+        let gone = !!sn;
+        for (const t of targets) if (Array.isArray(t.values[gk])) { const n0 = t.values[gk].length; t.values[gk] = t.values[gk].filter((x) => x && x.__id !== r.id); if (t.values[gk].length < n0) gone = true; }
+        delete snap[key]; if (gone) sum.rows++; continue;                  // the same answer comes again inside the overlap: nothing left to remove, nothing to report
+      }
+      const o = Object.assign({}, r.row, { __id: r.id, __by: r.enteredBy, __at: r.enteredAt });
+      for (const t of targets) { const a = t.values[gk] || (t.values[gk] = []), i = a.findIndex((x) => x && x.__id === r.id); if (i >= 0) a[i] = clone(o); else a.push(clone(o)); }
+      snap[key] = { ver: r.version, data: clone(r.row), time: r.rowTime || null, setId: r.setId, groupId: r.groupId }; sum.rows++;
+    }
+    for (const v of ch.values || []) {
+      const key = 'val:' + id + '|' + v.key, sn = snap[key], mine = cur.values[v.key];
+      if (sn && sn.ver >= v.version) continue;
+      if (sn ? !eq(sn.data, mine === undefined ? null : mine) : mine !== undefined) { skip(); continue; }
+      if (editing('value', v.key)) { skip(); continue; }
+      for (const t of targets) { if (v.value === null) delete t.values[v.key]; else t.values[v.key] = clone(v.value); }
+      snap[key] = { ver: v.version, data: clone(v.value) }; sum.values++;
+    }
+    for (const n of ch.notes || []) {
+      const key = 'note:' + id + '|' + n.id, sn = snap[key], local = (cur.notes || []).find((x) => x.id === n.id);
+      if (sn && sn.ver >= n.version) continue;
+      if (local && (!sn || !eq(sn.data, noteData(local)) || editing('note', n.id))) { skip(); continue; }
+      const o = { id: n.id, type: n.type, text: n.text || '', status: n.status, signedBy: n.signedByName || n.signedBy || '', signedAt: n.signedAt || '', createdAt: n.createdAt };
+      if (n.setId) o.setId = n.setId;
+      if (n.amends) { o.amends = n.amends; o.reason = n.reason || ''; }
+      for (const t of targets) { t.notes = t.notes || []; const i = t.notes.findIndex((x) => x.id === n.id); if (i >= 0) t.notes[i] = clone(o); else t.notes.push(clone(o)); }
+      snap[key] = { ver: n.version, data: noteData({ type: n.type, setId: n.setId, text: n.text, status: n.status, amends: n.amends, reason: n.reason }) }; sum.notes++;
+    }
+    for (const a of ch.acks || []) {
+      let added = false;
+      for (const t of targets) {
+        t.alertLog = t.alertLog || [];
+        if (t.alertLog.some((x) => (a.id !== undefined && x.id === a.id) || (x.ruleId === a.ruleId && x.setId === a.setId && x.sig === a.sig))) continue;
+        t.alertLog = t.alertLog.concat([clone(a)]).slice(-2000); added = true;
+      }
+      if (added) sum.acks++;
+    }
+    const cs = ch.case, sc = snap['case:' + id];
+    if (cs && sc && sc.ver < cs.version) {
+      const mc = metaOf(cur);
+      if (!fieldsOfCase.every((f) => eq(sc.data[f], mc[f])) || fieldsOfCase.some((f) => editing('case', f))) skip();
+      else {
+        for (const t of targets) {
+          if (cs.patient) t.patient = clone(cs.patient);
+          t.narrative = cs.narrative || ''; t.applied = clone(cs.applied || []); t.pathways = clone(cs.pathways || []);
+          if (Array.isArray(cs.pinned)) t.pinned = clone(cs.pinned); else delete t.pinned;
+          t.patientId = cs.patientId || null; t.encounterId = cs.encounterId || null;
+          t.patientRecord = cs.patientRecord || null; t.encounterRecord = cs.encounterRecord || null; t.updatedAt = cs.updatedAt;
+        }
+        snap['case:' + id] = { ver: cs.version, data: metaOf(cache) }; sum.case = true;
+      }
+    }
+    if (sum.acks && snap['case:' + id]) snap['case:' + id].data.alertLog = metaOf(cache).alertLog;      // acknowledgements are not part of a case PATCH: keep the snapshot level with them
+    sum.changed = !!(sum.rows || sum.values || sum.notes || sum.acks || sum.case);
+    return sum;
+  }
+  // A full case read, put in the shape of a /changes answer (first read of a case that has no cursor yet, or an answer that was cut off).
+  function fullAsChanges(sc) {
+    const out = { cursor: sc.asOf, truncated: false, rows: [], values: [], notes: sc.notes || [], acks: sc.alertLog || [], latest: null,
+      case: { version: sc.version, narrative: sc.narrative, applied: sc.applied, pathways: sc.pathways, pinned: sc.pinned, patient: sc.patient, patientId: sc.patientId, encounterId: sc.encounterId,
+        patientRecord: sc.patientRecord, encounterRecord: sc.encounterRecord, updatedAt: sc.updatedAt } };
+    for (const k of Object.keys(sc.values || {})) {
+      const i = k.indexOf('/@'), v = sc.values[k];
+      if (i > 0 && Array.isArray(v)) v.forEach((r) => out.rows.push({ id: r.__id, setId: k.slice(0, i), groupId: k.slice(i + 2), row: strip(r), rowTime: r.__time || null, version: r.__v, status: 'active', enteredBy: r.__by, enteredAt: r.__at }));
+      else out.values.push({ key: k, value: v, version: (sc.valueVersions || {})[k] || 1 });
+    }
+    return out;
+  }
+  // One poll now. Resolves to the merge summary, or null when nothing was asked (not server mode, signed out, conflict screen open, case not yet on the server).
+  async function pollOnce(id) {
+    if (Store.mode !== 'server' || needLogin || wrongUser || conflicts[id] || REVIEW[id] || !snap['case:' + id] || !caseById(id)) return null;
+    const since = (LIVE && LIVE.id === id && LIVE.since) || ASOF[id];
+    let ch;
+    if (!since) { const sc = await api('GET', '/cases/' + id); ch = fullAsChanges(sc); }
+    else {
+      ch = await api('GET', '/cases/' + id + '/changes?since=' + encodeURIComponent(since) + '&caseVersion=' + snap['case:' + id].ver);
+      if (ch.truncated) { const sc = await api('GET', '/cases/' + id); ch = fullAsChanges(sc); }
+    }
+    if (conflicts[id] || REVIEW[id]) return null;                    // a conflict appeared while the request was out: leave the case to the conflict screen
+    const o = (LIVE && LIVE.id === id && LIVE.opts) || {}, sum = applyChanges(id, ch, o.live ? o.live() : null, o);
+    ASOF[id] = ch.cursor; if (LIVE && LIVE.id === id) LIVE.since = ch.cursor;
+    if (sum && (sum.changed || sum.skipped)) { try { (o.onMerged || Store.hooks.onChanges)(id, sum); } catch (e) { /* UI */ } }
+    return sum;
+  }
+  const hiddenTab = () => !!(g.document && g.document.hidden);
+  function liveSchedule() {
+    if (!LIVE || LIVE.stopped) return;
+    clearTimeout(LIVE.timer);
+    LIVE.timer = setTimeout(liveTick, (LIVE.opts.interval || 10000) + (LIVE.opts.interval ? 0 : Math.random() * 5000));
+  }
+  async function liveTick() {
+    const L = LIVE; if (!L || L.stopped || L.busy) return;
+    if (hiddenTab()) { L.paused = true; return; }                    // no polling while hidden; the visibilitychange listener below starts it again at once
+    L.busy = true;
+    try { await pollOnce(L.id); } catch (e) { if (e.status === 404) { Store.live.stop(); return; } /* network or server trouble: try again next time */ }
+    finally { if (LIVE === L) { L.busy = false; liveSchedule(); } }
+  }
+  if (g.document && g.document.addEventListener) g.document.addEventListener('visibilitychange', () => { if (LIVE && LIVE.paused && !hiddenTab()) { LIVE.paused = false; liveTick(); } });
+  Store.live = {
+    // opts: live() -> the screen's working copy of the case; editing(kind, ref) -> true while the person has that item open; onMerged(id, summary); interval (ms, tests only)
+    start(id, opts) { Store.live.stop(); if (Store.mode !== 'server') return false; LIVE = { id, opts: opts || {}, since: null, timer: null, busy: false, paused: false, stopped: false }; if (hiddenTab()) LIVE.paused = true; else liveSchedule(); return true; },
+    stop() { if (LIVE) { LIVE.stopped = true; clearTimeout(LIVE.timer); } LIVE = null; },
+    now: (id) => pollOnce(id),                                       // one poll right now (the screen's Refresh, and the tests)
+    active: () => (LIVE ? LIVE.id : null),
+  };
+  Store.applyChanges = applyChanges;
+
   Store.setMode = function (m) { try { g.localStorage.setItem('storeMode', m === 'local' ? 'local' : 'server'); } catch (e) { /* ignore */ } g.location && g.location.reload(); };
-  Store._test = { S, snap, Q, conflicts, failed, metaOf, fromServerCase, csrf: () => csrf };
+  Store._test = { S, snap, Q, conflicts, failed, metaOf, fromServerCase, ASOF, csrf: () => csrf };
   g.Store = Store;
 })(typeof window !== 'undefined' ? window : globalThis);

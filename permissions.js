@@ -81,7 +81,7 @@ const CARE_ONLY_ROLES = ['nurse'];
 /** Every route, keyed 'METHOD /path' exactly as registered in api.js. */
 const ROUTE_ACTIONS = {
   'GET /me': 'session.read',
-  'GET /cases': 'case.read', 'GET /cases/:id': 'case.read', 'GET /cases/:id/history': 'case.history', 'POST /cases': 'case.create', 'PATCH /cases/:id': 'case.patch',
+  'GET /cases': 'case.read', 'GET /cases/:id': 'case.read', 'GET /cases/:id/history': 'case.history', 'GET /cases/:id/changes': 'case.read', 'POST /cases': 'case.create', 'PATCH /cases/:id': 'case.patch',
   'POST /cases/:id/rows': 'row.add', 'PATCH /cases/:id/rows/:rowId': 'row.amend_own', 'POST /cases/:id/rows/:rowId/error': 'row.amend_own',
   'PUT /cases/:id/values': 'value.write',
   'POST /cases/:id/notes': 'note.write', 'PATCH /cases/:id/notes/:nid': 'note.write', 'POST /cases/:id/notes/:nid/sign': 'note.sign', 'POST /cases/:id/notes/:nid/amend': 'note.write',
