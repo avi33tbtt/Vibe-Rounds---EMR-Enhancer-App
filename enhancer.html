@@ -1844,16 +1844,27 @@ function patientRowModel(c){
   return{c,p,mins,ward:wardOf(c),bed:patientBedKey(c),activity:Number.isFinite(activity)?activity:0,alerts,diagnoses,pathways,reading,due:patientDueItems(c)};
 }
 /* chunk 37c3: ward board row data (pure; no flags, no colours). Latest value is shown as recorded. */
+/* shared by the ward board and the handover view: newest timed row of a set, and its values as recorded */
+function rowVals(fs,tc,r){const uf=new Set(fs.map(f=>f.unitField).filter(Boolean));return fs.filter(f=>f!==tc&&!f.meta&&!uf.has(f.id)&&!/note/i.test(f.id)&&r[f.id]!==undefined&&String(r[f.id]).trim()!=='')}
+function rowText(r,vals){const bp=vals.find(f=>f.id=='bp_sys'),bd=vals.find(f=>f.id=='bp_dia');return vals.filter(f=>!(bp&&bd&&f===bd)).map(f=>bp&&bd&&f===bp?'BP '+r.bp_sys+' / '+r.bp_dia+' mmHg':f.label+' '+r[f.id]+(f.unit?' '+f.unit:f.unitField&&r[f.unitField]?' '+r[f.unitField]:'')).join(', ')}
+function latestOf(c,s){let best=null;[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>{const fs=grp(s,g),tc=tcol(fs);if(!tc)return;rowsOf(c,s.setId,g).forEach(r=>{const t=rowT(r,tc);if(!Number.isFinite(t))return;const vals=rowVals(fs,tc,r);if(vals.length&&(!best||t>best.t))best={t,r,vals}})});return best}
+/* chunk 37c3: ward board row data (pure; no flags, no colours). Latest value is shown as recorded. */
 function boardRow(c,ids){
-  const p=patientView(c),cells=(ids||pinListFor(c)).map(id=>getSet(id)).filter(s=>s&&s.direct).map(s=>{
-    let best=null;
-    [...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>{const fs=grp(s,g),tc=tcol(fs),uf=new Set(fs.map(f=>f.unitField).filter(Boolean));if(!tc)return;
-      rowsOf(c,s.setId,g).forEach(r=>{const t=rowT(r,tc);if(!Number.isFinite(t))return;const vals=fs.filter(f=>f!==tc&&!f.meta&&!uf.has(f.id)&&!/note/i.test(f.id)&&r[f.id]!==undefined&&String(r[f.id]).trim()!=='');if(vals.length&&(!best||t>best.t))best={t,r,vals}})});
-    if(!best)return{setId:s.setId,setTitle:shortOf(s),latest:'',ageText:''};
-    const r=best.r,bp=best.vals.find(f=>f.id=='bp_sys'),bd=best.vals.find(f=>f.id=='bp_dia'),
-    parts=best.vals.filter(f=>!(bp&&bd&&f===bd)).map(f=>bp&&bd&&f===bp?'BP '+r.bp_sys+' / '+r.bp_dia+' mmHg':f.label+' '+r[f.id]+(f.unit?' '+f.unit:f.unitField&&r[f.unitField]?' '+r[f.unitField]:''));
-    return{setId:s.setId,setTitle:shortOf(s),latest:parts.join(', '),ageText:ageTxt(best.t).trim()}});
+  const p=patientView(c),cells=(ids||pinListFor(c)).map(id=>getSet(id)).filter(s=>s&&s.direct).map(s=>{const best=latestOf(c,s);
+    return best?{setId:s.setId,setTitle:shortOf(s),latest:rowText(best.r,best.vals),ageText:ageTxt(best.t).trim()}:{setId:s.setId,setTitle:shortOf(s),latest:'',ageText:''}});
   return{name:(p.name||'').trim(),mrn:p.mrn||'',ward:p.ward||'',bed:p.bed||'',cells}
+}
+/* chunk 37d1: handover data (pure; no rendering, no judgement text). newRows = rows the server stamped as entered after sinceMs
+   (rows with no entry time, such as Demo mode rows, are left out rather than guessed). */
+function handoverData(c,sinceMs,nowMs){
+  c=c||{};const now=Number.isFinite(nowMs)?nowMs:Date.now(),since=Number.isFinite(sinceMs)?sinceMs:-Infinity,latest=[],newRows=[];
+  (c.applied||[]).map(a=>getSet(a.setId,a)).filter(s=>s&&!isPw(s)).forEach(s=>{const b=latestOf(c,s);if(b)latest.push({set:shortOf(s),value:rowText(b.r,b.vals),ageText:ageTxt(b.t).trim()});
+    [...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>{const fs=grp(s,g),tc=tcol(fs);if(!tc)return;
+      rowsOf(c,s.setId,g).forEach(r=>{const e=new Date(r.__at).getTime();if(!Number.isFinite(e)||e<=since)return;const vals=rowVals(fs,tc,r);if(vals.length)newRows.push({set:shortOf(s),enteredAt:r.__at,readingAt:r[tc.id]||'',value:rowText(r,vals)})})})});
+  newRows.sort((x,y)=>new Date(x.enteredAt)-new Date(y.enteredAt));
+  const pathways=(Array.isArray(c.pathways)?c.pathways:[]).filter(Boolean).map(x=>{const q=getSet(x.pathwayId,x);return{title:q&&isPw(q)?(q.title||x.pathwayId):String(x.pathwayId||''),startedAt:x.startedAt||''}});
+  const acks24h=(Array.isArray(c.alertLog)?c.alertLog:[]).filter(l=>{const t=l&&new Date(l.ackedAt).getTime();return Number.isFinite(t)&&t>now-864e5&&t<=now}).map(l=>({ruleId:l.ruleId,setId:l.setId,ackedAt:l.ackedAt}));
+  return{narrative:String(c.narrative||'').trim(),pathways,latest,acks24h,newRows}
 }
 /* chunk 37c5: minutes from an APPROVED, enabled minutes_since_gt rule that is true now (evalRules already skips unapproved rules); null when there is none. N is the recorded age, never invented. */
 function boardNoReading(alerts,setId){const a=(Array.isArray(alerts)?alerts:[]).find(x=>x&&x.op==='minutes_since_gt'&&x.setId===setId&&Number.isFinite(x.value));return a?Math.round(a.value):null}
