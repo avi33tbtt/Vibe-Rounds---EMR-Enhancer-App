@@ -807,3 +807,46 @@ test('35b: Demo mode: ackAlert does nothing and never calls the server (the scre
   const id = crypto.randomUUID(); t.Store.setCases([mkCase(id)]);
   assert.equal(t.Store.ackAlert(id, { ruleId: 'r1', setId: 'care.t', sig: 's' }), false); assert.equal(t.calls.length, 0);
 });
+
+// ---------------------------------------------------------------- chunk 36b: Store.ai (the browser only ever talks to the server routes)
+const aiMe = (extra = {}) => async (m, p) => (m === 'GET' && p === '/me' ? [200, Object.assign({ id: 'u1', name: 'Dev', role: 'doctor', mode: 'session', ai: true, allowed: ['ai.suggest', 'ai.rule_draft'] }, extra)] : null);
+
+test('36b: Store.ai.available follows the /me flag and the role; Demo mode has no AI', async () => {
+  const t = await readyServerStore(); t.custom = null;
+  const on = boot(happy(), {}); on.custom = null;
+  const mk = async (extra) => { const x = boot(async (m, p, b) => (await aiMe(extra)(m, p)) || happy()(m, p, b)); await x.Store.init(); return x.Store; };
+  let S = await mk({});
+  assert.equal(S.ai.available(), true); assert.equal(S.ai.available('suggest'), true); assert.equal(S.ai.available('ruleDraft'), true); assert.equal(S.ai.available('schema'), false, 'a doctor-like list without ai.schema');
+  S = await mk({ ai: false }); assert.equal(S.ai.available(), false); assert.equal(S.ai.available('suggest'), false);
+  S = await mk({ ai: undefined }); assert.equal(S.ai.available(), false, 'a server that does not say is treated as off');
+  const demo = boot(async () => { throw new Error('fetch must not be called in Demo mode'); }, { mode: 'local' }); await demo.Store.init();
+  assert.equal(demo.Store.ai.available(), false);
+  for (const f of [() => demo.Store.ai.preview('suggest', { narrative: 'x' }), () => demo.Store.ai.run('suggest', { narrative: 'x' }), () => demo.Store.ai.status(), () => demo.Store.ai.setEnabled(true)]) await assert.rejects(f(), (e) => e.code === 'demo_mode');
+  assert.equal(demo.calls.length, 0);
+});
+
+test('36b: Store.ai.preview sends preview:true and nothing else changes; run never sends preview and never caches or queues anything', async () => {
+  const t = boot(async (m, p, b) => (await aiMe()(m, p)) || (m === 'POST' && p.startsWith('/llm/') ? [200, b.preview ? { preview: true, sent: 'text', removed: {}, removedCount: 0 } : { suggestions: [], pathways: [] }] : happy()(m, p, b)));
+  await t.Store.init(); const before = t.calls.length;
+  const pv = await t.Store.ai.preview('suggest', { narrative: 'cough', caseId: 'c1', preview: false });
+  assert.equal(pv.sent, 'text');
+  const rn = await t.Store.ai.run('suggest', { narrative: 'cough', caseId: 'c1', preview: true });
+  assert.deepEqual(rn, { suggestions: [], pathways: [] });
+  const ai = t.calls.slice(before).filter((c) => c.method === 'POST'); assert.equal(ai.length, 2);
+  assert.deepEqual(ai[0], { method: 'POST', path: '/llm/suggest', body: { narrative: 'cough', caseId: 'c1', preview: true } });
+  assert.deepEqual(ai[1], { method: 'POST', path: '/llm/suggest', body: { narrative: 'cough', caseId: 'c1' } }, 'preview is stripped from the real call');
+  const paths = []; for (const [k, p] of [['schema', '/llm/schema'], ['ruleDraft', '/llm/rule-draft']]) { await t.Store.ai.run(k, { x: 1 }); paths.push(t.calls[t.calls.length - 1].path); assert.equal(paths[paths.length - 1], p); }
+  await assert.rejects(t.Store.ai.run('nope', {}), (e) => e.code === 'bad_kind');
+  assert.equal(t.writes().filter((w) => !w.path.startsWith('/llm/')).length, 0, 'no queued writes');
+  assert.ok(![...t.ls.keys()].some((k) => /ai|llm/i.test(k)), 'nothing stored in the browser');
+});
+
+test('36b: a 403 ai_disabled switches the AI flag off at once; an admin toggle updates it; other errors leave it alone', async () => {
+  let off = false;
+  const t = boot(async (m, p, b) => (await aiMe({ role: 'admin', allowed: ['ai.suggest', 'ai.admin'] })(m, p)) || (p === '/llm/suggest' ? (off ? [403, { error: { code: 'ai_disabled', message: 'AI disabled' } }] : [429, { error: { code: 'ai_rate_limited', message: 'Too many AI requests.' } }]) : p === '/admin/ai' && m === 'PUT' ? [200, { enabled: b.enabled }] : happy()(m, p, b)));
+  await t.Store.init(); assert.equal(t.Store.ai.available('suggest'), true);
+  await assert.rejects(t.Store.ai.run('suggest', { narrative: 'x' }), (e) => e.status === 429); assert.equal(t.Store.ai.available('suggest'), true);
+  off = true; await assert.rejects(t.Store.ai.preview('suggest', { narrative: 'x' }), (e) => e.code === 'ai_disabled'); assert.equal(t.Store.ai.available('suggest'), false);
+  await t.Store.ai.setEnabled(true); assert.equal(t.Store.me.ai, true); assert.deepEqual(t.calls[t.calls.length - 1].body, { enabled: true });
+  await t.Store.ai.setEnabled(false); assert.equal(t.Store.me.ai, false);
+});

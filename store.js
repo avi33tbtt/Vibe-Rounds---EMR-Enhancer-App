@@ -650,6 +650,25 @@
   const needReason = (b) => { const r = b && typeof b.reason === 'string' ? b.reason.trim() : ''; if (!r) throw pfail('reason_required', 'A reason is required'); return r; };
   const busyCase = (id) => Q.some((o) => grpOf(o.key) === id);
 
+  // ---------------------------------------------------------------- AI through the server (chunk 36b)
+  // The browser never talks to a model. preview() asks the server for the EXACT text it would send (identifiers already removed) and sends nothing;
+  // run() is the real call and must only follow a click on Send. Nothing here is cached or saved: the caller shows the answer and a clinician saves it.
+  // Store.me.ai (from /me) is true only when an admin switched AI on and a model is configured; the buttons mirror it, the server still checks every call.
+  const AI_ROUTES = { schema: '/llm/schema', suggest: '/llm/suggest', ruleDraft: '/llm/rule-draft' };
+  const aiRoute = (kind) => { if (Store.mode !== 'server') throw pfail('demo_mode', 'AI needs the server and is not available in demo mode'); if (!AI_ROUTES[kind]) throw pfail('bad_kind', 'Unknown AI request'); return AI_ROUTES[kind]; };
+  const aiFail = (er) => { if (er && er.status === 403 && er.code === 'ai_disabled' && Store.me) { Store.me.ai = false; notify(); } throw er; };   // an admin switched it off meanwhile: hide the buttons
+  Store.ai = {
+    /** True when the AI buttons should be shown: server mode, switched on by an admin, a model configured, and this role may use `kind` (optional). */
+    available: (kind) => Store.mode === 'server' && !!Store.me && Store.me.ai === true && (!kind || Store.can({ schema: 'ai.schema', suggest: 'ai.suggest', ruleDraft: 'ai.rule_draft' }[kind])),
+    /** -> { sent, removed, removedCount, bytes, note }. Nothing is sent to the model, nothing is audited. */
+    preview: async (kind, body) => { const p = aiRoute(kind); try { return await api('POST', p, Object.assign({}, body, { preview: true })); } catch (er) { return aiFail(er); } },
+    /** The real call. Answers the validated draft (schema: {schema, warnings}; suggest: {suggestions, pathways}; ruleDraft: {draft}). Never saves anything. */
+    run: async (kind, body) => { const p = aiRoute(kind); const b = Object.assign({}, body); delete b.preview; try { return await api('POST', p, b); } catch (er) { return aiFail(er); } },
+    /** Admin only. */
+    status: async () => { if (Store.mode !== 'server') throw pfail('demo_mode', 'AI needs the server and is not available in demo mode'); return api('GET', '/admin/ai'); },
+    setEnabled: async (on) => { if (Store.mode !== 'server') throw pfail('demo_mode', 'AI needs the server and is not available in demo mode'); const r = await api('PUT', '/admin/ai', { enabled: on === true }); if (Store.me) { Store.me.ai = r.enabled === true; notify(); } return r; },
+  };
+
   Store.patients = {
     /** Name, MRN or phone. Under 2 characters nothing is asked and [] is returned (the server needs at least 2). */
     search: serverOnly(async (q, limit) => {

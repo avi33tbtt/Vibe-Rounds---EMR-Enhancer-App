@@ -287,7 +287,8 @@ test('rules and protocols: delete needs the current version; protocol approval i
 test('GET /api/me returns the acting user (a session user: mode "session")', async () => {
   const r = await api().get('/api/me');
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.body).sort(), ['allowed', 'id', 'mode', 'mustChangePassword', 'name', 'role']);
+  assert.deepEqual(Object.keys(r.body).sort(), ['ai', 'allowed', 'id', 'mode', 'mustChangePassword', 'name', 'role']);
+  assert.equal(r.body.ai, false, 'AI is off by default (chunk 36b)');
   assert.ok(Array.isArray(r.body.allowed) && r.body.allowed.includes('rule.approve') && r.body.allowed.includes('session.read'), 'allowed lists the actions of the role (chunk 32d2)');
   assert.equal(r.body.mode, 'session'); assert.equal(r.body.role, 'admin'); assert.match(r.body.id, /^[0-9a-f-]{36}$/);
 });

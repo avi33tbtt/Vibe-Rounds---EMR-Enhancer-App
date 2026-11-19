@@ -22,7 +22,7 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 **Built (chunks 1-34a, 34b1-34b3, 34c, 34d):**
 - Single-file prototype `enhancer.html`: quick bar, fever chart, insulin grid, flowsheets, notes (draft/sign/amend), pathways, rules and alerts, EMR shell, FHIR export.
 - Server in the repo root: PostgreSQL schema, REST API, `store.js` cache-first client layer, import from browser, conflict screen, login and sessions, roles and permissions, CSRF, users screen, forced password change, audit log with admin screen and CSV export, entered-in-error history drawer, sign-in audit events, patients/encounters/merge/duplicate-check API (`patients.js`).
-- **212 tests pass** on PostgreSQL 16 (`npm test`): the server tests, the store tests (52 in `store.test.js`), and the 34c and 34d tests.
+- **212 tests pass** (258 after 36b) on PostgreSQL 16 (`npm test`): the server tests, the store tests (52 in `store.test.js`), and the 34c and 34d tests.
 - 34b3 filled in `onPatientChosen`: list open encounters or start one (type, ward, bed), create the chart, link it with `Store.patients.link`, open Summary; the case picker shows name and MRN. The chart's typed `patient` fields are a display copy of the real patient until 34c reads the real record.
 - 34b2 added the Find or register a patient dialog (`#ptFind`) in `enhancer.html`, opened by + New patient in server mode; it ends at `onPatientChosen(patient)`, which 34b3 fills in. Demo mode keeps the typed flow.
 - 34b1 added `Store.patients` (search, get, create, update, encounters, link) to `store.js`; server mode only, nothing cached, Demo mode rejects with `demo_mode`.
@@ -37,7 +37,9 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 
 - 36a: `007_app_settings.sql` (AI switch, off by default, app role may SELECT/INSERT/UPDATE); new root file `llm.js` (provider for Anthropic or OpenRouter from `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL`; the three prompts; output validators; routes); `POST /llm/schema`, `/llm/suggest`, `/llm/rule-draft`, `GET/PUT /admin/ai`; new actions `ai.admin`, `ai.schema`, `ai.suggest`, `ai.rule_draft`; per-user in-memory rate limit; one `ai.call` audit row per call, no content. The model is no longer asked for `derived.flag` thresholds (permanent rule). Not done until 36b: de-identification, browser buttons, `/api/me` AI flag. Keep AI switched off until 36b. Also fixed: `alert-acks.test.js` (35b) called old URLs and shapes and failed on a clean checkout; import now keeps duplicate acknowledgements once. 246 tests pass.
 
-**Next up:** 36b onward in the order below.
+- 36b: `deidentify()` and `knownIdentifiers()` in `llm.js` (server): every free-text AI input is cleaned before the provider sees it; for `suggest` the case's real patient, its merged-into record and a typed demo patient are removed by value as well as by pattern. `preview:true` on the three routes returns the exact text to be sent and calls nothing (no allowance used, no audit row). `/api/me` carries `ai` (switch on and a model configured). `Store.ai` in `store.js` (`available`, `preview`, `run`, `status`, `setEnabled`). `enhancer.html`: the three AI buttons call the server, show a Send / Cancel dialog with the exact text and what was removed, and follow `/me`; the old browser prompts, `callLLM` and demo drafts are gone; a generated set is saved only after a second click (Save draft set); Settings has the admin switch and the data-processing-agreement note. Demo mode has no AI. See API.md.
+
+**Next up:** 37a onward in the order below. Keep AI switched off for real patient data until a data processing agreement is in place.
 
 **Manual work that is not a chunk (do soon, needs two real browsers):**
 - [ ] (a) Force a conflict on one row and confirm the side-by-side screen appears.
@@ -262,7 +264,7 @@ Server only. (1) Routes /api/llm/schema, /api/llm/suggest, /api/llm/rule-draft; 
 **Done when:** AI is off by default; admin switch, limits and audit rows work; no content is logged.
 
 
-### [ ] 36b. AI proxy 2: de-identification, confirm dialog, buttons follow the switch
+### [x] 36b. AI proxy 2: de-identification, confirm dialog, buttons follow the switch
 
 **Goal:** Strip identifiers before sending narratives; show exactly what will be sent; hide buttons when AI is off.
 

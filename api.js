@@ -408,6 +408,7 @@ async function commitImport(c, out, actor) {
 function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter }) {   // llm: a provider object, or null for none; left out = built from LLM_* in the environment
   if (getActor && process.env.NODE_ENV === 'production') throw new Error('getActor is for tests only and is not allowed when NODE_ENV=production');
   if (!getActor && !(requireAuth && requireCsrf)) throw new Error('mountApi needs requireAuth and requireCsrf');
+  const aiProvider = llm === undefined ? createProvider(process.env) : llm;      // chunk 36b: /me tells the browser whether AI buttons should show
   const r = guardRouter(express.Router());            // every route below must have an action in permissions.js ROUTE_ACTIONS
   r.use(getActor
     ? (req, res, next) => { Promise.resolve(getActor(req)).then((a) => { req.actor = a; next(); }, next); }
@@ -431,7 +432,8 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   r.get('/me', wrap(async (req, res) => {
     const u = (await db.query('SELECT id,name,role,must_change_password FROM users WHERE id=$1', [req.actor.id])).rows[0];
     if (!u) throw new ApiError(401, 'unauthorized', 'No such user');
-    res.json({ id: u.id, name: u.name, role: u.role, mode: 'session', mustChangePassword: !!u.must_change_password, allowed: allowedActions(u) });   // allowed: for hiding controls only (chunk 32d2); the server still checks every request
+    res.json({ id: u.id, name: u.name, role: u.role, mode: 'session', mustChangePassword: !!u.must_change_password, allowed: allowedActions(u),
+      ai: !!aiProvider && !!((await db.query("SELECT value FROM app_settings WHERE key='ai'")).rows[0] || { value: {} }).value.enabled });   // chunk 36b: true only when an admin switched AI on AND a model is configured; buttons mirror it, the routes still check   // allowed: for hiding controls only (chunk 32d2); the server still checks every request
   }));
 
   // ================= cases =================
@@ -1134,7 +1136,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   }));
 
   // ================= patients, encounters, case link (chunk 34a; routes live in patients.js) =================
-  mountLlm(r, { db, ApiError, wrap, parse, audit, provider: llm === undefined ? createProvider(process.env) : llm, limiter: aiLimiter });
+  mountLlm(r, { db, ApiError, wrap, parse, audit, provider: aiProvider, limiter: aiLimiter });
   mountPatients(r, { db, ApiError, wrap, parse, idParam, iso, audit, auditOnce, can, loadCase });
 
   // consistent errors (server.js also has a final handler for non-API paths)

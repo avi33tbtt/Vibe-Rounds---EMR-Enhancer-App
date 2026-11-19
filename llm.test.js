@@ -224,3 +224,109 @@ test('the operator, indicator and field-type lists and the order-word test match
   assert.deepEqual(arr('OPS'), L.OPS); assert.deepEqual(arr('IND'), L.IND); assert.deepEqual(arr('NUMT'), L.NUMT); assert.deepEqual(arr('TIMT'), L.TIMT);
   assert.equal(src.match(/const ORDERY=(\/.*\/i);/)[1], String(L.ORDERY));
 });
+
+// ---------------------------------------------------------------- chunk 36b: de-identification, preview, /me flag
+const IDENT = { name: 'Asha Kumari Rai', mrn: '1000017', national_id: '123-45-6789', phone: '+977 9812345678', date_of_birth: '1980-03-12' };
+const mkPatient = async (p = IDENT, extra = {}) => (await db.query(`INSERT INTO patients (mrn,name,national_id,phone,date_of_birth) VALUES ($1,$2,$3,$4,$5) RETURNING id`, [p.mrn, p.name, p.national_id, p.phone, p.date_of_birth])).rows[0].id;
+
+test('deidentify: names, MRN, national id, phone, e-mail, birth date, address and titled names go; readings and thresholds stay', () => {
+  const known = L.knownIdentifiers(IDENT);
+  const t = 'Asha Rai, 45-year-old, MRN 1000017, DOB 12/03/1980 (born 12 March 1980), national id 123-45-6789, phone 9812345678, a@b.com, lives at 12 Mahendra Marg. Temp 38.5, BP 120/80, K 5.5 mmol/L, HR 110. Mr Sharma and Dr. Patel visited. Patient named Sita Rai.';
+  const d = L.deidentify(t, known);
+  for (const bad of ['Asha', 'Rai', 'Kumari', '1000017', '1980', '123-45-6789', '9812345678', 'a@b.com', 'Mahendra', 'Sharma', 'Patel', 'Sita', 'March']) assert.ok(!d.text.includes(bad), bad + ' should be gone: ' + d.text);
+  for (const keep of ['45-year-old', '38.5', '120/80', '5.5 mmol/L', 'HR 110', 'Temp', 'BP']) assert.ok(d.text.includes(keep), keep + ' should stay: ' + d.text);
+  assert.deepEqual(L.deidentify(t, known), d, 'deterministic: the preview and the send agree');
+  assert.ok(L.deidentify('Age 93 year old').text.includes('90+'), 'ages of 90 and over become 90+');
+  assert.equal(L.deidentify('warn when potassium above 5.5 or 120 80 100').text, 'warn when potassium above 5.5 or 120 80 100');
+  assert.equal(L.deidentify('').text, ''); assert.equal(L.deidentify(null).text, '');
+  assert.deepEqual(L.knownIdentifiers(null), []);
+});
+
+test('suggest: the case\'s real patient (and the record it was merged into) is removed from the narrative before the provider sees it', async () => {
+  await setAi(true);
+  const c = (await as('admin').post('/api/cases', { narrative: 'x' })).body;
+  const kept = await mkPatient({ name: 'Bimala Gurung', mrn: '1000025', national_id: '987-65-4321', phone: '+977 9801112222', date_of_birth: '1975-07-01' });
+  const dup = await mkPatient(IDENT);
+  await db.query('UPDATE patients SET active=false, merged_into=$1, merged_at=now(), merged_by=$2 WHERE id=$3', [kept, actors.admin.id, dup]);
+  await db.query('UPDATE cases SET patient_id=$1 WHERE id=$2', [dup, c.id]);
+  reply = () => '{"suggestions":[],"pathways":[]}';
+  const nar = 'Asha Rai, MRN 1000017, DOB 12/03/1980, phone 9812345678, daughter Bimala Gurung 1000025. Fever 38.5 for two days, K 5.5.';
+  const r = await as('doctor').post('/api/llm/suggest', { narrative: nar, caseId: c.id });
+  assert.equal(r.status, 200); assert.equal(calls.length, 1);
+  const sent = calls[0].user;
+  for (const bad of ['Asha', 'Rai', 'Bimala', 'Gurung', '1000017', '1000025', '12/03/1980', '9812345678']) assert.ok(!sent.includes(bad), bad + ' reached the provider: ' + sent);
+  assert.ok(sent.includes('Fever 38.5') && sent.includes('K 5.5'), 'clinical content is kept');
+  assert.ok(sent.includes('care.one | One'), 'the registry list is still there');
+  const rows = await auditSince(await maxId() - 1);
+  assert.ok(!JSON.stringify(rows).includes('Asha'), 'no content in the audit row');
+});
+
+test('suggest: a typed demo patient on the case is removed too', async () => {
+  const c = (await as('admin').post('/api/cases', { narrative: 'x' })).body; assert.ok(c.id);
+  await db.query('UPDATE cases SET demo_patient=$1 WHERE id=$2', [JSON.stringify({ name: 'Gita Magar', ageSex: '', bed: '', mrn: 'D-4471' }), c.id]);
+  reply = () => '{"suggestions":[],"pathways":[]}';
+  assert.equal((await as('doctor').post('/api/llm/suggest', { narrative: 'Gita Magar has a cough, D-4471', caseId: c.id })).status, 200);
+  assert.ok(!/Gita|Magar|D-4471/.test(calls[0].user), calls[0].user);
+});
+
+test('preview: shows the exact text the server will send, sends nothing, writes no audit row, does not use the rate limit; the real call then sends that same text', async () => {
+  const limiter = L.createLimiter({ perMinute: 1, perHour: 100 });
+  const a2 = createApp({ db, getActor, llm: mock, aiLimiter: limiter });
+  const nar = 'Mr Sharma, phone 9812345678, has fever 38.5';
+  const m = await maxId();
+  const p1 = await as('doctor', a2).post('/api/llm/suggest', { narrative: nar, preview: true });
+  const p2 = await as('doctor', a2).post('/api/llm/suggest', { narrative: nar, preview: true });
+  assert.equal(p1.status, 200); assert.equal(p2.status, 200);
+  assert.equal(p1.body.preview, true); assert.equal(p1.body.purpose, 'suggest'); assert.ok(p1.body.removedCount >= 2); assert.ok(p1.body.removed.phone || p1.body.removed.number);
+  assert.ok(!/Sharma|9812345678/.test(p1.body.sent) && p1.body.sent.includes('fever 38.5'));
+  assert.equal(calls.length, 0, 'the provider was not called'); assert.equal((await auditSince(m)).length, 0, 'no audit row for a preview');
+  reply = () => '{"suggestions":[],"pathways":[]}';
+  const real = await as('doctor', a2).post('/api/llm/suggest', { narrative: nar });
+  assert.equal(real.status, 200, 'previews did not use up the one call a minute'); assert.equal(calls[0].user, p1.body.sent, 'exactly the previewed text');
+  assert.equal((await as('doctor', a2).post('/api/llm/suggest', { narrative: nar })).status, 429);
+  assert.equal((await as('doctor', a2).post('/api/llm/suggest', { narrative: nar, preview: 'yes' })).status, 400);
+});
+
+test('preview obeys the same gates: AI off is 403, nurse and viewer are 403, a bad body is 400', async () => {
+  const body = { narrative: 'cough', preview: true };
+  assert.equal((await as('nurse').post('/api/llm/suggest', body)).status, 403); assert.equal((await as('viewer').post('/api/llm/suggest', body)).status, 403);
+  assert.equal((await as('informatician').post('/api/llm/suggest', body)).status, 403);
+  assert.equal((await as('doctor').post('/api/llm/suggest', { preview: true })).status, 400);
+  await setAi(false);
+  for (const [u, b] of [['/api/llm/schema', { diagnosis: 'Asthma', preview: true }], ['/api/llm/suggest', body], ['/api/llm/rule-draft', { ...RULE, preview: true }]]) assert.equal((await as('admin').post(u, b)).status, 403, u);
+  await setAi(true); assert.equal(calls.length, 0);
+});
+
+test('schema: vignette and instructions are de-identified, the diagnosis is de-identified for the provider but comes back as the clinician typed it', async () => {
+  reply = () => JSON.stringify({ diagnosis: { text: 'model text' }, sections: [{ title: 'S', fields: [{ id: 'a_b', label: 'A', type: 'number' }] }] });
+  const r = await as('doctor').post('/api/llm/schema', { diagnosis: 'Dengue', vignette: 'Ram Thapa, DOB 03/04/1990, MRN 1000099, platelets falling', instructions: 'call 9812345678' });
+  assert.equal(r.status, 200); assert.equal(r.body.schema.diagnosis.text, 'Dengue');
+  const sent = calls[0].user; assert.ok(!/1990|1000099|9812345678/.test(sent), sent); assert.ok(sent.includes('platelets falling') && sent.includes('Diagnosis: Dengue'));
+  const pv = await as('doctor').post('/api/llm/schema', { diagnosis: 'Dengue', vignette: 'Ram Thapa, DOB 03/04/1990, MRN 1000099, platelets falling', instructions: 'call 9812345678', preview: true });
+  assert.equal(pv.body.sent, sent); assert.equal(calls.length, 1);
+});
+
+test('rule drafting never receives patient values: only field names, units and the typed sentence; extra keys are refused; a phone number in the sentence is removed and the typed threshold still works', async () => {
+  for (const extra of [{ values: { 'care.one/k': 7.1 } }, { caseId: crypto.randomUUID() }, { patient: { name: 'X' } }]) assert.equal((await as('doctor').post('/api/llm/rule-draft', { ...RULE, ...extra })).status, 400, JSON.stringify(extra));
+  assert.equal((await as('doctor').post('/api/llm/rule-draft', { ...RULE, fields: [{ ...RULE.fields[0], value: 7.1 }] })).status, 400);
+  assert.equal(calls.length, 0);
+  reply = () => JSON.stringify(goodRule);
+  const r = await as('doctor').post('/api/llm/rule-draft', { ...RULE, text: 'Review potassium when above 5.5, phone 9812345678' });
+  assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.draft.threshold, 5.5);
+  const sent = calls[0].user; assert.ok(!sent.includes('9812345678'), sent);
+  assert.equal(sent, 'Fields (ref | label | unit | type):\ncare.one/k | Potassium | mmol/L | number\ncare.one/t | Last reading |  | datetime\n\nSentence:\nReview potassium when above [phone removed]'.replace('above [phone removed]', 'above 5.5, phone [number removed]'));
+});
+
+test('/api/me says whether AI is on: false when off, true when on and a model is configured, false when on but no model; the admin panel says de-identification is on', async () => {
+  await setAi(false); assert.equal((await as('doctor').get('/api/me')).body.ai, false);
+  await setAi(true); assert.equal((await as('doctor').get('/api/me')).body.ai, true); assert.equal((await as('nurse').get('/api/me')).body.ai, true, 'the flag is the switch; the role list (allowed) says who may use it');
+  const bare = createApp({ db, getActor, llm: null }); assert.equal((await as('doctor', bare).get('/api/me')).body.ai, false, 'switched on in the database but no model on the server');
+  assert.equal((await as('admin').get('/api/admin/ai')).body.deidentification, 'server_patterns');
+});
+
+test('the page no longer talks to a model provider or holds a prompt: only the server routes do', () => {
+  const html = fs.readFileSync(__dirname + '/enhancer.html', 'utf8');
+  for (const bad of ['api.anthropic.com', 'openrouter.ai', 'callLLM', 'anthropic-dangerous-direct-browser-access', 'You are a clinical informatics assistant', 'You turn a clinician']) assert.ok(!html.includes(bad), bad);
+  for (const must of ['Store.ai.preview', 'data processing agreement', 'id="aiSent"', 'Not for clinical use']) assert.ok(html.includes(must), must);
+  const src = fs.readFileSync(__dirname + '/store.js', 'utf8'); assert.ok(!/api\.anthropic\.com|openrouter\.ai/.test(src));
+});

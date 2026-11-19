@@ -12,7 +12,9 @@
  * not return, a clinical threshold or flag value of its own, so `derived.flag` from the old browser prompt is removed on purpose.
  * One audit row per call that reached the provider: purpose, outcome, byte counts, model. Never the prompt, the answer or any patient value.
  *
- * NOT DONE HERE (chunk 36b): de-identification of narratives and the browser side. Until 36b, keep AI switched off for anything but synthetic data.
+ * Chunk 36b: every free-text input is de-identified HERE, on the server, before it can reach the provider (deidentify()). `preview:true` on a route returns the exact
+ * text that would be sent and calls nothing (no provider, no rate-limit use, no audit row). Pattern removal is best effort: a person still reads the preview before Send.
+ * Rule drafting never receives patient values: its input is field names, units and the clinician's own sentence, and the schema refuses anything else.
  */
 const { z } = require('zod');
 
@@ -144,13 +146,55 @@ function validateSchema(j, diagnosis) {
   return { schema: { diagnosis: { text: diagnosis, snomed }, sections }, warnings };       // the diagnosis text is the clinician's own, never the model's
 }
 
+
+// ---------- de-identification (chunk 36b) ----------
+// Best effort, pattern based, deliberately over-removing: a wrong removal costs a little context, a miss sends an identifier. Numbers that can be clinical readings
+// (38.5, 120/80, 5.5) are never touched: only digit runs of 7+, phone shapes, full dates, labelled ids, emails, street addresses and titled or known names.
+const MONTH = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+const DEID = [
+  ['email', /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email removed]'],
+  ['url', /\bhttps?:\/\/\S+|\bwww\.\S+/gi, '[link removed]'],
+  ['id', /\b(?:mrn|uhid|nid|ssn|passport|national\s*id|citizenship(?:\s*(?:no|number))?|medical\s*record(?:\s*(?:no|number))?)\b\.?\s*[:#]?\s*[A-Za-z0-9-]{3,}/gi, '[id removed]'],
+  ['date', new RegExp('\\b\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}\\b|\\b\\d{1,2}[-/.]\\d{1,2}[-/.](?:\\d{4}|\\d{2})\\b|\\b\\d{1,2}(?:st|nd|rd|th)?\\s+' + MONTH + '\\.?,?\\s+\\d{2,4}\\b|\\b' + MONTH + '\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{4}\\b', 'gi'), '[date removed]'],
+  ['phone', /\+\d[\d\s().-]{7,}\d|\(?\d{2,4}\)?[-.]\d{3,4}[-.]\d{3,4}\b|\b\d{3} \d{3} \d{4}\b/g, '[phone removed]'],
+  ['number', /(?<![\d.])\d{7,}(?![\d])/g, '[number removed]'],                        // MRN, national id, long phone numbers
+  ['address', /\b(?:lives\s+(?:at|in)|resident\s+of|address(?:\s+is)?|house\s*(?:no|number))\b\.?\s*[:#]?\s*(?:(?!\.\s)[^;\n]){3,60}/gi, '[address removed]'],   // labelled first, up to the end of the sentence
+  ['address', /\b\d{1,5}[A-Za-z]?\s+(?:[A-Za-z0-9'’.-]+\s+){1,4}(?:street|st|road|rd|avenue|ave|lane|ln|drive|dr|boulevard|blvd|court|ct|way|marg|chowk|tole)\b/gi, '[address removed]'],
+  ['name', /\b(?:[Mm]r|[Mm]rs|[Mm]s|[Mm]iss|[Mm]x|[Dd]r|[Pp]rof|[Ss]hri|[Ss]mt|[Ss]ri|MR|MRS|MS|DR)\.?\s+[A-Z][\p{L}'’-]+(?:\s+[A-Z][\p{L}'’-]+)?/gu, '[name removed]'],
+  ['name', /\b(?:[Nn]amed|[Cc]alled|[Nn]ame\s+is|[Nn]ame:)\s+[A-Z][\p{L}'’-]+(?:\s+[A-Z][\p{L}'’-]+){0,2}/gu, '[name removed]'],
+  ['age', /\b(?:9\d|1[0-2]\d)(?=\s*(?:-|\s)?\s*(?:years?|yrs?|y\.?o\.?|yo)\b)/gi, '90+'],         // ages of 90 and over are identifying: say 90+
+];
+const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** The patient's own record, for removing exactly what we know identifies them (name parts, MRN, national id, phone, birth date in common spellings). */
+function knownIdentifiers(p) {
+  if (!p) return [];
+  const out = [], add = (x) => { x = String(x || '').trim(); if (x.length >= 2) out.push(x); };
+  String(p.name || '').split(/[\s,]+/).forEach((w) => w.length >= 2 && add(w));
+  add(p.name); add(p.mrn); add(p.national_id); add(p.phone);
+  const digits = String(p.phone || '').replace(/\D/g, ''); if (digits.length >= 5) add(digits);
+  if (p.date_of_birth) { const d = p.date_of_birth instanceof Date ? p.date_of_birth : new Date(p.date_of_birth); if (!isNaN(d)) { const y = d.getUTCFullYear(), m = d.getUTCMonth() + 1, dd = d.getUTCDate(); const z = (n) => String(n).padStart(2, '0');
+    [`${y}-${z(m)}-${z(dd)}`, `${z(dd)}/${z(m)}/${y}`, `${dd}/${m}/${y}`, `${z(m)}/${z(dd)}/${y}`].forEach(add); } }
+  return [...new Set(out)];
+}
+/** -> { text, removed: { name: n, date: n, ... } }. Known identifiers go first (longest first), then the patterns. Pure and deterministic: the preview and the send agree. */
+function deidentify(text, known = []) {
+  let t = String(text == null ? '' : text); const removed = {}; const hit = (k, n) => { if (n) removed[k] = (removed[k] || 0) + n; };
+  for (const k of [...known].sort((a, b) => b.length - a.length)) {
+    const re = new RegExp((/^\w/.test(k) ? '\\b' : '') + esc(k) + (/\w$/.test(k) ? '\\b' : ''), 'gi');
+    t = t.replace(re, () => { hit('known', 1); return '[removed]'; });
+  }
+  for (const [kind, re, rep] of DEID) t = t.replace(re, () => { hit(kind, 1); return rep; });
+  return { text: t, removed };
+}
+const totalRemoved = (r) => Object.values(r).reduce((a, b) => a + b, 0);
+
 // ---------- routes ----------
 const S = {
-  schema: z.object({ diagnosis: z.string().trim().min(2).max(200), vignette: z.string().max(2000).optional(), instructions: z.string().max(1000).optional() }).strict(),
-  suggest: z.object({ caseId: z.string().uuid().optional(), narrative: z.string().trim().min(1).max(8000) }).strict(),
+  schema: z.object({ diagnosis: z.string().trim().min(2).max(200), vignette: z.string().max(2000).optional(), instructions: z.string().max(1000).optional(), preview: z.boolean().optional() }).strict(),
+  suggest: z.object({ caseId: z.string().uuid().optional(), narrative: z.string().trim().min(1).max(8000), preview: z.boolean().optional() }).strict(),
   rule: z.object({ owner: z.string().regex(/^[A-Za-z0-9_.-]{1,100}$/), text: z.string().trim().min(1).max(300),
     fields: z.array(z.object({ ref: z.string().regex(/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/), label: z.string().min(1).max(120), unit: z.string().max(20).default(''),
-      type: z.enum([...NUMT, ...TIMT]), repeat: z.boolean().optional() }).strict()).min(1).max(200) }).strict(),
+      type: z.enum([...NUMT, ...TIMT]), repeat: z.boolean().optional() }).strict()).min(1).max(200), preview: z.boolean().optional() }).strict(),
   setting: z.object({ enabled: z.boolean() }).strict(),
 };
 
@@ -159,8 +203,9 @@ function mountLlm(r, { db, ApiError, wrap, parse, audit, provider, limiter }) {
   const enabled = async (q) => { const x = await q.query("SELECT value FROM app_settings WHERE key='ai'"); return !!(x.rows[0] && x.rows[0].value && x.rows[0].value.enabled === true); };
 
   /** Gate, call, validate, audit. Order matters: the body is validated by the caller first, then switch, configuration and rate limit, then the call. */
-  async function run(req, res, purpose, { system, user, validate, caseId }) {
+  async function run(req, res, purpose, { system, user, validate, caseId, preview, removed = {} }) {
     if (!(await enabled(db))) throw new ApiError(403, 'ai_disabled', 'AI disabled');
+    if (preview) return res.json({ preview: true, purpose, sent: user, removed, removedCount: totalRemoved(removed), bytes: Buffer.byteLength(system + user), note: 'Nothing has been sent. This is the exact text the server will send, after identifiers were removed.' });   // no provider call, no rate-limit use, no audit row
     if (!provider) throw new ApiError(503, 'ai_not_configured', 'AI is switched on but no model is configured on the server.');
     const bytesIn = Buffer.byteLength(system + user);
     if (bytesIn > 40000) throw new ApiError(413, 'too_large', 'Request too large for the AI service.');
@@ -184,39 +229,47 @@ function mountLlm(r, { db, ApiError, wrap, parse, audit, provider, limiter }) {
   }
 
   r.post('/llm/schema', wrap(async (req, res) => {
-    const b = parse(S.schema, req.body);
-    await run(req, res, 'schema', { system: SYS_SCHEMA, user: `Diagnosis: ${b.diagnosis}\nVignette: ${b.vignette || ''}\nExtra instructions: ${b.instructions || ''}`, validate: (j) => validateSchema(j, b.diagnosis) });
+    const b = parse(S.schema, req.body), removed = {};
+    const de = (x) => { const d = deidentify(x || ''); for (const [k, n] of Object.entries(d.removed)) removed[k] = (removed[k] || 0) + n; return d.text; };
+    await run(req, res, 'schema', { system: SYS_SCHEMA, preview: b.preview, removed, user: `Diagnosis: ${de(b.diagnosis)}\nVignette: ${de(b.vignette)}\nExtra instructions: ${de(b.instructions)}`, validate: (j) => validateSchema(j, b.diagnosis) });
   }));
 
   r.post('/llm/suggest', wrap(async (req, res) => {
     const b = parse(S.suggest, req.body);
     if (!(await enabled(db))) throw new ApiError(403, 'ai_disabled', 'AI disabled');           // before touching any case data
-    let done = new Set(), onPw = new Set();
+    let done = new Set(), onPw = new Set(), known = [];
     if (b.caseId) {
-      const c = (await db.query('SELECT applied, pathways FROM cases WHERE id=$1', [b.caseId])).rows[0];
+      const c = (await db.query('SELECT applied, pathways, demo_patient, patient_id FROM cases WHERE id=$1', [b.caseId])).rows[0];
       if (!c) throw new ApiError(404, 'not_found', 'Not found');
       done = new Set(c.applied.map((a) => a.setId)); onPw = new Set(c.pathways.map((p) => p.pathwayId));
+      if (c.patient_id) {            // the real record, and the record it was merged into: both are removed from the text
+        const pr = (await db.query('SELECT p.name,p.mrn,p.national_id,p.phone,p.date_of_birth, k.name AS k_name,k.mrn AS k_mrn,k.national_id AS k_nid,k.phone AS k_phone,k.date_of_birth AS k_dob FROM patients p LEFT JOIN patients k ON k.id=p.merged_into WHERE p.id=$1', [c.patient_id])).rows[0];
+        if (pr) known = knownIdentifiers(pr).concat(pr.k_name ? knownIdentifiers({ name: pr.k_name, mrn: pr.k_mrn, national_id: pr.k_nid, phone: pr.k_phone, date_of_birth: pr.k_dob }) : []);
+      }
+      if (c.demo_patient && typeof c.demo_patient === 'object') known = known.concat(knownIdentifiers({ name: c.demo_patient.name, mrn: c.demo_patient.mrn }));
     }
+    const nar = deidentify(b.narrative, known);
     const reg = (await db.query("SELECT set_id, kind, coalesce(body->>'title', set_id) AS title FROM element_sets_latest ORDER BY set_id LIMIT 600")).rows;
     const sets = reg.filter((x) => x.kind !== 'pathway' && !done.has(x.set_id)), pws = reg.filter((x) => x.kind === 'pathway' && !onPw.has(x.set_id));
     if (!sets.length && !pws.length) return res.json({ suggestions: [], pathways: [], note: 'All registry sets and pathways are already on this case.' });
     const line = (x) => x.set_id + ' | ' + String(x.title).replace(/\s+/g, ' ').slice(0, 120);
-    const user = `Case narrative:\n${b.narrative}\n\nAvailable sets (id | title):\n${sets.map(line).join('\n') || '(none)'}\n\nAvailable pathways (id | title):\n${pws.map(line).join('\n') || '(none)'}`;
-    await run(req, res, 'suggest', { system: SYS_SUGGEST, user, caseId: b.caseId, validate: (j) => validateSuggest(j, new Set(sets.map((x) => x.set_id)), new Set(pws.map((x) => x.set_id))) });
+    const user = `Case narrative:\n${nar.text}\n\nAvailable sets (id | title):\n${sets.map(line).join('\n') || '(none)'}\n\nAvailable pathways (id | title):\n${pws.map(line).join('\n') || '(none)'}`;
+    await run(req, res, 'suggest', { system: SYS_SUGGEST, user, caseId: b.caseId, preview: b.preview, removed: nar.removed, validate: (j) => validateSuggest(j, new Set(sets.map((x) => x.set_id)), new Set(pws.map((x) => x.set_id))) });
   }));
 
   r.post('/llm/rule-draft', wrap(async (req, res) => {
     const b = parse(S.rule, req.body);
     if (!(await enabled(db))) throw new ApiError(403, 'ai_disabled', 'AI disabled');
     if (!(await db.query('SELECT 1 FROM element_sets_latest WHERE set_id=$1', [b.owner])).rows.length) throw new ApiError(404, 'not_found', 'Not found');
-    const user = 'Fields (ref | label | unit | type):\n' + b.fields.map((f) => [f.ref, f.label, f.unit, f.type].join(' | ')).join('\n') + '\n\nSentence:\n' + b.text;   // field names and the clinician's sentence only: never a patient value
-    await run(req, res, 'rule_draft', { system: SYS_RULE, user, validate: (j) => ({ draft: validateRuleDraft(j, b.fields, b.text) }) });
+    const sen = deidentify(b.text);       // the numbers the clinician typed are kept (see DEID), so the threshold check below still works on what the model actually saw
+    const user = 'Fields (ref | label | unit | type):\n' + b.fields.map((f) => [f.ref, f.label, f.unit, f.type].join(' | ')).join('\n') + '\n\nSentence:\n' + sen.text;   // field names and the clinician's sentence only: never a patient value
+    await run(req, res, 'rule_draft', { system: SYS_RULE, user, preview: b.preview, removed: sen.removed, validate: (j) => ({ draft: validateRuleDraft(j, b.fields, sen.text) }) });
   }));
 
   r.get('/admin/ai', wrap(async (req, res) => {
     const s = (await db.query("SELECT s.value, s.updated_at, u.name FROM app_settings s LEFT JOIN users u ON u.id=s.updated_by WHERE s.key='ai'")).rows[0];
     res.json({ enabled: !!(s && s.value.enabled === true), configured: !!provider, provider: provider ? provider.name : null, model: provider ? provider.model : null,
-      limits: { perMinute: lim.perMinute, perHour: lim.perHour }, deidentification: 'not_yet', updatedAt: s ? s.updated_at.toISOString() : null, updatedBy: s ? s.name : null });
+      limits: { perMinute: lim.perMinute, perHour: lim.perHour }, deidentification: 'server_patterns', updatedAt: s ? s.updated_at.toISOString() : null, updatedBy: s ? s.name : null });
   }));
   r.put('/admin/ai', wrap(async (req, res) => {
     const b = parse(S.setting, req.body);
@@ -232,5 +285,5 @@ function mountLlm(r, { db, ApiError, wrap, parse, audit, provider, limiter }) {
   }));
 }
 
-module.exports = { mountLlm, createProvider, createLimiter, validateSuggest, validateRuleDraft, validateSchema, parseJson, AiReject, ProviderError,
+module.exports = { deidentify, knownIdentifiers, mountLlm, createProvider, createLimiter, validateSuggest, validateRuleDraft, validateSchema, parseJson, AiReject, ProviderError,
   OPS, IND, NUMT, TIMT, ORDERY, DOSE_RE, SYS_SCHEMA, SYS_SUGGEST, SYS_RULE };
