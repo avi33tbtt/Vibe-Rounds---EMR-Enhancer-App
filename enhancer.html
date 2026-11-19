@@ -144,7 +144,7 @@ body.compact label{margin:7px 0 2px}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 #cfm{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}#cfm[hidden]{display:none}.cfmbox{background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:10px;max-width:760px;width:100%;padding:16px 18px}.cfmbox h2{margin:0 0 6px;font-size:17px}.cfmit{border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:8px 0}.cfmit b{display:block;margin-bottom:4px}.cfmit label{display:flex;gap:8px;align-items:flex-start;margin:4px 0;font-weight:400;cursor:pointer}.cfmit pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit;font-size:13px}.cfmbox ul{margin:4px 0 8px 18px;padding:0}.cfmbox .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.cfmbox .acts .b{margin:0}.cfmbox button[disabled]{opacity:.5;cursor:not-allowed}
 #login,#pwChange,#tmpPw{position:fixed;inset:0;z-index:110;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}#login[hidden],#pwChange[hidden],#tmpPw[hidden]{display:none}#login form,#pwChange form,#tmpPw .tmpbox{width:100%;max-width:340px;display:flex;flex-direction:column;gap:8px}#login label,#pwChange label{font-size:13px;font-weight:600}#login input,#pwChange input,#tmpPw input{width:100%}#loginMsg,#pwMsg{min-height:1.3em;color:#7a1c14;font-size:13px}#tmpPw input{font:600 17px ui-monospace,monospace;letter-spacing:.04em}#tmpPw{z-index:120}.us-tbl{width:100%;border-collapse:collapse;font-size:13px}.us-tbl th,.us-tbl td{border-bottom:1px solid var(--bd);padding:6px;text-align:left;vertical-align:middle}.us-tbl .off{opacity:.6}.us-add{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin:10px 0}.us-add label{margin:0}.us-wrap{overflow-x:auto}#who[hidden],#logoutBtn[hidden]{display:none}
-#ptFind{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}#ptFind[hidden]{display:none}#ptFind .cfmbox{max-width:640px}#pfMsg{min-height:1.3em;color:#7a1c14;font-size:13px;margin:4px 0}.pfrow{display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:6px 0}.pfrow .b{margin:0}.pfgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}.pfgrid label{margin:0}#pfDup{border:1px solid #c9a227;border-radius:8px;padding:8px 10px;margin:10px 0}#pfChosen .pfchosen{border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:15px}
+#ptFind{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}#ptFind[hidden]{display:none}#ptFind .cfmbox{max-width:640px}#pfMsg{min-height:1.3em;color:#7a1c14;font-size:13px;margin:4px 0}.pfrow{display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:6px 0}.pfrow .b{margin:0}.pfgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}.pfgrid label{margin:0}#pfDup{border:1px solid #c9a227;border-radius:8px;padding:8px 10px;margin:10px 0}#pfEnc fieldset{border:1px solid var(--bd);border-radius:8px;margin:8px 0;padding:6px 10px 10px}#pfEnc legend{font-weight:600;padding:0 4px}.pfopt{display:flex;gap:8px;align-items:center;font-weight:400;margin:4px 0;cursor:pointer}.pfopt input{width:auto}#pfEncMsg{min-height:1.3em;color:#7a1c14;font-size:13px;margin:4px 0}#pfChosen .pfchosen{border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin:10px 0;font-size:15px}
 #boot{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px}#boot[hidden]{display:none}.bootbox{max-width:460px;text-align:center}.bootbox .b{margin:8px 4px 0}#saveRetry[hidden],#demoBan[hidden],#wireBan[hidden]{display:none}#saveState.bad{color:var(--r);font-weight:600}
 </style></head><body>
 <div id="boot" role="status" aria-live="polite"><div class="bootbox"><b id="bootMsg">Loading…</b><div class="mu" id="bootWhy">Not for clinical use – synthetic data only.</div><button class="b" id="bootRetry" type="button" hidden>Retry</button><button class="b sm" id="bootDemo" type="button" hidden>Use Demo mode instead</button></div></div>
@@ -1151,7 +1151,7 @@ $('slist').innerHTML=h||'<span class="mu">No matching sets.</span>';
 const sg2=SUGG.id==CUR.id?SUGG.items.filter(x=>getSet(x.setId)&&!done.has(x.setId)):[];
 $('sugs').innerHTML=sg2.map(x=>{const t=getSet(x.setId);return`<button class="chip" data-add="${esc(x.setId)}" title="${esc(x.reason)}">+ ${esc(t.title||x.setId)}</button><div class="mu" style="margin:-2px 0 4px 8px">${esc(x.reason)}</div>`}).join('')+sgp.map(x=>{const t=getSet(x.pathwayId);return`<button class="chip" data-pw="${esc(x.pathwayId)}" title="${esc(x.reason)}">Preview pathway: ${esc(t.title||x.pathwayId)}</button><div class="mu" style="margin:-2px 0 4px 8px">${esc(x.reason)}</div>`+(PWPV==x.pathwayId?pwPrev(t):'')}).join('')}
 $('sb').addEventListener('click',e=>{const a=e.target.closest('[data-add]');if(a){addSet(a.dataset.add);$('addPanel').classList.remove('open');return}const pw=e.target.closest('[data-pw]');if(pw){pwOpen(pw.dataset.pw);return}const pg=e.target.closest('[data-pwgo]');if(pg){pwGo(pg.dataset.pwgo);$('addPanel').classList.remove('open');return}const pc=e.target.closest('[data-pwcl]');if(pc){pwOpen('');return}});
-function picker(){const c=getC().filter(x=>!x.syn),lab=x=>(x.saved||x.updatedAt||'').slice(0,10)+' · '+((x.narrative||'').trim().slice(0,28)||(x.applied||[]).map(a=>{const s=getSet(a.setId);return s&&s.title}).filter(Boolean).join(', ').slice(0,28)||'(empty)');
+function picker(){const c=getC().filter(x=>!x.syn),lab=x=>((x.patient&&x.patient.name?x.patient.name+(x.patient.mrn?' ('+x.patient.mrn+')':'')+' · ':'')+(x.saved||x.updatedAt||'').slice(0,10))+' · '+((x.narrative||'').trim().slice(0,28)||(x.applied||[]).map(a=>{const s=getSet(a.setId);return s&&s.title}).filter(Boolean).join(', ').slice(0,28)||'(empty)');
 $('cpick').innerHTML='<option value="">— current / new case —</option>'+c.map(x=>`<option value="${esc(x.id)}">${esc(lab(x))}</option>`).join('');$('cpick').value=c.some(x=>x.id==CUR.id)?CUR.id:''}
 function addSet(id){const had=CUR.applied.some(a=>a.setId==id);if(!applySet(CUR,id))return toast('Set not found: '+id);if(!had)bumpUsage(id);persist();renderCase();renderPatientBanner()}
 function rmSet(id){if(!getSet(id))CUR.applied=CUR.applied.filter(a=>a.setId!=id);else if(!removeSet(CUR,id))return;persist();renderCase();renderPatientBanner()}
@@ -1823,20 +1823,24 @@ $('patientsRows').addEventListener('keydown',e=>{if(e.target.closest('[data-my-p
 ['patientsSearch','patientsWard','patientsSort','myPatients'].forEach(id=>$(id).addEventListener(id==='patientsSearch'?'input':'change',renderPatients));
 $('patientsNew').addEventListener('click',createPatientFromList);
 /* Chunk 34b2: find or register a patient (server mode only; Demo mode keeps the typed fields). Step one: it ends with a chosen patient.
-   onPatientChosen() only shows the name and MRN for now; chunk 34b3 starts the encounter, links the chart and opens Summary. */
-let PF_TOKEN=0,PF_TIMER=null,PF_OPENER=null,PF_DUP=null,PF_BUSY=false;
+   Chunk 34b3: onPatientChosen() lists the patient's open encounters (or starts one), links a new chart to the patient and opens Summary. */
+let PF_TOKEN=0,PF_TIMER=null,PF_OPENER=null,PF_DUP=null,PF_BUSY=false,PF_PAT=null,PF_ENC=[],PF_SEL=null,PF_CASE=null;
 function pfAge(p){if(!p||!p.dateOfBirth)return'';const d=new Date(p.dateOfBirth+'T00:00:00Z');if(isNaN(d))return'';const n=new Date();let y=n.getUTCFullYear()-d.getUTCFullYear();if(n.getUTCMonth()<d.getUTCMonth()||(n.getUTCMonth()===d.getUTCMonth()&&n.getUTCDate()<d.getUTCDate()))y--;return(p.ageEstimated?'about ':'')+Math.max(0,y)+' y'}
 function pfLine(p){return esc([pfAge(p),p.sex,p.mrn?'MRN '+p.mrn:''].filter(Boolean).join(' · '))}
-function pfMsgOf(er){const c=er&&er.code;
+function pfMsgOf(er,ctx){const c=er&&er.code;
   if(c==='patient_merged')return'This record was merged into another one. Search again and choose the record that was kept.';
   if(c==='patient_inactive')return'This patient record is inactive.';
   if(c==='patient_locked')return'This chart already belongs to another patient. A duplicate is fixed by merging the two patient records, not by moving the chart.';
-  if(c==='conflict')return'Someone else changed this record. Search again to see the latest.';
+  if(c==='bed_occupied')return'That bed already has an open encounter. Choose another bed, or open the existing encounter for that bed.';
+  if(c==='encounter_not_open')return'That encounter is no longer open. Choose another encounter or start a new one.';
+  if(c==='encounter_mismatch')return'That encounter does not belong to this patient.';
+  if(c==='attending_invalid')return'The attending doctor is not valid. Ask an administrator.';
+  if(c==='conflict')return ctx==='link'?'This chart was changed by someone else while it was being linked. Wait for "Saved", then try again.':'Someone else changed this record. Search again to see the latest.';
   if(er&&er.network)return'Cannot reach the server. What you typed is still here; try again.';
   if(er&&er.status===401)return'You are signed out. Sign in and try again.';
   return(er&&er.message)||'Something went wrong. Try again.'}
 const pfSay=m=>{$('pfMsg').textContent=m||''};
-function pfBusy(b){PF_BUSY=b;['pfSave','pfNewBtn'].forEach(id=>{$(id).disabled=b})}
+function pfBusy(b){PF_BUSY=b;$('pfSave').disabled=b;$('pfNewBtn').disabled=b||!mayDo('patient.write');const o=$('pfOpen');if(o)o.disabled=b||!mayDo('case.link')}
 function openPtFind(opener){
   if(!mayDo('patient.read'))return toast('Your role ('+Store.me.role+') may not open patient records.');
   PF_OPENER=opener||null;pfReset();$('ptFind').hidden=false;
@@ -1844,12 +1848,12 @@ function openPtFind(opener){
   $('pfQ').focus();
 }
 function pfReset(){
-  PF_TOKEN++;clearTimeout(PF_TIMER);PF_DUP=null;PF_BUSY=false;
+  PF_TOKEN++;clearTimeout(PF_TIMER);PF_DUP=null;PF_BUSY=false;PF_PAT=null;PF_ENC=[];PF_SEL=null;PF_CASE=null;
   ['pfQ','pfName','pfPhone','pfNid','pfAge'].forEach(id=>{$(id).value=''});$('pfSex').value='';$('pfAgeMode').value='dob';pfAgeMode();
-  $('pfRes').innerHTML='';pfSay('');$('pfDup').hidden=true;$('pfDup').innerHTML='';$('pfForm').hidden=true;$('pfNewBtn').setAttribute('aria-expanded','false');$('pfNewBtn').disabled=false;
+  $('pfRes').innerHTML='';pfSay('');$('pfDup').hidden=true;$('pfDup').innerHTML='';$('pfForm').hidden=true;$('pfNewBtn').setAttribute('aria-expanded','false');
   $('pfMain').hidden=false;$('pfChosen').hidden=true;$('pfChosen').innerHTML='';
 }
-function pfClose(){clearTimeout(PF_TIMER);PF_TOKEN++;pfReset();$('ptFind').hidden=true;if(PF_OPENER&&PF_OPENER.focus)PF_OPENER.focus();PF_OPENER=null}
+function pfClose(){if(PF_BUSY)return;clearTimeout(PF_TIMER);PF_TOKEN++;pfReset();$('ptFind').hidden=true;if(PF_OPENER&&PF_OPENER.focus)PF_OPENER.focus();PF_OPENER=null}
 function pfAgeMode(){const dob=$('pfAgeMode').value==='dob',a=$('pfAge');a.type=dob?'date':'number';a.value='';if(dob){a.max=new Date().toISOString().slice(0,10);a.removeAttribute('min')}else{a.min='0';a.max='120';a.step='1'}$('pfAgeL').textContent=dob?'Date of birth':'Estimated age (years)'}
 function pfSearchSoon(){
   clearTimeout(PF_TIMER);const q=$('pfQ').value.trim();pfSay('');
@@ -1873,10 +1877,62 @@ async function pfPick(id){
     pfBusy(false);onPatientChosen(p,{merged});
   }catch(er){pfBusy(false);pfSay(pfMsgOf(er))}
 }
-function onPatientChosen(p,info){
-  $('pfMain').hidden=true;$('pfChosen').hidden=false;
-  $('pfChosen').innerHTML=`<div class="pfchosen"><b>${esc(p.name)}</b><div>MRN ${esc(p.mrn||'')}</div>${info&&info.merged?'<div class="mu">The record you picked was merged into this one, so this one is shown.</div>':''}${info&&info.created?'<div class="mu">New patient registered.</div>':''}<div class="mu">Starting the encounter and opening the chart comes in the next update.</div></div><div class="acts"><button class="b sm" id="pfAgain" type="button">Choose a different patient</button></div>`;
-  $('pfAgain').focus();
+const PF_TYPES=[['admission','Admission'],['OPD','Outpatient (OPD)'],['emergency','Emergency']];
+const pfEncText=e=>{const t=(PF_TYPES.find(x=>x[0]===e.type)||[0,e.type])[1],loc=[e.ward,e.bed&&'bed '+e.bed].filter(Boolean).join(', ');return t+(loc?' · '+loc:'')+' · since '+String(e.startAt||'').slice(0,16).replace('T',' ')};
+const pfEncSay=m=>{const x=$('pfEncMsg');if(x)x.textContent=m||''};
+async function onPatientChosen(p,info){
+  PF_PAT=p;PF_ENC=[];PF_SEL=null;$('pfMain').hidden=true;$('pfChosen').hidden=false;
+  $('pfChosen').innerHTML=`<div class="pfchosen"><b>${esc(p.name)}</b><div>MRN ${esc(p.mrn||'')}</div>${info&&info.merged?'<div class="mu">The record you picked was merged into this one, so this one is shown.</div>':''}${info&&info.created?'<div class="mu">New patient registered.</div>':''}</div><div id="pfEnc"><div class="mu">Loading encounters…</div></div><div id="pfEncMsg" role="alert"></div><div class="acts"><button class="b" id="pfOpen" type="button" disabled>Open chart</button><button class="b sm" id="pfAgain" type="button">Choose a different patient</button></div>`;
+  $('pfAgain').focus();pfEncLoad(p);
+}
+async function pfEncLoad(p){
+  try{
+    const all=await Store.patients.encounters(p.id);if(PF_PAT!==p)return;
+    const open=all.filter(e=>e.status==='open');PF_ENC=open.filter(e=>!e.fromMergedPatient);pfEncRender(open.length-PF_ENC.length);
+  }catch(er){if(PF_PAT!==p)return;$('pfEnc').innerHTML='<button class="b sm" id="pfEncRetry" type="button">Try loading encounters again</button>';pfEncSay(pfMsgOf(er))}
+}
+function pfEncRender(hiddenN){
+  const w=mayDo('encounter.write'),keep=PF_SEL;
+  $('pfEnc').innerHTML='<fieldset><legend>Encounter</legend>'+PF_ENC.map(e=>`<label class="pfopt"><input type="radio" name="pfe" value="${esc(e.id)}"> ${esc(pfEncText(e))}</label>`).join('')+
+    `<label class="pfopt"><input type="radio" name="pfe" value="new"${w?'':' disabled'}> Start a new encounter${w?'':' (your role may not)'}</label>`+
+    '<div class="pfgrid" id="pfNewEnc" hidden><div><label for="pfEType">Type</label><select id="pfEType">'+PF_TYPES.map(t=>`<option value="${t[0]}">${esc(t[1])}</option>`).join('')+'</select></div><div><label for="pfEWard">Ward (optional)</label><input id="pfEWard" type="text" maxlength="50" autocomplete="off"></div><div><label for="pfEBed">Bed (optional)</label><input id="pfEBed" type="text" maxlength="50" autocomplete="off"></div></div>'+
+    '<label class="pfopt"><input type="radio" name="pfe" value="none"> No encounter for now (open the chart only)</label></fieldset>'+(hiddenN?`<div class="mu">${hiddenN} open encounter${hiddenN===1?'':'s'} on a merged duplicate record ${hiddenN===1?'is':'are'} not shown.</div>`:'');
+  const pre=keep&&PF_ENC.some(e=>e.id===keep)?keep:PF_ENC.length===1?PF_ENC[0].id:(!PF_ENC.length&&w?'new':null);
+  if(pre){const r=[...document.getElementsByName('pfe')].find(x=>x.value===pre);if(r){r.checked=true;pfEncPick()}}
+  const o=$('pfOpen');if(o)o.disabled=PF_BUSY||!mayDo('case.link');
+}
+function pfEncPick(){const c=document.querySelector('input[name="pfe"]:checked');$('pfNewEnc').hidden=!(c&&c.value==='new')}
+function pfChartMeta(p,e){return{name:p.name,ageSex:[pfAge(p),p.sex].filter(Boolean).join(' · '),bed:e?[e.ward,e.bed].filter(Boolean).join(' / '):'',mrn:p.mrn||''}}   // display copy for the banner and lists until 34c reads the real record
+async function pfSaved(){
+  await Promise.race([Store.flush(),new Promise((_,rej)=>setTimeout(()=>rej({message:'The chart could not be saved in time. Check the connection and try again.'}),20000))]);
+  const st=Store.status();if(st.state!=='saved')throw{message:st.text};
+}
+async function pfOpenChart(){
+  if(PF_BUSY||!PF_PAT)return;pfEncSay('');
+  const sel=document.querySelector('input[name="pfe"]:checked'),p=PF_PAT;
+  if(!sel)return pfEncSay('Choose an encounter, start a new one, or choose "No encounter for now".');
+  if(!mayDo('case.link'))return pfEncSay('Your role ('+Store.me.role+') may not link a chart to a patient.');
+  let nb=null;
+  if(sel.value==='new'){const ward=$('pfEWard').value.trim(),bed=$('pfEBed').value.trim();if(bed&&!ward)return pfEncSay('A bed needs a ward.');nb={type:$('pfEType').value};if(ward)nb.ward=ward;if(bed)nb.bed=bed}
+  pfBusy(true);let step='encounter';
+  try{
+    persist();                                                  // keep whatever chart was open
+    let encId=sel.value==='new'||sel.value==='none'?null:sel.value;
+    if(nb){const e=await Store.patients.createEncounter(p.id,nb);encId=e.id;PF_ENC.unshift(e);PF_SEL=e.id}   // from here a retry picks this encounter instead of starting a second one
+    const enc=encId?PF_ENC.find(x=>x.id===encId)||null:null;
+    step='link';
+    let all=getC(),c=PF_CASE&&PF_CASE.patientId===p.id?all.find(x=>x.id===PF_CASE.caseId):null;
+    if(!c){c=newCase();all.push(c);PF_CASE={caseId:c.id,patientId:p.id}}      // a retry reuses the chart made by the first try
+    c.patient=pfChartMeta(p,enc);
+    if(!setC(all))throw{message:'The chart could not be saved here. Try again.'};
+    await pfSaved();
+    await Store.patients.link(c.id,encId?{patientId:p.id,encounterId:encId}:{patientId:p.id});
+    const fresh=getC().find(x=>x.id===c.id);
+    pfBusy(false);pfClose();enterCase(JSON.parse(JSON.stringify(fresh)),'ov');toast('Chart opened for '+p.name+' (MRN '+(p.mrn||'')+').');
+  }catch(er){
+    pfBusy(false);if(PF_SEL)pfEncRender(0);
+    pfEncSay((step==='link'&&PF_SEL?'The encounter was started, but the chart could not be linked. ':'')+pfMsgOf(er,step));
+  }
 }
 function pfBody(){
   const name=$('pfName').value.trim(),sex=$('pfSex').value,mode=$('pfAgeMode').value,av=$('pfAge').value.trim(),phone=$('pfPhone').value.trim(),nid=$('pfNid').value.trim();
@@ -1916,7 +1972,11 @@ $('pfFormCancel').addEventListener('click',()=>{$('pfForm').hidden=true;$('pfNew
 $('pfForm').addEventListener('input',()=>{if(PF_DUP){PF_DUP=null;$('pfDup').hidden=true;$('pfDup').innerHTML=''}});   // an edited form must be checked for duplicates again
 $('pfForm').addEventListener('submit',e=>{e.preventDefault();pfRegister(false)});
 $('pfAgeMode').addEventListener('change',pfAgeMode);
-$('pfBox').addEventListener('click',e=>{if(e.target.id==='pfAgain'){$('pfChosen').hidden=true;$('pfMain').hidden=false;$('pfQ').focus()}});
+$('pfBox').addEventListener('click',e=>{const id=e.target.id;
+  if(id==='pfAgain'&&!PF_BUSY){PF_PAT=null;PF_ENC=[];PF_SEL=null;$('pfChosen').hidden=true;$('pfMain').hidden=false;$('pfQ').focus()}
+  else if(id==='pfOpen')pfOpenChart();
+  else if(id==='pfEncRetry'){pfEncSay('');$('pfEnc').innerHTML='<div class="mu">Loading encounters…</div>';pfEncLoad(PF_PAT)}});
+$('pfBox').addEventListener('change',e=>{if(e.target.name==='pfe')pfEncPick()});
 $('pfClose').addEventListener('click',pfClose);
 $('ptFind').addEventListener('mousedown',e=>{if(e.target===$('ptFind'))pfClose()});
 $('ptFind').addEventListener('keydown',e=>{if(e.key!=='Tab')return;const f=[...$('pfBox').querySelectorAll('button,input,select')].filter(x=>!x.disabled&&!x.closest('[hidden]'));if(!f.length)return;const a=f[0],z=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}});

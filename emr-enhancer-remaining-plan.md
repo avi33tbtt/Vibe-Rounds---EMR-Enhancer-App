@@ -19,14 +19,15 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 
 ## 1. Where the project stands
 
-**Built (chunks 1-34a, 34b1, 34b2):**
+**Built (chunks 1-34a, 34b1-34b3):**
 - Single-file prototype `enhancer.html`: quick bar, fever chart, insulin grid, flowsheets, notes (draft/sign/amend), pathways, rules and alerts, EMR shell, FHIR export.
 - Server in the repo root: PostgreSQL schema, REST API, `store.js` cache-first client layer, import from browser, conflict screen, login and sessions, roles and permissions, CSRF, users screen, forced password change, audit log with admin screen and CSV export, entered-in-error history drawer, sign-in audit events, patients/encounters/merge/duplicate-check API (`patients.js`).
 - **187 server tests pass** on PostgreSQL 16, plus 9 new store tests (47 in `store.test.js`).
+- 34b3 filled in `onPatientChosen`: list open encounters or start one (type, ward, bed), create the chart, link it with `Store.patients.link`, open Summary; the case picker shows name and MRN. The chart's typed `patient` fields are a display copy of the real patient until 34c reads the real record.
 - 34b2 added the Find or register a patient dialog (`#ptFind`) in `enhancer.html`, opened by + New patient in server mode; it ends at `onPatientChosen(patient)`, which 34b3 fills in. Demo mode keeps the typed flow.
 - 34b1 added `Store.patients` (search, get, create, update, encounters, link) to `store.js`; server mode only, nothing cached, Demo mode rejects with `demo_mode`.
 
-**Next up:** 34b3, 34c, 34d, then 35a onward in the order below.
+**Next up:** 34c, 34d, then 35a onward in the order below.
 
 **Manual work that is not a chunk (do soon, needs two real browsers):**
 - [ ] (a) Force a conflict on one row and confirm the side-by-side screen appears.
@@ -160,7 +161,7 @@ enhancer.html only (uses Store.patients from 34b1). Rework the New patient flow 
 **Done when:** New patient flow works in server mode against the real server; duplicate candidates shown; merged patient opens the kept record; Demo mode unchanged.
 
 
-### [ ] 34b3. Patients 2c: start an encounter, link the case, open Summary
+### [x] 34b3. Patients 2c: start an encounter, link the case, open Summary
 
 **Goal:** Screen part 2: pick or start an encounter, attach the case, show name and MRN in the case picker.
 
