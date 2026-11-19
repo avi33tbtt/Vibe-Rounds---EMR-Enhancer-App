@@ -196,6 +196,7 @@ One table, `permissions.js`: action -> roles. Each route maps to exactly one act
 | `POST /import/dry-run` | `import.run` | admin |
 | `POST /import` | `import.run` | admin |
 | `GET /audit`, `GET /audit.csv` | `audit.read` | admin |
+| `GET /rules-in-force`, `GET /rules-in-force.csv` | `rules.inforce` | admin, doctor |
 | `GET /users` | `user.manage` | admin |
 | `POST /users` | `user.manage` | admin |
 | `POST /users/:id/deactivate` | `user.manage` | admin |
@@ -219,6 +220,8 @@ Admin only (action `audit.read`; every other role gets 403, logged out gets 401)
 | Route | What it does |
 |---|---|
 | `GET /audit` | One page of entries, newest first: `{ items, nextBefore }`. Each item: `id, at, userId, username, role, action, entity, entityId, patientId, before, after, reason, ip`. Query (all optional, anything else is 400): `user` (user id or username, case-insensitive), `patient` (id), `from` (inclusive), `to` (exclusive; a bare `YYYY-MM-DD` means that whole UTC day), `action` (exact, or a prefix ending in `*`, such as `row.*`), `limit` (1 to 200, default 50), `before` (the `nextBefore` of the previous page). Paging is by id, so rows arriving meanwhile never cause gaps or repeats. Viewing writes no audit row. |
+| `GET /rules-in-force` | Read-only list of what can run now: every rule that is enabled **and** has an approver, and every protocol that has a verifier. `{ items: [{ kind: 'rule'|'protocol', setId, setTitle, ruleId, sentence, indicator, approvedBy, approvedAt, source, version }] }`. Query (all optional, anything else is 400): `set` (set id), `source` (`manual`, `ai-drafted`, `package`, `protocol`). The sentence is built from the rule or bands exactly as typed; nothing is added. Viewing writes no audit row. |
+| `GET /rules-in-force.csv` | The same filters as a CSV download. Columns: `kind, set_id, set_title, rule_id, sentence, indicator, approved_by, approved_at, source`. Formula-safe (leading `'` on cells starting `=`, `+`, `-`, `@`, tab or CR). Writes one `rules_inforce_export` audit row (filter, row count) in the same transaction as the read. |
 | `GET /audit.csv` | The same filters (no `limit`/`before`) as a CSV download, up to 50,000 rows; `X-Audit-Rows` and `X-Audit-Truncated` say what was sent. Columns: `id, at, user_id, username, role, action, entity, entity_id, patient_id, reason, ip`. Record contents (`before`/`after`) are **not** exported. Cells starting with `=`, `+`, `-`, `@`, tab or CR get a leading `'` so a spreadsheet cannot run them as formulas. The export writes its own `audit_export` row (the filter, the row count, whether it was cut off) in the same transaction as the read: if that row cannot be written, nothing is exported (500). The export is not in its own file, but is in the next one. |
 
 Decisions to confirm: viewing the screen is not logged (only exports are); `before`/`after` are on screen but not in the CSV; the 50,000-row cap is reported, not silent.

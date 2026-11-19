@@ -187,7 +187,7 @@ body.compact label{margin:7px 0 2px}
   <details id="tools"><summary>Tools ▾</summary><div class="toolitems">
     <button data-shell-t="in">Set builder</button><button data-shell-t="fh">Codes</button>
     <button data-shell-t="an">Analytics</button><button data-shell-t="ab">About</button>
-    <button type="button" id="auditTool" hidden>Audit log</button><button type="button" id="usersTool" hidden>Users</button><button type="button" id="pwTool" hidden>Change my password</button>
+    <button type="button" id="rulesTool" hidden>Rules in force</button><button type="button" id="auditTool" hidden>Audit log</button><button type="button" id="usersTool" hidden>Users</button><button type="button" id="pwTool" hidden>Change my password</button>
     <button type="button" id="settingsTool">Settings</button>
   </div></details>
 </div>
@@ -213,6 +213,14 @@ body.compact label{margin:7px 0 2px}
   <h3 style="margin:14px 0 0">Add a user</h3>
   <div class="us-add"><label>Username<input id="usNewUser" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="100"></label><label>Name<input id="usNewName" autocomplete="off" maxlength="200"></label><label>Role<select id="usNewRole"><option value="nurse">nurse</option><option value="doctor">doctor</option><option value="informatician">informatician</option><option value="viewer">viewer</option><option value="admin">admin</option></select></label><label>Temporary password (optional)<input id="usNewPw" type="password" autocomplete="off" maxlength="200" placeholder="blank = the server makes one"></label></div>
   <button class="b" id="usAdd" type="button">Add user</button> <span class="mu">The new person must change the password when they first sign in.</span>
+</div></div>
+<div class="pane" id="ri"><div class="cd patients-screen" style="text-align:left;max-width:none;margin:10px 0">
+  <div class="patients-head"><div><h2>Rules in force</h2><div class="mu">Every alert rule and protocol that is approved right now, with who approved it and when. Read-only: change or approve rules in the rule editor. Decision support, not orders. Not for clinical use.</div></div><button class="b" id="riBack" type="button">Back to patients</button></div>
+  <div class="au-filters"><label>Set id<input id="riSet" placeholder="e.g. care.vitals" autocomplete="off"></label><label>Source<select id="riSource"><option value="">All sources</option><option value="manual">manual</option><option value="ai-drafted">ai-drafted</option><option value="package">package</option><option value="protocol">protocol</option></select></label></div>
+  <div class="au-btns"><button class="b" id="riApply" type="button">Apply filters</button><button class="b" id="riReset" type="button">Reset</button><button class="b" id="riCsv" type="button">Export CSV</button></div>
+  <div class="mu">The CSV export is recorded in the audit log.</div>
+  <div id="riMsg" class="mu" aria-live="polite"></div>
+  <div class="patients-table-wrap"><table class="patients-table" id="riTable"><thead><tr><th>Type</th><th>Set</th><th>In plain words</th><th>Approved by</th><th>Approved</th><th>Source</th></tr></thead><tbody id="riRows"></tbody></table></div>
 </div></div>
 <div class="pane" id="au"><div class="cd patients-screen" style="text-align:left;max-width:none;margin:10px 0">
   <div class="patients-head"><div><h2>Audit log</h2><div class="mu">Administrators only. Who opened or changed what, and when. Entries cannot be edited or deleted. Not for clinical use.</div></div><button class="b" id="auBack" type="button">Back to patients</button></div>
@@ -2208,7 +2216,7 @@ async function boot(){
   try{
     await Store.init();
     if(!BOOTED){startApp();BOOTED=true}
-    paintMode();paintSave(Store.status());auTool();usTool();pwTool();paintWho();
+    paintMode();paintSave(Store.status());riTool();auTool();usTool();pwTool();paintWho();
     $('boot').hidden=true;$('login').hidden=true;
   }catch(e){
     if(e&&e.status===401){showLogin('');return}   /* not signed in: the login screen (chunk 32d1) */
@@ -2408,6 +2416,38 @@ $('histBtn').addEventListener('click',histOpen);
 $('histClose').addEventListener('click',histClose);
 $('histErr').addEventListener('change',histRender);
 document.addEventListener('keydown',e=>{if(e.key==='Escape')histClose()});
+/* chunk 35c: Rules in force (server mode, admin and doctor; the server refuses everyone else). Read-only list of approved rules and verified protocols. */
+const RI={seq:0};
+const riAllowed=()=>Store.mode==='server'&&!!Store.me&&Store.can('rules.inforce');
+function riTool(){$('rulesTool').hidden=!riAllowed()}
+function riQuery(){const p=new URLSearchParams(),s=$('riSet').value.trim(),o=$('riSource').value;if(s)p.set('set',s);if(o)p.set('source',o);return p.toString()}
+function riRow(i){return '<tr><td>'+esc(i.kind)+'</td><td>'+esc(i.setTitle)+'<div class="mu">'+esc(i.setId)+(i.ruleId?' / '+esc(i.ruleId):'')+'</div></td><td>'+esc(i.sentence)+'</td><td>'+esc(i.approvedBy||'(unknown)')+'</td><td>'+esc(i.approvedAt?new Date(i.approvedAt).toLocaleString():'')+'</td><td>'+esc(i.source)+'</td></tr>'}
+async function riLoad(){
+  if(!riAllowed())return;const my=++RI.seq,msg=$('riMsg');$('riRows').innerHTML='';msg.textContent='Loading…';
+  let r;try{r=await Store.api('GET','/rules-in-force?'+riQuery())}
+  catch(e){if(my===RI.seq)msg.textContent=e.status===403?'Only a doctor or an administrator can see the rules in force.':'Could not load the list: '+e.message;return}
+  if(my!==RI.seq)return;
+  $('riRows').innerHTML=r.items.map(riRow).join('');
+  msg.textContent=r.items.length?r.items.length+' in force.':'Nothing is in force with these filters. A rule runs only after a doctor or administrator approves it.'}
+async function riExport(){
+  if(!riAllowed())return;const msg=$('riMsg'),b=$('riCsv');b.disabled=true;msg.textContent='Preparing the export…';
+  try{
+    const res=await fetch(Store.base+'/api/rules-in-force.csv?'+riQuery(),{credentials:'same-origin'});
+    if(!res.ok){let m='HTTP '+res.status;try{m=(await res.json()).error.message||m}catch(e){}throw new Error(m)}
+    const blob=await res.blob(),a=document.createElement('a'),url=URL.createObjectURL(blob);
+    a.href=url;a.download='rules-in-force-'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+    msg.textContent='Exported '+(res.headers.get('X-Rows')||'')+' rows. This export was recorded in the audit log.'
+  }catch(e){msg.textContent='Export failed, nothing was downloaded: '+e.message}
+  b.disabled=false}
+function showRules(){
+  if(!riAllowed())return toast('Rules in force is for doctors and administrators in server mode.');
+  if($('tools'))$('tools').open=false;persist();showNoCase();$('noCase').classList.remove('show');$('ri').classList.add('on');riLoad()}
+$('rulesTool').addEventListener('click',showRules);
+$('riApply').addEventListener('click',riLoad);
+$('riCsv').addEventListener('click',riExport);
+$('riReset').addEventListener('click',()=>{$('riSet').value='';$('riSource').value='';riLoad()});
+$('riBack').addEventListener('click',()=>{$('ri').classList.remove('on');showNoCase()});
+$('riSet').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();riLoad()}});
 /* chunk 33d: admin Audit screen (server mode, admin only; the server refuses everyone else). Read-only: filters, paging by "older entries", and a CSV export
    that the server records in the log itself. The CSV has no record contents. */
 const AU={next:null,seq:0,seen:false};

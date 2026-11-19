@@ -12,7 +12,7 @@ const { z } = require('zod');
 const crypto = require('node:crypto');
 const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied, allowedActions, ACTION_LABELS } = require('./permissions.js');
 const { hashPassword, verifyPassword, passwordProblem } = require('./auth.js');   // chunk 32e1: admin users routes and own-password change
-const { audit, auditOnce, auditContext, auditPage, auditOut, csvLine, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
+const { audit, auditOnce, auditContext, auditPage, auditOut, csvLine, csvCell, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
 const { mountPatients } = require('./patients.js');                        // chunk 34a: patients, encounters, link a case to them
 
 class ApiError extends Error {
@@ -56,6 +56,7 @@ const S = {
   passwordChange: z.object({ currentPassword: z.string().min(1).max(200), newPassword: z.string().max(200) }).strict(),
   auditQuery: z.object({ ...auditFilter, before: z.string().regex(/^\d{1,18}$/).optional(), limit: z.string().regex(/^\d{1,3}$/).optional() }).strict(),
   auditCsv: z.object(auditFilter).strict(),
+  inForce: z.object({ set: ident.optional(), source: z.enum(['manual', 'ai-drafted', 'package', 'protocol']).optional() }).strict(),
   caseCreate: z.object({ id: uuid.optional(), patient: patientObj.optional(), narrative: z.string().max(200000).optional(),
     applied: appliedArr.optional(), pathways: pathwaysArr.optional(), pinned: pinnedArr.optional() }).strict(),
   alertAck: z.object({ ruleId: ident, setId: ident, sig: z.string().min(1).max(500) }).strict(),
@@ -916,6 +917,57 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
       return q.rows[0];
     });
     res.json(protoOut(row));
+  }));
+
+  // ================= rules in force (chunk 35c): read-only list of what can run right now =================
+  // A rule is in force when it is enabled AND has an approver; a protocol when it has a verifier. Nothing here changes anything. The sentence is built from
+  // the typed rule or the typed bands exactly as stored; it never adds a threshold, band or dose.
+  const IN_FORCE_CSV = ['kind', 'set_id', 'set_title', 'rule_id', 'sentence', 'indicator', 'approved_by', 'approved_at', 'source'];
+  const bandText = (b) => `${b.min === '' || b.min == null ? '' : b.min}-${b.max === '' || b.max == null ? '' : b.max}: ${b.instruction || ''}`;
+  async function loadInForce(q, f) {
+    const sets = {};
+    for (const s of (await q.query('SELECT DISTINCT ON (set_id) set_id, body FROM element_sets ORDER BY set_id, version DESC')).rows) {
+      const fields = {}; for (const sec of (s.body && s.body.sections) || []) for (const fl of (sec && sec.fields) || []) if (fl && fl.id) fields[fl.id] = fl;
+      sets[s.set_id] = { title: (s.body && s.body.title) || s.set_id, fields };
+    }
+    const title = (sid) => (sets[sid] ? sets[sid].title : sid), items = [];
+    if (!f.source || f.source !== 'protocol') {
+      const rows = (await q.query(`SELECT x.*, u.name AS who FROM cds_rules x LEFT JOIN users u ON u.id=x.verified_by_user
+        WHERE x.enabled AND x.verified_by_user IS NOT NULL ${f.set ? 'AND x.owner_set_id=$1' : ''} ${f.source ? `AND x.source=$${f.set ? 2 : 1}` : ''} ORDER BY x.owner_set_id, x.rule_id`,
+        [f.set, f.source].filter((v) => v !== undefined)) ).rows;
+      for (const x of rows) {
+        const rb = x.body || {}, ref = String(rb.fieldRef || ''), i = ref.indexOf('/'), fl = i > 0 && sets[ref.slice(0, i)] ? sets[ref.slice(0, i)].fields[ref.slice(i + 1)] : null;
+        const label = (fl && fl.label) || ref || 'value', unit = rb.unit ? ' ' + rb.unit : '';
+        const sentence = rb.op === 'minutes_since_gt' ? `If the latest ${label} reading is more than ${rb.threshold} min old, show ${rb.indicator}: ${rb.summary}`
+          : `If latest ${label} ${rb.op} ${rb.threshold}${unit}, show ${rb.indicator}: ${rb.summary}`;
+        items.push({ kind: 'rule', setId: x.owner_set_id, setTitle: title(x.owner_set_id), ruleId: x.rule_id, sentence, indicator: rb.indicator || '', approvedBy: x.who || '', approvedAt: iso(x.verified_at), source: x.source, version: x.version });
+      }
+    }
+    if (!f.source || f.source === 'protocol') {
+      const rows = (await q.query(`SELECT x.*, u.name AS who FROM protocols x LEFT JOIN users u ON u.id=x.verified_by_user
+        WHERE x.verified_by_user IS NOT NULL ${f.set ? 'AND x.set_id=$1' : ''} ORDER BY x.set_id`, f.set ? [f.set] : [])).rows;
+      for (const x of rows) {
+        const bands = Array.isArray(x.body && x.body.bands) ? x.body.bands : [];
+        items.push({ kind: 'protocol', setId: x.set_id, setTitle: title(x.set_id), ruleId: '', sentence: `Verified protocol, ${bands.length} band${bands.length === 1 ? '' : 's'} as typed: ${bands.map(bandText).join('; ')}`,
+          indicator: '', approvedBy: x.who || '', approvedAt: iso(x.verified_at), source: 'protocol', version: x.version });
+      }
+    }
+    return items;
+  }
+  r.get('/rules-in-force', wrap(async (req, res) => {
+    const f = parse(S.inForce, req.query);
+    res.json({ items: await loadInForce(db, f) });   // viewing is not audited (like the audit screen); the CSV export is
+  }));
+  r.get('/rules-in-force.csv', wrap(async (req, res) => {
+    const f = parse(S.inForce, req.query);
+    const items = await db.withTx(async (c) => {   // the read and its audit row share one transaction: an export that cannot be recorded does not happen
+      const it = await loadInForce(c, f);
+      await audit(c, { action: 'rules_inforce_export', entity: 'rules_in_force', after: { filter: f, rows: it.length } });
+      return it;
+    });
+    const cell = { kind: (i) => i.kind, set_id: (i) => i.setId, set_title: (i) => i.setTitle, rule_id: (i) => i.ruleId, sentence: (i) => i.sentence, indicator: (i) => i.indicator, approved_by: (i) => i.approvedBy, approved_at: (i) => i.approvedAt, source: (i) => i.source };
+    res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="rules-in-force.csv"', 'Cache-Control': 'no-store', 'X-Rows': String(items.length) });
+    res.send(IN_FORCE_CSV.join(',') + '\r\n' + items.map((i) => IN_FORCE_CSV.map((k) => csvCell(cell[k](i))).join(',')).join('\r\n') + (items.length ? '\r\n' : ''));
   }));
 
   // ================= prefs (per user) =================

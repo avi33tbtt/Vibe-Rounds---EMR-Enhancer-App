@@ -33,7 +33,9 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 - 35b: `006_alert_acks.sql` finishes the `alert_acks` table (append-only, user stamped by the server, `source` user or imported); `GET/POST /cases/:id/alert-acks`; the case's `alertLog` is now read from that table and `PATCH /cases/:id` refuses `alertLog`; import and the old JSON list become `imported` rows; `Store.ackAlert`; alert cards show who acknowledged. `sig` is the client's string (operator, threshold, unit, reading time, value), kept as sent so migrated old acks still match. Rule wording edits do not change it; any rule edit still resets approval.
 - 34d: `GET /cases/:id/export` (admin, doctor) returns the real FHIR Patient (MRN, name, gender, birthDate) and Encounter and writes one audit row per export (ids only); `Store.patients.exportCase`; `bundle()` in `enhancer.html` uses them in server mode, Demo mode keeps the placeholder. An unlinked chart is refused (`case_not_linked`).
 
-**Next up:** 35c onward in the order below.
+- 35c: `GET /rules-in-force` and `/rules-in-force.csv` (action `rules.inforce`, admin and doctor): every rule that is enabled and approved and every verified protocol, with a plain sentence built from what was typed, approver, time and source; filters `set` and `source`; the CSV is formula-safe and writes one `rules_inforce_export` audit row; viewing writes none. Tools > Rules in force is read-only. 6 new tests in `rules-inforce.test.js`.
+
+**Next up:** 36a onward in the order below.
 
 **Manual work that is not a chunk (do soon, needs two real browsers):**
 - [ ] (a) Force a conflict on one row and confirm the side-by-side screen appears.
@@ -232,7 +234,7 @@ Server plus small client change. (1) POST /api/rules/:id/approve and /api/protoc
 **Done when:** Acknowledgements are server records with user and time; an alert acknowledged by one user shows as acknowledged to others.
 
 
-### [ ] 35c. Server rules 3: 'Rules in force' admin screen
+### [x] 35c. Server rules 3: 'Rules in force' admin screen
 
 **Goal:** Admin list of every approved rule and protocol with approver and date, plus CSV.
 
