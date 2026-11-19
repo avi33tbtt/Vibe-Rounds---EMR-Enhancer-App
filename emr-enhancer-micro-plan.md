@@ -1,8 +1,8 @@
 # EMR Enhancer: Micro Plan (free-tier edition)
 
-*19 Nov 2026. Repo: github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App. Replaces the chunk list in `emr-enhancer-remaining-plan.md` from 37c onward. Chunks 1-37b are built. Data contracts v5-v7 stay in the old plan file as reference; each task below carries the few facts it needs, so you rarely paste a contract.*
+*19 Nov 2026. Repo: github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App. Replaces the chunk list in `emr-enhancer-remaining-plan.md` from 37c onward. Chunks 1-37c are built. Data contracts v5-v7 stay in the old plan file as reference; each task below carries the few facts it needs, so you rarely paste a contract.*
 
-**Next up: 37c2**
+**Next up: 37d1**
 
 ---
 
@@ -69,25 +69,25 @@ Add one pure function sumByType(rows, fromMs, toMs) returning {type: number} sum
 ```
 **Done when:** test passes; function not yet shown anywhere.
 
-### [ ] 37c2. Shift sum: show it on the I/O flowsheet
+### [x] 37c2. Shift sum: show it on the I/O flowsheet
 **File:** enhancer.html | **Paste:** the flowsheet table renderer (just its head and foot), sumByType
 ```text
 Under the I/O flowsheet table show a small block "Sum of entered rows" with a window choice (last 8 h, 12 h, 24 h) and one line per type from sumByType. Label it "sum of entered rows". No comparison, no colours, no target. Show nothing for other sets.
 ```
 
-### [ ] 37c3. Ward board: row data function
+### [x] 37c3. Ward board: row data function
 **File:** enhancer.html | **Paste:** the Patients row renderer, ageTxt, how pinned direct sets are read
 ```text
 Add boardRow(patientCase) returning {name, mrn, ward, bed, cells:[{setTitle, latest, ageText}]} for the pinned direct sets, using patientView(c) and ageTxt. No flags, no colours. Do not change the renderer yet.
 ```
 
-### [ ] 37c4. Ward board: screen
+### [x] 37c4. Ward board: screen
 **File:** enhancer.html | **Paste:** the Patients screen render function, boardRow
 ```text
 On the Patients screen add a ward filter (wards from open encounters) and render rows from boardRow with one column per pinned direct set: latest value and its age. Keep the row renderer in one function. Server mode only; Demo mode unchanged.
 ```
 
-### [ ] 37c5. Ward board: "no reading for N minutes"
+### [x] 37c5. Ward board: "no reading for N minutes"
 **File:** enhancer.html | **Paste:** evalRules signature, one approved minutes_since_gt rule example, boardRow
 ```text
 In a board cell, show "No reading for N min" only when an approved, enabled minutes_since_gt rule exists for that set and its condition is true now. Use evalRules; never invent N. Without such a rule the cell shows only latest value and age.

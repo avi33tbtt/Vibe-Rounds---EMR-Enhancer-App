@@ -1838,10 +1838,10 @@ function pinListFor(c){let p=c&&Array.isArray(c.pinned)?c.pinned:null;if(!p){con
 function patientRowModel(c){
   const p=patientView(c),ap=new Set((c.applied||[]).map(a=>a.setId)),diagnoses=(c.applied||[]).map(a=>getSet(a.setId)).filter(s=>s&&s.kind==='disease'),pathways=(c.pathways||[]).map(x=>getSet(x.pathwayId)).filter(Boolean);
   let alerts=[];try{if(window.CDS&&CDS.evalRules)alerts=CDS.evalRules(c,ruleReg())}catch(e){}
-  const log=Array.isArray(c.alertLog)?c.alertLog:[],isAck=a=>{for(let i=log.length-1;i>=0;i--){const l=log[i];if(l&&l.ruleId===a.ruleId&&l.setId===a.setId)return l.sig===a.sig}return false};alerts=alerts.filter(a=>!isAck(a));
+  const mins=alerts.filter(a=>a&&a.op==='minutes_since_gt'),log=Array.isArray(c.alertLog)?c.alertLog:[],isAck=a=>{for(let i=log.length-1;i>=0;i--){const l=log[i];if(l&&l.ruleId===a.ruleId&&l.setId===a.setId)return l.sig===a.sig}return false};alerts=alerts.filter(a=>!isAck(a));
   const pins=pinListFor(c),minuteAlerts=alerts.filter(a=>a.op==='minutes_since_gt'),reading=pins.map(id=>{const s=getSet(id);if(!s)return'';const a=minuteAlerts.find(x=>x.setId===id);if(a)return`<span class="patient-chip">${esc(shortOf(s))}: No reading for ${esc(a.value)} min</span>`;if(!ap.has(id))return`<span class="patient-chip">${esc(shortOf(s))}: not added</span>`;const t=patientLatestTime(c,s);return`<span class="patient-chip">${esc(shortOf(s))} ${t==null?'—':esc(patientAgeLabel(t))}</span>`}).join('');
   const activity=new Date(c.updatedAt||c.saved||0).getTime();
-  return{c,p,ward:wardOf(c),bed:patientBedKey(c),activity:Number.isFinite(activity)?activity:0,alerts,diagnoses,pathways,reading,due:patientDueItems(c)};
+  return{c,p,mins,ward:wardOf(c),bed:patientBedKey(c),activity:Number.isFinite(activity)?activity:0,alerts,diagnoses,pathways,reading,due:patientDueItems(c)};
 }
 /* chunk 37c3: ward board row data (pure; no flags, no colours). Latest value is shown as recorded. */
 function boardRow(c,ids){
@@ -1849,15 +1849,17 @@ function boardRow(c,ids){
     let best=null;
     [...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>{const fs=grp(s,g),tc=tcol(fs),uf=new Set(fs.map(f=>f.unitField).filter(Boolean));if(!tc)return;
       rowsOf(c,s.setId,g).forEach(r=>{const t=rowT(r,tc);if(!Number.isFinite(t))return;const vals=fs.filter(f=>f!==tc&&!f.meta&&!uf.has(f.id)&&!/note/i.test(f.id)&&r[f.id]!==undefined&&String(r[f.id]).trim()!=='');if(vals.length&&(!best||t>best.t))best={t,r,vals}})});
-    if(!best)return{setTitle:shortOf(s),latest:'',ageText:''};
+    if(!best)return{setId:s.setId,setTitle:shortOf(s),latest:'',ageText:''};
     const r=best.r,bp=best.vals.find(f=>f.id=='bp_sys'),bd=best.vals.find(f=>f.id=='bp_dia'),
     parts=best.vals.filter(f=>!(bp&&bd&&f===bd)).map(f=>bp&&bd&&f===bp?'BP '+r.bp_sys+' / '+r.bp_dia+' mmHg':f.label+' '+r[f.id]+(f.unit?' '+f.unit:f.unitField&&r[f.unitField]?' '+r[f.unitField]:''));
-    return{setTitle:shortOf(s),latest:parts.join(', '),ageText:ageTxt(best.t).trim()}});
+    return{setId:s.setId,setTitle:shortOf(s),latest:parts.join(', '),ageText:ageTxt(best.t).trim()}});
   return{name:(p.name||'').trim(),mrn:p.mrn||'',ward:p.ward||'',bed:p.bed||'',cells}
 }
+/* chunk 37c5: minutes from an APPROVED, enabled minutes_since_gt rule that is true now (evalRules already skips unapproved rules); null when there is none. N is the recorded age, never invented. */
+function boardNoReading(alerts,setId){const a=(Array.isArray(alerts)?alerts:[]).find(x=>x&&x.op==='minutes_since_gt'&&x.setId===setId&&Number.isFinite(x.value));return a?Math.round(a.value):null}
 function renderPatientRow(m){
   const name=(m.p.name||'Unnamed patient').trim(),dx=m.diagnoses.map(s=>`<span class="patient-chip">${esc(s.title||s.setId)}</span>`).join('')||'<span class="mu">—</span>',pw=m.pathways.map(s=>`<span class="patient-chip">${esc(s.title||s.setId)}</span>`).join('')||'<span class="mu">—</span>';
-  const pinned=myPatientIds().includes(m.c.id);return `<tr class="patients-row" tabindex="0" role="button" aria-label="Open patient ${esc(name)}" data-patient-open="${esc(m.c.id)}"><td><button class="b sm" type="button" data-my-pin="${esc(m.c.id)}" aria-label="${pinned?'Remove from':'Add to'} My patients" title="${pinned?'Remove from':'Add to'} My patients">${pinned?'★':'☆'}</button></td><td><b>${esc(m.p.bed||'—')}</b><div class="patient-sub">${esc(m.ward||'Ward not set')}</div></td><td><div class="patient-name">${esc(name)}</div><div class="patient-sub">${esc([m.p.ageSex,m.p.mrn?'MRN '+m.p.mrn:''].filter(Boolean).join(' · ')||'Details not entered')}</div></td><td>${dx}</td><td>${pw}</td>${m.board?m.board.cells.map(x=>`<td>${x.latest?`<div>${esc(x.latest)}</div><div class="patient-sub">${esc(x.ageText)}</div>`:'<span class="mu">—</span>'}</td>`).join(''):`<td>${m.reading||'<span class="mu">No pinned direct sets</span>'}</td>`}<td>${m.alerts.length?`<span class="patient-alert">${m.alerts.length} open</span>`:'0'}</td><td>${m.due.length?m.due.map(x=>`<span class="patient-chip">${esc(patientDueLabel(x))}</span>`).join(''):'—'}</td></tr>`;
+  const pinned=myPatientIds().includes(m.c.id);return `<tr class="patients-row" tabindex="0" role="button" aria-label="Open patient ${esc(name)}" data-patient-open="${esc(m.c.id)}"><td><button class="b sm" type="button" data-my-pin="${esc(m.c.id)}" aria-label="${pinned?'Remove from':'Add to'} My patients" title="${pinned?'Remove from':'Add to'} My patients">${pinned?'★':'☆'}</button></td><td><b>${esc(m.p.bed||'—')}</b><div class="patient-sub">${esc(m.ward||'Ward not set')}</div></td><td><div class="patient-name">${esc(name)}</div><div class="patient-sub">${esc([m.p.ageSex,m.p.mrn?'MRN '+m.p.mrn:''].filter(Boolean).join(' · ')||'Details not entered')}</div></td><td>${dx}</td><td>${pw}</td>${m.board?m.board.cells.map(x=>{const n=boardNoReading(m.mins,x.setId);return`<td>${x.latest?`<div>${esc(x.latest)}</div><div class="patient-sub">${esc(x.ageText)}</div>`:'<span class="mu">—</span>'}${n==null?'':`<div class="patient-sub">No reading for ${esc(n)} min</div>`}</td>`}).join(''):`<td>${m.reading||'<span class="mu">No pinned direct sets</span>'}</td>`}<td>${m.alerts.length?`<span class="patient-alert">${m.alerts.length} open</span>`:'0'}</td><td>${m.due.length?m.due.map(x=>`<span class="patient-chip">${esc(patientDueLabel(x))}</span>`).join(''):'—'}</td></tr>`;
 }
 function renderPatients(){
   const host=$('patientsRows');if(!host)return;const all=getC().filter(Boolean),mine=new Set(myPatientIds()),q=String($('patientsSearch')?.value||'').trim().toLowerCase(),ward=$('patientsWard')?.value||'',sort=$('patientsSort')?.value||'bed',onlyMine=!!$('myPatients')?.checked;
