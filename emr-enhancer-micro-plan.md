@@ -2,7 +2,7 @@
 
 *19 Nov 2026. Repo: github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App. Replaces the chunk list in `emr-enhancer-remaining-plan.md` from 37c onward. Chunks 1-37c are built. Data contracts v5-v7 stay in the old plan file as reference; each task below carries the few facts it needs, so you rarely paste a contract.*
 
-**Next up: 37d2**
+**Next up: 37d3**
 
 ---
 
@@ -102,7 +102,7 @@ In a board cell, show "No reading for N min" only when an approved, enabled minu
 Add handoverData(case, sinceMs) returning {narrative, pathways, latest:[{set, value, ageText}], acks24h, newRows}. newRows = rows entered after sinceMs. No judgement text. Pure function, no rendering.
 ```
 
-### [ ] 37d2. Handover view: render
+### [x] 37d2. Handover view: render
 **File:** enhancer.html | **Paste:** handoverData, how a tab/view is added in the dispatcher
 ```text
 Add a Handover view per patient rendering handoverData as simple sections. Display only.

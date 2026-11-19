@@ -184,7 +184,7 @@ body.compact label{margin:7px 0 2px}
 <div id="ibOut" aria-live="polite"></div></div></div>
 <nav id="oldnav" aria-hidden="true"></nav>
 <div id="shellnav" role="navigation" aria-label="Patient chart sections">
-  <button class="on" data-shell-t="ov" aria-current="page">Summary</button><button data-shell-t="flw">Flowsheets</button><button data-shell-t="nt">Notes</button><button data-shell-t="pw">Pathway</button><button data-shell-t="al">Alerts</button><button data-shell-t="ex">Export</button>
+  <button class="on" data-shell-t="ov" aria-current="page">Summary</button><button data-shell-t="flw">Flowsheets</button><button data-shell-t="nt">Notes</button><button data-shell-t="pw">Pathway</button><button data-shell-t="al">Alerts</button><button data-shell-t="ho">Handover</button><button data-shell-t="ex">Export</button>
   <details id="tools"><summary>Tools ▾</summary><div class="toolitems">
     <button data-shell-t="in">Set builder</button><button data-shell-t="fh">Codes</button>
     <button data-shell-t="an">Analytics</button><button data-shell-t="ab">About</button>
@@ -456,6 +456,7 @@ body.compact label{margin:7px 0 2px}
 <div class="mu" style="margin-top:8px">Add a code you verified yourself in the SNOMED / LOINC browsers:</div>
 <select id="afld" style="width:auto;max-width:260px"><option value="">Field to attach to (optional)</option></select> <select id="asys" style="width:110px"><option>snomed</option><option>loinc</option></select> <input id="acode" placeholder="code" style="width:130px"> <input id="adisp" placeholder="display (as in browser)" style="width:260px"> <button class="b" onclick="addCode()">Add</button></div>
 </div>
+<div class="pane" id="ho"><div class="cd"><b>Handover</b> <span class="mu">Display only. Everything is shown as recorded; no assessment is made.</span><div id="hob"></div></div></div>
 <div class="pane" id="ex"><div class="cd"><b>FHIR R4 bundle</b> <span class="mu">(from the current case values; unverified codes are left out, text kept. In server mode each build is recorded in the audit log, and the chart must be linked to a patient.)</span><br>
 <button class="b" onclick="bundle()">Build bundle</button><button class="b" onclick="navigator.clipboard.writeText($('bj').textContent)">Copy</button><button class="b" onclick="dl()">Download</button>
 <div id="bchk" class="mu"></div><pre id="bj"></pre></div></div>
@@ -977,7 +978,7 @@ function showShellTab(id){
   const pane=$(id);if(pane)pane.classList.add('on');
   const tools=$('tools');if(tools&&['in','fh','an','ab'].includes(id))tools.open=false;
   if(id==='an')ana();if(id==='fh')codesUI();if(id==='ov')summaryWorkspace();
-  if(id==='cp')renderCase();if(id==='flw'){renderFlowsheets();renderCase()}if(id==='nt')renderNotes();if(id==='pw')pathwayWorkspace();if(id==='al'){cdsRender();alertsRender()}
+  if(id==='cp')renderCase();if(id==='flw'){renderFlowsheets();renderCase()}if(id==='nt')renderNotes();if(id==='pw')pathwayWorkspace();if(id==='al'){cdsRender();alertsRender()}if(id==='ho')handoverRender();
 }
 document.querySelectorAll('[data-shell-t]').forEach(b=>b.addEventListener('click',()=>{if(!CASE_OPEN)return toast('Open or create a case first.');showShellTab(b.dataset.shellT)}));
 $('settingsTool').addEventListener('click',()=>{if($('tools'))$('tools').open=false;tg('set');aiPaint();aiAdmin()});
@@ -1175,7 +1176,7 @@ if(Store.mode==='server'&&r.__id)Store.reasons[r.__id]=why.trim();rows.splice(i,
 function persist(msg){if(!CUR)return;clearTimeout(PT);const c=getC(),i=c.findIndex(x=>x.id==CUR.id),p=CUR.patient||{},hasPatient=!!(p.name||p.ageSex||p.bed||p.mrn||CUR.patientId),empty=!(CUR.narrative||'').trim()&&!CUR.applied.length&&!(CUR.pathways||[]).length&&!hasPatient;
 if(empty){if(i>=0){c.splice(i,1);setC(c)}picker();return}
 CUR.updatedAt=new Date().toISOString();patientOf(CUR);ensureRowIds(CUR);const cp=JSON.parse(JSON.stringify(CUR));if(i<0)c.push(cp);else c[i]=cp;if(!setC(c)){$('sv').textContent='NOT SAVED';return}
-$('sv').textContent=Store.status().text;if(msg)toast('Saved ('+c.length+' cases)');picker();pwRefresh();alertsRender();if($('ov')&&$('ov').classList.contains('on'))summaryWorkspace();renderPatientBanner();if(!CASE_OPEN)renderPatients()}
+$('sv').textContent=Store.status().text;if(msg)toast('Saved ('+c.length+' cases)');picker();pwRefresh();alertsRender();if($('ov')&&$('ov').classList.contains('on'))summaryWorkspace();if($('ho')&&$('ho').classList.contains('on'))handoverRender();renderPatientBanner();if(!CASE_OPEN)renderPatients()}
 const persistSoon=()=>{clearTimeout(PT);PT=setTimeout(()=>persist(),400);today();alertsRender()};
 function save(){persist(true)}
 function openCase(){const id=$('cpick').value;if(!id)return;persist();const x=getC().find(y=>y.id==id);if(x)enterCase(JSON.parse(JSON.stringify(x)),'ov')}
@@ -1866,6 +1867,23 @@ function handoverData(c,sinceMs,nowMs){
   const acks24h=(Array.isArray(c.alertLog)?c.alertLog:[]).filter(l=>{const t=l&&new Date(l.ackedAt).getTime();return Number.isFinite(t)&&t>now-864e5&&t<=now}).map(l=>({ruleId:l.ruleId,setId:l.setId,ackedAt:l.ackedAt}));
   return{narrative:String(c.narrative||'').trim(),pathways,latest,acks24h,newRows}
 }
+/* chunk 37d2: Handover view. Display only: sections from handoverData, no colours, no flags, no judgement text. */
+const HOW={h:12};
+function handoverHtml(d,hrs,ruleText){
+  const tm=t=>{const x=new Date(t);return isNaN(x)?'':x.toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})},none='<div class="mu">None.</div>',
+  sec=(t,b)=>`<div class="kh">${esc(t)}</div>${b}`,
+  tbl=(hd,rows)=>`<div style="overflow-x:auto;max-width:100%"><table class="pt"><tr>${hd.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>${rows.map(r=>'<tr>'+r.map(x=>`<td>${esc(x)}</td>`).join('')+'</tr>').join('')}</table></div>`;
+  return'<div class="tj">Entries from the last '+[8,12,24].map(n=>`<button class="b sm" type="button" data-how="${n}" style="${hrs==n?'border:1px solid var(--ac)':'opacity:.6'}">${n} h</button>`).join(' ')+'</div>'
+  +sec('Narrative',d.narrative?`<div style="white-space:pre-wrap">${esc(d.narrative)}</div>`:'<div class="mu">No narrative entered.</div>')
+  +sec('Pathways',d.pathways.length?d.pathways.map(x=>`<div>${esc(x.title)}${x.startedAt?' <span class="mu">started '+esc(String(x.startedAt).slice(0,10))+'</span>':''}</div>`).join(''):none)
+  +sec('Latest readings',d.latest.length?tbl(['Set','Latest value','Recorded'],d.latest.map(x=>[x.set,x.value,x.ageText])):'<div class="mu">No timed readings.</div>')
+  +sec('Entered in the last '+hrs+' h',d.newRows.length?tbl(['Set','Entered','Reading time','Value'],d.newRows.map(x=>[x.set,tm(x.enteredAt),tm(x.readingAt),x.value])):'<div class="mu">None. Rows without a recorded entry time are not listed.</div>')
+  +sec('Alerts acknowledged in the last 24 h',d.acks24h.length?d.acks24h.map(x=>`<div>${esc(ruleText(x.ruleId,x.setId))} <span class="mu">acknowledged ${esc(tm(x.ackedAt))}</span></div>`).join(''):none)
+}
+function handoverRender(){const el=$('hob');if(!el||!CUR)return;
+  try{const rs=ruleReg().flatMap(x=>Array.isArray(x.rules)?x.rules:[]),rt=(rid,sid)=>{const r=rs.find(x=>x&&x.ruleId===rid),q=getSet(sid);return(r&&r.summary?r.summary:rid)+(q?' ('+shortOf(q)+')':'')};
+    el.innerHTML=handoverHtml(handoverData(CUR,Date.now()-HOW.h*36e5),HOW.h,rt)}catch(e){el.innerHTML='<div class="mu">Handover could not be drawn.</div>'}}
+$('ho').addEventListener('click',e=>{const b=e.target.closest('[data-how]');if(!b)return;HOW.h=[8,12,24].includes(+b.dataset.how)?+b.dataset.how:12;handoverRender()});
 /* chunk 37c5: minutes from an APPROVED, enabled minutes_since_gt rule that is true now (evalRules already skips unapproved rules); null when there is none. N is the recorded age, never invented. */
 function boardNoReading(alerts,setId){const a=(Array.isArray(alerts)?alerts:[]).find(x=>x&&x.op==='minutes_since_gt'&&x.setId===setId&&Number.isFinite(x.value));return a?Math.round(a.value):null}
 function renderPatientRow(m){
