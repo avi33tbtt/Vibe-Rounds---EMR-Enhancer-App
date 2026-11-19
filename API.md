@@ -28,9 +28,11 @@ Base path `/api`. JSON in, JSON out. Synthetic data only; not for clinical use.
 | `GET /cases` | | summary list `[{id,patient,preview,appliedCount,pathways,version,updatedAt}]` |
 | `GET /cases/:id[?include_errors=true]` | | the case in the prototype shape (below). `include_errors=true` (older spelling `includeErrors=1`) also returns rows marked entered in error; doctor and admin only, other roles get 403 |
 | `POST /cases` | `{id?, patient?, narrative?, applied?, pathways?, pinned?}` | 201 case; an existing `id` gives 409 (idempotent import) |
-| `PATCH /cases/:id` | `{expectedVersion, patient?, narrative?, applied?, pathways?, pinned?, alertLog?}` | updated case |
+| `PATCH /cases/:id` | `{expectedVersion, patient?, narrative?, applied?, pathways?, pinned?}` | updated case (`alertLog` is refused with 400: acknowledgements are their own records, see below) |
+| `GET /cases/:id/alert-acks` | – | the case's acknowledgements, oldest first (newest 2000) |
+| `POST /cases/:id/alert-acks` | `{ruleId, setId, sig}` (strict: no user, time or source) | `201` new acknowledgement; `200` and the existing one when this rule and `sig` are already acknowledged. The server stamps the signed-in user and time. `sig` is built by the screen from the rule (operator, threshold, unit) and the time and value of the reading that fired it, so an edited rule or a new reading no longer matches and the old row stays as history. Append-only (no UPDATE or DELETE, even for the app role). Entries from the old list or a browser import are `source: "imported"` with no user. |
 
-Case shape: `{id, patient, patientId, encounterId, narrative, applied[{setId,addedAt}], pathways[], pinned, alertLog[], values, valueVersions, notes[], version, createdAt, updatedAt}`.
+Case shape: `{id, patient, patientId, encounterId, narrative, applied[{setId,addedAt}], pathways[], pinned, alertLog[{id,ruleId,setId,sig,ackedAt,by,byName,source}], values, valueVersions, notes[], version, createdAt, updatedAt}`.
 `values` holds scalar keys (`setId/fieldId`, `setId/__ref`, `setId/__protocol`) and, for repeat groups, `values["setId/@group"] = [row objects]`, sorted by time. Each row object also carries metadata keys `__id`, `__v` (version), `__by`, `__at`, `__status`, `__time`, which the client uses to patch a row and strips before display or export. Rows entered in error are hidden unless `include_errors=true` (doctor and admin).
 
 ## Rows (append-only)
@@ -87,6 +89,7 @@ Every route that changes data writes **one** `audit_log` row on the same databas
 | Route | Audit `action` |
 |---|---|
 | `POST /cases` / `PATCH /cases/:id` | `case.create` / `case.update` |
+| `POST /cases/:id/alert-acks` | `alert.ack` |
 | `POST /cases/:id/rows` / `PATCH …/rows/:rowId` / `POST …/rows/:rowId/error` | `row.add` / `row.amend` / `row.entered_in_error` (with `reason`) |
 | `PUT /cases/:id/values` | `value.set` |
 | `POST /cases/:id/notes` / `PATCH …/notes/:nid` / `POST …/sign` / `POST …/amend` | `note.create` / `note.edit` / `note.sign` / `note.amend` (with `reason`) |
@@ -151,6 +154,8 @@ One table, `permissions.js`: action -> roles. Each route maps to exactly one act
 | `GET /me` | `session.read` | all |
 | `GET /cases` | `case.read` | all |
 | `GET /cases/:id` | `case.read` | all |
+| `GET /cases/:id/alert-acks` | `case.read` | all |
+| `POST /cases/:id/alert-acks` | `alert.ack` | admin, doctor, nurse |
 | `GET /cases/:id/history` | `case.history` | all (rows entered in error: doctor, admin only) |
 | `POST /cases` | `case.create` | admin, doctor, nurse |
 | `PATCH /cases/:id` | `case.patch` | admin, doctor, nurse |
@@ -200,7 +205,7 @@ One table, `permissions.js`: action -> roles. Each route maps to exactly one act
 | `POST /password` | `password.change` | all |
 
 **Finer rules inside a route**
-- `PATCH /cases/:id` needs the right for *every* field in the body (`narrative` -> `case.narrative`, `applied` and `pathways` -> `case.apply`, `patient` -> `case.patient`, `pinned` -> `case.pin`, `alertLog` -> `alert.ack`). One forbidden field refuses the whole change.
+- `PATCH /cases/:id` needs the right for *every* field in the body (`narrative` -> `case.narrative`, `applied` and `pathways` -> `case.apply`, `patient` -> `case.patient`, `pinned` -> `case.pin`; `alertLog` was removed in 35b, see `POST /cases/:id/alert-acks`). One forbidden field refuses the whole change.
 - A **nurse** adds readings, and amends or marks "entered in error" only **her own** readings, and only in sets of kind `care`. A set the server cannot find counts as not care. Doctors and admins amend any row.
 - Only a **doctor or admin** can approve a rule or protocol. Editing an approved rule or protocol resets approval (unchanged from 30c). The approver is the session user.
 - `usage` and `prefs` are the caller's own display data, so every role (including viewer) may write them.

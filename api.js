@@ -35,7 +35,6 @@ const anyJson = (max) => z.any().refine((v) => v !== undefined, 'required').refi
 const appliedArr = z.array(z.object({ setId: ident, version: z.number().int().min(1).optional(), addedAt: z.string().max(40) }).strict()).max(200);
 const pathwaysArr = z.array(z.object({ pathwayId: ident, version: z.number().int().min(1).optional(), startedAt: z.string().max(40) }).strict()).max(50);
 const patientObj = z.object({ name: z.string().max(200), ageSex: z.string().max(50), bed: z.string().max(50), mrn: z.string().max(50) }).strict();
-const alertLogArr = z.array(z.object({ ruleId: ident, ackedAt: z.string().max(40) }).passthrough()).max(2000);
 const pinnedArr = z.array(ident).max(50).nullable();
 
 // Format checks only (does the string look like a SNOMED CT concept id or a LOINC code). They say nothing about whether the code is the RIGHT concept.
@@ -59,8 +58,9 @@ const S = {
   auditCsv: z.object(auditFilter).strict(),
   caseCreate: z.object({ id: uuid.optional(), patient: patientObj.optional(), narrative: z.string().max(200000).optional(),
     applied: appliedArr.optional(), pathways: pathwaysArr.optional(), pinned: pinnedArr.optional() }).strict(),
+  alertAck: z.object({ ruleId: ident, setId: ident, sig: z.string().min(1).max(500) }).strict(),
   casePatch: z.object({ expectedVersion: ver, patient: patientObj.optional(), narrative: z.string().max(200000).optional(),
-    applied: appliedArr.optional(), pathways: pathwaysArr.optional(), pinned: pinnedArr.optional(), alertLog: alertLogArr.optional() }).strict()
+    applied: appliedArr.optional(), pathways: pathwaysArr.optional(), pinned: pinnedArr.optional() }).strict()
     .refine((o) => Object.keys(o).length > 1, 'nothing to change'),
   rowCreate: z.object({ setId: ident, groupId: ident, row: rowObj, rowTime: isoTime.nullable().optional() }).strict(),
   rowPatch: z.object({ expectedVersion: ver, row: rowObj.optional(), rowTime: isoTime.nullable().optional(), reason: reasonText.optional() }).strict()
@@ -109,16 +109,21 @@ async function recordsOf(q, patientId, encounterId) {
   return { patientRecord, encounterRecord };
 }
 
+// chunk 35b: one acknowledgement as the screen reads it (alertLog entries); `by` is the user id the server stamped, null when imported
+const ackOut = (a) => ({ id: a.id, ruleId: a.rule_id, setId: a.set_id, sig: a.sig, ackedAt: iso(a.acked_at), by: a.user_id, byName: a.user_name || null, source: a.source });
+
 // ---------- case assembly: the exact shape the prototype uses ----------
 async function loadCase(q, id, { includeErrors = false } = {}) {
   const c = (await q.query('SELECT * FROM cases WHERE id=$1', [id])).rows[0];
   if (!c) return null;
-  const [vals, rows, notes, recs] = await Promise.all([
+  const [vals, rows, notes, recs, acks] = await Promise.all([
     q.query('SELECT key,value,version FROM case_values WHERE case_id=$1', [id]),
     q.query(`SELECT * FROM case_rows WHERE case_id=$1 ${includeErrors ? '' : "AND status='active'"}
              ORDER BY row_time NULLS LAST, entered_at, id`, [id]),
     q.query('SELECT * FROM case_notes WHERE case_id=$1 ORDER BY created_at, id', [id]),
     recordsOf(q, c.patient_id, c.encounter_id),
+    q.query(`SELECT * FROM (SELECT a.id, a.set_id, a.rule_id, a.sig, a.user_id, a.source, a.acked_at, u.name AS user_name FROM alert_acks a LEFT JOIN users u ON u.id=a.user_id
+             WHERE a.case_id=$1 ORDER BY a.acked_at DESC, a.id DESC LIMIT 2000) x ORDER BY acked_at, id`, [id]),   // chunk 35b: the newest 2000, oldest first (the screen reads the latest per rule)
   ]);
   const values = {}, valueVersions = {};
   for (const v of vals.rows) { values[v.key] = v.value; valueVersions[v.key] = v.version; }
@@ -129,7 +134,7 @@ async function loadCase(q, id, { includeErrors = false } = {}) {
   return {
     id: c.id, patient: c.demo_patient || { name: '', ageSex: '', bed: '', mrn: '' }, patientId: c.patient_id, encounterId: c.encounter_id,
     patientRecord: recs.patientRecord, encounterRecord: recs.encounterRecord,      // chunk 34c: read-only copies for the banner and lists
-    narrative: c.narrative, applied: c.applied, pathways: c.pathways, pinned: c.pinned, alertLog: c.alert_log,
+    narrative: c.narrative, applied: c.applied, pathways: c.pathways, pinned: c.pinned, alertLog: acks.rows.map(ackOut),
     values, valueVersions,
     notes: notes.rows.map((n) => ({ id: n.id, type: n.type, setId: n.set_id, text: n.text, status: n.status, signedBy: n.signed_by, signedAt: iso(n.signed_at),
       amends: n.amends_id, reason: n.reason, createdAt: iso(n.created_at), version: n.version })),
@@ -255,6 +260,7 @@ function planImport(b, ex) {
     if (Array.isArray(c.pinned)) { if (c.pinned.length > 50 || !c.pinned.every((x) => ident.safeParse(x).success)) errs.push('pinned must be up to 50 valid set ids'); else k.pinned = c.pinned; }
     for (const a of Array.isArray(c.alertLog) ? c.alertLog : []) {
       if (isObj(a) && ident.safeParse(a.ruleId).success && typeof a.ackedAt === 'string' && a.ackedAt.length <= 40) k.alertLog.push({ ruleId: a.ruleId, setId: typeof a.setId === 'string' ? a.setId.slice(0, 100) : '', ackedAt: a.ackedAt, sig: typeof a.sig === 'string' ? a.sig.slice(0, 500) : '' });
+      const last = k.alertLog[k.alertLog.length - 1]; if (last) last.ackedAt = isNaN(Date.parse(last.ackedAt)) ? null : new Date(last.ackedAt).toISOString();   // 35b: a time that does not parse becomes 'now' on insert
     }
     if (k.alertLog.length > 2000) errs.push('more than 2000 alert acknowledgements');
     for (const [key, v] of Object.entries(isObj(c.values) ? c.values : {})) {
@@ -372,8 +378,11 @@ async function commitImport(c, out, actor) {
     const id = (await c.query(`INSERT INTO cases (id,legacy_id,demo_patient,narrative,applied,pathways,pinned,alert_log,created_by,created_at,updated_at)
       VALUES (COALESCE($1::uuid,gen_random_uuid()),$2,$3,$4,$5,$6,$7,$8,$9,COALESCE($10::timestamptz,now()),COALESCE($11::timestamptz,now())) RETURNING id`,
       [k.id, k.legacyId, JSON.stringify(k.patient), k.narrative, JSON.stringify(k.applied), JSON.stringify(k.pathways), k.pinned === null ? null : JSON.stringify(k.pinned),
-        JSON.stringify(k.alertLog), actor, k.createdAt, k.updatedAt])).rows[0].id;
+        '[]', actor, k.createdAt, k.updatedAt])).rows[0].id;
     idMap.push({ legacyId: k.legacyId, id });
+    if (k.alertLog.length) await c.query(`INSERT INTO alert_acks (case_id,set_id,rule_id,sig,source,acked_at)
+      SELECT $1, x.set_id, x.rule_id, x.sig, 'imported', COALESCE(x.acked_at::timestamptz, now()) FROM jsonb_to_recordset($2::jsonb) AS x(set_id text, rule_id text, sig text, acked_at text)
+      WHERE x.set_id ~ '^[A-Za-z0-9_.-]{1,100}$'`, [id, JSON.stringify(k.alertLog.map((a) => ({ set_id: a.setId, rule_id: a.ruleId, sig: a.sig, acked_at: a.ackedAt })))]);   // 35b: imported, no user
     if (k.values.length) await c.query('INSERT INTO case_values (case_id,key,value,updated_by) SELECT $1, x.key, x.value, $3 FROM jsonb_to_recordset($2::jsonb) AS x(key text, value jsonb)', [id, JSON.stringify(k.values), actor]);
     if (k.rows.length) await c.query(`INSERT INTO case_rows (case_id,set_id,group_id,row,row_time,status,error_reason,entered_by,entered_at)
       SELECT $1, x.set_id, x.group_id, x.row, x.row_time, x.status, x.error_reason, $3, now() + x.ord * interval '1 microsecond'
@@ -495,9 +504,8 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
     if (b.applied !== undefined) add('applied', b.applied, true);
     if (b.pathways !== undefined) add('pathways', b.pathways, true);
     if (b.pinned !== undefined) add('pinned', b.pinned, true);
-    if (b.alertLog !== undefined) add('alert_log', b.alertLog, true);
     await db.withTx(async (c) => {
-      const old = (await c.query('SELECT demo_patient AS patient, narrative, applied, pathways, pinned, alert_log AS "alertLog" FROM cases WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      const old = (await c.query('SELECT demo_patient AS patient, narrative, applied, pathways, pinned FROM cases WHERE id=$1 FOR UPDATE', [id])).rows[0];
       const u = await c.query(`UPDATE cases SET ${sets.join(',')}, version=version+1, updated_at=now() WHERE id=$1 AND version=$2 RETURNING id`, p);
       if (!u.rows.length) await conflict(db, id, 'This case');
       const keys = Object.keys(b).filter((k) => k !== 'expectedVersion');              // before/after hold only the fields this request changed
@@ -505,6 +513,28 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
         before: Object.fromEntries(keys.map((k) => [k, old[k]])), after: Object.fromEntries(keys.map((k) => [k, b[k]])) });
     });
     res.json(await loadCase(db, id));
+  }));
+
+  // ================= alert acknowledgements (chunk 35b): one append-only row each; the user is the session, never the body =================
+  r.get('/cases/:id/alert-acks', wrap(async (req, res) => {
+    const id = idParam(req.params.id);
+    if (!(await db.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
+    res.json((await loadCase(db, id)).alertLog);
+  }));
+  r.post('/cases/:id/alert-acks', wrap(async (req, res) => {
+    const id = idParam(req.params.id), b = parse(S.alertAck, req.body);
+    const out = await db.withTx(async (c) => {
+      if (!(await c.query('SELECT 1 FROM cases WHERE id=$1 FOR SHARE', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
+      await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`ack:${id}:${b.setId}:${b.ruleId}`]);   // two people clicking together write one row
+      const same = (await c.query(`SELECT a.id, a.set_id, a.rule_id, a.sig, a.user_id, a.source, a.acked_at, u.name AS user_name FROM alert_acks a LEFT JOIN users u ON u.id=a.user_id
+        WHERE a.case_id=$1 AND a.set_id=$2 AND a.rule_id=$3 AND a.sig=$4 ORDER BY a.acked_at DESC LIMIT 1`, [id, b.setId, b.ruleId, b.sig])).rows[0];
+      if (same) return { row: same, created: false };   // already acknowledged for this exact rule and reading: nothing new to write
+      const ins = (await c.query('INSERT INTO alert_acks (case_id,set_id,rule_id,sig,user_id) VALUES ($1,$2,$3,$4,$5) RETURNING id, set_id, rule_id, sig, user_id, source, acked_at',
+        [id, b.setId, b.ruleId, b.sig, req.actor.id])).rows[0];
+      await audit(c, { action: 'alert.ack', entity: 'alert_ack', entity_id: ins.id, case_id: id, after: { setId: b.setId, ruleId: b.ruleId } });   // ids only
+      return { row: { ...ins, user_name: (await c.query('SELECT name FROM users WHERE id=$1', [req.actor.id])).rows[0].name }, created: true };
+    });
+    res.status(out.created ? 201 : 200).json(ackOut(out.row));
   }));
 
   // ================= rows (append-only; never DELETE) =================

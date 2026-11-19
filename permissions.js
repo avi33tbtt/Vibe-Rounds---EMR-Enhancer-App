@@ -24,7 +24,7 @@ const ACTIONS = {
   'case.create': ['admin', 'doctor', 'nurse'],
   'case.patient': ['admin', 'doctor', 'nurse'],      // patient banner details (demo fields until chunk 34)
   'case.pin': ['admin', 'doctor', 'nurse'],          // quick bar
-  'alert.ack': ['admin', 'doctor', 'nurse'],         // acknowledge an alert (alertLog)
+  'alert.ack': ['admin', 'doctor', 'nurse'],         // acknowledge an alert: POST /cases/:id/alert-acks (chunk 35b)
   'patient.write': ['admin', 'doctor', 'nurse'],     // register and correct patients (a correction needs a reason)
   'patient.merge': ['admin'],                        // merge and unmerge duplicate records
   'encounter.write': ['admin', 'doctor', 'nurse'],   // start, move, close or cancel an encounter
@@ -54,7 +54,7 @@ const ACTIONS = {
   'content.review': ['admin', 'informatician'], 'package.install': ['admin', 'informatician'],
 };
 // PATCH /cases/:id changes several things; the route needs any of them, and api.js then checks each field the body touches.
-const CASE_FIELD_ACTION = { patient: 'case.patient', narrative: 'case.narrative', applied: 'case.apply', pathways: 'case.apply', pinned: 'case.pin', alertLog: 'alert.ack' };
+const CASE_FIELD_ACTION = { patient: 'case.patient', narrative: 'case.narrative', applied: 'case.apply', pathways: 'case.apply', pinned: 'case.pin' };
 ACTIONS['case.patch'] = ROLES.filter((r) => Object.values(CASE_FIELD_ACTION).some((a) => ACTIONS[a].includes(r)));
 
 // Plain-words label for each action, used in the 403 sentence the screen shows (chunk 32d2). A missing label falls back to the action code.
@@ -97,7 +97,7 @@ const ROUTE_ACTIONS = {
   'GET /patients': 'patient.read', 'GET /patients/:id': 'patient.read', 'GET /patients/:id/encounters': 'patient.read',
   'POST /patients': 'patient.write', 'PATCH /patients/:id': 'patient.write', 'POST /patients/:id/merge': 'patient.merge', 'POST /patients/:id/unmerge': 'patient.merge',
   'POST /patients/:id/encounters': 'encounter.write', 'PATCH /encounters/:id': 'encounter.write', 'POST /encounters/:id/close': 'encounter.write', 'POST /encounters/:id/cancel': 'encounter.write',
-  'POST /cases/:id/link': 'case.link', 'GET /cases/:id/export': 'case.export',
+  'POST /cases/:id/link': 'case.link', 'GET /cases/:id/alert-acks': 'case.read', 'POST /cases/:id/alert-acks': 'alert.ack', 'GET /cases/:id/export': 'case.export',
   'POST /admin/migrate-demo-patients': 'migrate.run',
 };
 

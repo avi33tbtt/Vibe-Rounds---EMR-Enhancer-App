@@ -30,9 +30,10 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 - 34c: the case now carries read-only `patientRecord` and `encounterRecord` (real patient and open encounter, merged duplicates shown as the kept record, none for an informatician). `patientView(c)` in `enhancer.html` is the one place the banner, Patients rows and case pickers read from; in server mode the Edit patient popover is hidden, Demo mode is unchanged. `POST /admin/migrate-demo-patients` (admin, idempotent, audited per case, `dryRun`) turns typed demo patients into real ones.
 
 - 35a: approve routes (built in 32d2) hardened: a rule that already runs or a verified protocol answers `409 already_approved` (approver never silently replaced); a protocol with no bands cannot be verified; `PUT /cases/:id/values` clears any typed `verifiedBy`/`verifiedAt` in a `__protocol` value; `protoOf` shows the server-stamped verifier. 215 tests pass.
+- 35b: `006_alert_acks.sql` finishes the `alert_acks` table (append-only, user stamped by the server, `source` user or imported); `GET/POST /cases/:id/alert-acks`; the case's `alertLog` is now read from that table and `PATCH /cases/:id` refuses `alertLog`; import and the old JSON list become `imported` rows; `Store.ackAlert`; alert cards show who acknowledged. `sig` is the client's string (operator, threshold, unit, reading time, value), kept as sent so migrated old acks still match. Rule wording edits do not change it; any rule edit still resets approval.
 - 34d: `GET /cases/:id/export` (admin, doctor) returns the real FHIR Patient (MRN, name, gender, birthDate) and Encounter and writes one audit row per export (ids only); `Store.patients.exportCase`; `bundle()` in `enhancer.html` uses them in server mode, Demo mode keeps the placeholder. An unlinked chart is refused (`case_not_linked`).
 
-**Next up:** 35b onward in the order below.
+**Next up:** 35c onward in the order below.
 
 **Manual work that is not a chunk (do soon, needs two real browsers):**
 - [ ] (a) Force a conflict on one row and confirm the side-by-side screen appears.
@@ -93,7 +94,7 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 
 Facts the remaining chunks rely on, so each new chat can be told them briefly.
 
-- **Stack:** Express + PostgreSQL 16, files in the repo root, numbered migrations `001_core.sql` to `005_patients.sql`, tests with `node:test` + supertest. `API.md` lists every route with its action and role.
+- **Stack:** Express + PostgreSQL 16, files in the repo root, numbered migrations `001_core.sql` to `006_alert_acks.sql`, tests with `node:test` + supertest. `API.md` lists every route with its action and role.
 - **Permissions:** one table in `permissions.js` (`can(user, action)`, `ROUTE_ACTIONS`). A route registered without an action stops the server starting. A role x route matrix test and a CSRF test pick up new routes automatically.
 - **Roles:** viewer reads; nurse adds readings and amends her own, acknowledges alerts; doctor also writes notes and values, applies sets and pathways, creates and approves rules and protocols; informatician authors sets, pathways and codes (no charting, cannot open patients); admin holds every action and is the only role that imports.
 - **Auth:** scrypt hashes, httpOnly cookie sessions (idle 30 min, absolute 12 h), lockout after 5 failures, CSRF token in `X-CSRF-Token` on every write, forced password change, last-admin protection.
@@ -218,7 +219,7 @@ Server plus small client change. (1) POST /api/rules/:id/approve and /api/protoc
 **Done when:** Approval comes only from the session user; typed names are ignored; tests cover nurse refusal.
 
 
-### [ ] 35b. Server rules 2: alert acknowledgements as server records
+### [x] 35b. Server rules 2: alert acknowledgements as server records
 
 **Goal:** alert_acks table replaces case.alertLog; edits make old acks irrelevant.
 

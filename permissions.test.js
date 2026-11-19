@@ -344,3 +344,42 @@ test('32e3: logout still works while the password change is pending, and the blo
   const ok = await tempUser('viewer', false);
   assert.equal((await ok.agent.get('/api/cases')).status, 200);
 });
+
+// ---------------------------------------------------------------- chunk 35b: alert acknowledgements are server records
+test('35b: doctor, nurse and admin acknowledge; viewer and informatician are refused; the user is the session user and a typed one is rejected', async () => {
+  const c = (await who.doctor.agent.post('/api/cases').send({})).body, url = `/api/cases/${c.id}/alert-acks`;
+  for (const role of ['viewer', 'informatician']) assert.equal((await who[role].agent.post(url).send({ ruleId: 'r1', setId: 'care.t', sig: 's0' })).status, 403, role);
+  for (const key of ['by', 'userId', 'user_id', 'ackedBy', 'ackedAt', 'source']) assert.equal((await who.nurse.agent.post(url).send({ ruleId: 'r1', setId: 'care.t', sig: 's0', [key]: who.doctor.id })).status, 400, key);
+  assert.equal((await who.nurse.agent.post(url).send({ ruleId: 'bad id', setId: 'care.t', sig: 's0' })).status, 400);
+  assert.equal((await who.nurse.agent.post(url).send({ ruleId: 'r1', setId: 'care.t', sig: '' })).status, 400);
+  assert.equal((await who.nurse.agent.post('/api/cases/00000000-0000-4000-8000-000000000000/alert-acks').send({ ruleId: 'r1', setId: 'care.t', sig: 's0' })).status, 404);
+  for (const role of ['doctor', 'nurse', 'admin']) { const r = await who[role].agent.post(url).send({ ruleId: 'r_' + role, setId: 'care.t', sig: 's1' }); assert.equal(r.status, 201, role); assert.equal(r.body.by, who[role].id); assert.equal(r.body.byName, 'User ' + role); assert.equal(r.body.source, 'user'); }
+  assert.equal((await db.query('SELECT count(*)::int n FROM alert_acks WHERE case_id=$1', [c.id])).rows[0].n, 3);
+});
+
+test('35b: an acknowledgement by one user shows to the others; the same rule and reading twice is one row; a new sig is a new row and the old one stays; one audit row each, ids only', async () => {
+  const c = (await who.doctor.agent.post('/api/cases').send({})).body, url = `/api/cases/${c.id}/alert-acks`, body = { ruleId: 'r1', setId: 'care.t', sig: 'r1|>=|38|C|2026-11-19T08:00:00.000Z|1' };
+  const a = await who.nurse.agent.post(url).send(body); assert.equal(a.status, 201);
+  const dup = await who.doctor.agent.post(url).send(body); assert.equal(dup.status, 200); assert.equal(dup.body.id, a.body.id); assert.equal(dup.body.by, who.nurse.id, 'the first acknowledger is kept');
+  const seen = (await who.viewer.agent.get(`/api/cases/${c.id}`)).body.alertLog; assert.equal(seen.length, 1); assert.equal(seen[0].sig, body.sig); assert.equal(seen[0].byName, 'User nurse');
+  assert.equal((await who.viewer.agent.get(url)).body.length, 1);
+  const b = await who.doctor.agent.post(url).send({ ...body, sig: 'r1|>=|39|C|2026-11-19T08:00:00.000Z|1' }); assert.equal(b.status, 201);
+  assert.equal((await who.viewer.agent.get(`/api/cases/${c.id}`)).body.alertLog.length, 2, 'the older acknowledgement is kept, it just no longer matches');
+  const rows = (await db.query("SELECT user_id, action, after FROM audit_log WHERE entity='alert_ack' AND entity_id IN ($1,$2)", [String(a.body.id), String(b.body.id)])).rows;
+  assert.equal(rows.length, 2); assert.deepEqual(rows.map((x) => x.user_id).sort(), [who.nurse.id, who.doctor.id].sort());
+  for (const x of rows) { assert.equal(x.action, 'alert.ack'); assert.deepEqual(Object.keys(x.after).sort(), ['ruleId', 'setId']); }
+  const both = await Promise.all([who.nurse.agent.post(url).send({ ...body, sig: 'race' }), who.doctor.agent.post(url).send({ ...body, sig: 'race' })]);
+  assert.deepEqual(both.map((r) => r.status).sort(), [200, 201]);
+  assert.equal((await db.query(`SELECT count(*)::int n FROM alert_acks WHERE case_id=$1 AND sig='race'`, [c.id])).rows[0].n, 1);
+});
+
+test('35b: acknowledgements cannot be changed or deleted, PATCH no longer takes alertLog, and the app role has only INSERT and SELECT', async () => {
+  const c = (await who.doctor.agent.post('/api/cases').send({})).body;
+  assert.equal((await who.doctor.agent.post(`/api/cases/${c.id}/alert-acks`).send({ ruleId: 'r1', setId: 'care.t', sig: 'x' })).status, 201);
+  await assert.rejects(db.query('UPDATE alert_acks SET sig=$2 WHERE case_id=$1', [c.id, 'y']), /append-only/);
+  await assert.rejects(db.query('DELETE FROM alert_acks WHERE case_id=$1', [c.id]), /append-only/);
+  const p = await who.doctor.agent.patch(`/api/cases/${c.id}`).send({ expectedVersion: 1, alertLog: [{ ruleId: 'r1', ackedAt: '2026-01-01' }] });
+  assert.equal(p.status, 400);
+  const priv = (await db.query(`SELECT has_table_privilege('emr_app','alert_acks','INSERT') i, has_table_privilege('emr_app','alert_acks','SELECT') s, has_table_privilege('emr_app','alert_acks','UPDATE') u, has_table_privilege('emr_app','alert_acks','DELETE') d, has_table_privilege('emr_app','alert_acks','TRUNCATE') t`)).rows[0];
+  assert.deepEqual(priv, { i: true, s: true, u: false, d: false, t: false });
+});

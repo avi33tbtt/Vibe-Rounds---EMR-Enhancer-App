@@ -780,3 +780,30 @@ test('34d: if the open chart changes while the export is being prepared, nothing
   let sb; sb = loadBundle({ server: true, exportCase: async () => { sb.CUR = { id: 'c2', applied: [], pathways: [], notes: [], narrative: 'x', values: {} }; return X34(); } });
   await sb.bundle(); assert.match(sb.toasts[0], /changed while the export/); assert.ok(!sb.els.bj || !sb.els.bj.textContent);
 });
+
+// ---------------------------------------------------------------- chunk 35b: acknowledgements are server records
+test('35b: ackAlert (server mode) POSTs ids and sig only, after the case itself; the server fills in who and when; a case PATCH never carries alertLog', async () => {
+  const t = await readyServerStore(); const id = crypto.randomUUID();
+  t.Store.setCases([mkCase(id)]); await t.Store.flush();
+  t.custom = async (m, p, b) => (m === 'POST' && p === '/cases/' + id + '/alert-acks' ? [201, { id: 7, ruleId: b.ruleId, setId: b.setId, sig: b.sig, ackedAt: '2026-11-19T08:00:00.000Z', by: 'u9', byName: 'Dr Server', source: 'user' }] : null);
+  const e = t.Store.ackAlert(id, { ruleId: 'r1', setId: 'care.t', sig: 'r1|>=|38|C|2026-11-19T07:00:00.000Z|39' });
+  assert.ok(e && e.ruleId === 'r1'); assert.equal(t.Store.getCases()[0].alertLog.length, 1, 'shown at once');
+  await t.Store.flush();
+  const w = t.writes().filter((x) => /alert-acks$/.test(x.path)); assert.equal(w.length, 1);
+  assert.deepEqual(Object.keys(w[0].body).sort(), ['ruleId', 'setId', 'sig'], 'no user, no time, no source in the request');
+  assert.equal(e.byName, 'Dr Server'); assert.equal(e.by, 'u9'); assert.equal(e.ackedAt, '2026-11-19T08:00:00.000Z');
+  edit(t.Store, id, (c) => { c.narrative = 'v2'; });
+  await t.Store.flush();
+  const patches = t.writes().filter((x) => x.method === 'PATCH' && /^\/cases\//.test(x.path)); assert.ok(patches.length >= 1);
+  for (const x of patches) assert.ok(!('alertLog' in x.body), 'alertLog is never sent in a case PATCH');
+  assert.equal(t.Store.ackAlert(id, { ruleId: 'bad id', setId: 'care.t', sig: 's' }), false);
+  assert.equal(t.Store.ackAlert(id, { ruleId: 'r1', setId: 'care.t', sig: '' }), false);
+  assert.equal(t.Store.ackAlert(crypto.randomUUID(), { ruleId: 'r1', setId: 'care.t', sig: 's' }), false, 'unknown case');
+  assert.equal(t.writes().filter((x) => /alert-acks$/.test(x.path)).length, 1, 'refused input sends nothing');
+});
+
+test('35b: Demo mode: ackAlert does nothing and never calls the server (the screen keeps its own list)', async () => {
+  const t = boot(async () => { throw new Error('fetch must not be called in Demo mode'); }, { mode: 'local' }); await t.Store.init();
+  const id = crypto.randomUUID(); t.Store.setCases([mkCase(id)]);
+  assert.equal(t.Store.ackAlert(id, { ruleId: 'r1', setId: 'care.t', sig: 's' }), false); assert.equal(t.calls.length, 0);
+});

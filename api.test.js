@@ -564,3 +564,15 @@ test('35a: a typed verifier inside a case protocol value is never stored', async
   const upd = await api().put(`/api/cases/${c.id}/values`).send({ key, value: { verifiedBy: 'Dr Forged', bands: [] }, expectedVersion: put.body.version });
   assert.equal(upd.status, 200); assert.equal(upd.body.value.verifiedBy, '');
 });
+
+test('35b: import carries acknowledgements into alert_acks as imported (no user); a time that does not parse becomes now; the case reads them back', async () => {
+  const cid = 'ack35-' + crypto.randomBytes(3).toString('hex');
+  const r = await imp({ cases: [mkCase(cid, { alertLog: [{ ruleId: 'r1', setId: 'care.t', ackedAt: '2026-11-18T09:00:00.000Z', sig: 's1' }, { ruleId: 'r2', setId: 'care.t', ackedAt: 'not a date', sig: '' }] })] });
+  assert.equal(r.status, 201);
+  const got = (await api().get('/api/cases/' + r.body.cases[0].id)).body;
+  assert.equal(got.alertLog.length, 2);
+  for (const a of got.alertLog) { assert.equal(a.source, 'imported'); assert.equal(a.by, null); assert.equal(a.byName, null); }
+  assert.equal(got.alertLog[0].ruleId, 'r1'); assert.equal(got.alertLog[0].ackedAt, '2026-11-18T09:00:00.000Z');
+  assert.ok(Date.now() - new Date(got.alertLog[1].ackedAt).getTime() < 60000, 'unparseable time became now');
+  assert.equal((await db.query('SELECT alert_log FROM cases WHERE legacy_id=$1', [cid])).rows[0].alert_log.length, 0, 'the old JSON list is no longer written');
+});

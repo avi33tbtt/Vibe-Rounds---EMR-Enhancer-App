@@ -224,7 +224,7 @@
       }
       sn = snap['case:' + id];
     }
-    const patch = {}; META.forEach((k) => { if (!eq(sn.data[k], m[k])) patch[k] = m[k]; });
+    const patch = {}; META.forEach((k) => { if (k !== 'alertLog' && !eq(sn.data[k], m[k])) patch[k] = m[k]; });   // 35b: acknowledgements are their own server records (Store.ackAlert), never part of a case PATCH
     if (!Object.keys(patch).length) return;
     const r = await api('PATCH', '/cases/' + id, Object.assign({ expectedVersion: sn.ver }, patch));
     sn.ver = r.version; Object.keys(patch).forEach((k) => { sn.data[k] = patch[k]; });
@@ -505,6 +505,19 @@
     else if (!wants && sn.enabled) { const r = await api('POST', '/rules/' + ow + '/' + rid + '/disable', { expectedVersion: sn.ver }); sn.ver = r.version; sn.enabled = false; }
   }
 
+  // chunk 35b: acknowledge one alert. Server mode only (Demo mode keeps its own list). The server stamps the user and time; the entry is shown at once
+  // and is filled in with the server's values when the write lands. Returns the entry (so the screen can add it to its own copy of the case) or false.
+  Store.ackAlert = function (caseId, a) {
+    if (Store.mode !== 'server') return false;
+    const c = caseById(caseId); if (!c || !a || !IDENT.test(a.ruleId || '') || !IDENT.test(a.setId || '') || typeof a.sig !== 'string' || !a.sig || a.sig.length > 500) return false;
+    const e = { ruleId: a.ruleId, setId: a.setId, sig: a.sig, ackedAt: new Date().toISOString(), by: null, byName: Store.who(), source: 'user' };
+    c.alertLog = (c.alertLog || []).concat([e]).slice(-2000);
+    enqueue('ack:' + caseId + '|' + uid(), async () => {
+      const r = await api('POST', '/cases/' + caseId + '/alert-acks', { ruleId: a.ruleId, setId: a.setId, sig: a.sig });
+      e.ackedAt = r.ackedAt; e.by = r.by; e.byName = r.byName; e.id = r.id;
+    });
+    return e;
+  };
   Store.protocols = () => clone(S.protocols);
   Store.protocol = (sid) => clone(S.protocols[sid]);
   const protoBody = (p) => { const b = clone(p); delete b.verifiedBy; delete b.verifiedAt; return b; };   // no typed name in a request body (32d2)
