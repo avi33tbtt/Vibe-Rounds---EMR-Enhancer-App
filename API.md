@@ -31,6 +31,12 @@ Base path `/api`. JSON in, JSON out. Synthetic data only; not for clinical use.
 | `PATCH /cases/:id` | `{expectedVersion, patient?, narrative?, applied?, pathways?, pinned?}` | updated case (`alertLog` is refused with 400: acknowledgements are their own records, see below) |
 | `GET /cases/:id/alert-acks` | – | the case's acknowledgements, oldest first (newest 2000) |
 | `POST /cases/:id/alert-acks` | `{ruleId, setId, sig}` (strict: no user, time or source) | `201` new acknowledgement; `200` and the existing one when this rule and `sig` are already acknowledged. The server stamps the signed-in user and time. `sig` is built by the screen from the rule (operator, threshold, unit) and the time and value of the reading that fired it, so an edited rule or a new reading no longer matches and the old row stays as history. Append-only (no UPDATE or DELETE, even for the app role). Entries from the old list or a browser import are `source: "imported"` with no user. |
+| `GET /admin/ai` | – | admin. `{enabled, configured, provider, model, limits:{perMinute, perHour}, deidentification, updatedAt, updatedBy}`. Never the key. `deidentification` is `"not_yet"` until chunk 36b. |
+| `PUT /admin/ai` | `{enabled}` (strict) | admin. Switches AI on or off; audited as `ai.setting` with before and after. `409 ai_not_configured` when turning on with no `LLM_API_KEY` and `LLM_MODEL` in the server environment. AI is OFF until this is called. |
+| `POST /llm/schema` | `{diagnosis (2-200), vignette? (2000), instructions? (1000)}` | admin, doctor, informatician. `{schema, warnings}`: a draft element set. The diagnosis text is the one typed; model flag thresholds are removed; dose-like text and unusable fields are dropped; codes are format-checked only. |
+| `POST /llm/suggest` | `{narrative (1-8000), caseId?}` | admin, doctor. `{suggestions:[{setId, reason}], pathways:[{pathwayId, reason}]}`: ids from the registry only (sets already on the case are not offered), at most 5 and 2. |
+| `POST /llm/rule-draft` | `{owner, text (1-300), fields:[{ref, label, unit, type, repeat?}]}` | admin, doctor. `{draft:{fieldRef, op, threshold, unit, indicator, summary, detail}}`: never approved or enabled. The threshold must be a number in `text`; the model sees field names and the sentence only. |
+| *AI errors* | | `403 ai_disabled` ("AI disabled"), `503 ai_not_configured`, `429 ai_rate_limited` (+ `Retry-After`), `413 too_large`, `422 ai_invalid_output` (nothing returned), `502 ai_provider_error` (generic message). Each call that reaches the model writes one `ai.call` audit row: purpose, outcome, byte counts, model, never the prompt or the answer. Limits are per user and live in the server process's memory. |
 
 Case shape: `{id, patient, patientId, encounterId, narrative, applied[{setId,addedAt}], pathways[], pinned, alertLog[{id,ruleId,setId,sig,ackedAt,by,byName,source}], values, valueVersions, notes[], version, createdAt, updatedAt}`.
 `values` holds scalar keys (`setId/fieldId`, `setId/__ref`, `setId/__protocol`) and, for repeat groups, `values["setId/@group"] = [row objects]`, sorted by time. Each row object also carries metadata keys `__id`, `__v` (version), `__by`, `__at`, `__status`, `__time`, which the client uses to patch a row and strips before display or export. Rows entered in error are hidden unless `include_errors=true` (doctor and admin).
@@ -156,6 +162,10 @@ One table, `permissions.js`: action -> roles. Each route maps to exactly one act
 | `GET /cases/:id` | `case.read` | all |
 | `GET /cases/:id/alert-acks` | `case.read` | all |
 | `POST /cases/:id/alert-acks` | `alert.ack` | admin, doctor, nurse |
+| `GET /admin/ai`, `PUT /admin/ai` | `ai.admin` | admin |
+| `POST /llm/schema` | `ai.schema` | admin, doctor, informatician |
+| `POST /llm/suggest` | `ai.suggest` | admin, doctor |
+| `POST /llm/rule-draft` | `ai.rule_draft` | admin, doctor |
 | `GET /cases/:id/history` | `case.history` | all (rows entered in error: doctor, admin only) |
 | `POST /cases` | `case.create` | admin, doctor, nurse |
 | `PATCH /cases/:id` | `case.patch` | admin, doctor, nurse |

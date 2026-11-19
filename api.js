@@ -13,6 +13,7 @@ const crypto = require('node:crypto');
 const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied, allowedActions, ACTION_LABELS } = require('./permissions.js');
 const { hashPassword, verifyPassword, passwordProblem } = require('./auth.js');   // chunk 32e1: admin users routes and own-password change
 const { audit, auditOnce, auditContext, auditPage, auditOut, csvLine, csvCell, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
+const { mountLlm, createProvider } = require('./llm.js');                  // chunk 36a: AI proxy routes and admin switch
 const { mountPatients } = require('./patients.js');                        // chunk 34a: patients, encounters, link a case to them
 
 class ApiError extends Error {
@@ -382,8 +383,8 @@ async function commitImport(c, out, actor) {
         '[]', actor, k.createdAt, k.updatedAt])).rows[0].id;
     idMap.push({ legacyId: k.legacyId, id });
     if (k.alertLog.length) await c.query(`INSERT INTO alert_acks (case_id,set_id,rule_id,sig,source,acked_at)
-      SELECT $1, x.set_id, x.rule_id, x.sig, 'imported', COALESCE(x.acked_at::timestamptz, now()) FROM jsonb_to_recordset($2::jsonb) AS x(set_id text, rule_id text, sig text, acked_at text)
-      WHERE x.set_id ~ '^[A-Za-z0-9_.-]{1,100}$'`, [id, JSON.stringify(k.alertLog.map((a) => ({ set_id: a.setId, rule_id: a.ruleId, sig: a.sig, acked_at: a.ackedAt })))]);   // 35b: imported, no user
+      SELECT DISTINCT ON (x.set_id, x.rule_id, x.sig) $1, x.set_id, x.rule_id, x.sig, 'imported', COALESCE(x.acked_at::timestamptz, now()) FROM jsonb_to_recordset($2::jsonb) AS x(ord int, set_id text, rule_id text, sig text, acked_at text)
+      WHERE x.set_id ~ '^[A-Za-z0-9_.-]{1,100}$' ORDER BY x.set_id, x.rule_id, x.sig, x.ord`, [id, JSON.stringify(k.alertLog.map((a, i) => ({ ord: i, set_id: a.setId, rule_id: a.ruleId, sig: a.sig, acked_at: a.ackedAt })))]);   // 35b: imported, no user
     if (k.values.length) await c.query('INSERT INTO case_values (case_id,key,value,updated_by) SELECT $1, x.key, x.value, $3 FROM jsonb_to_recordset($2::jsonb) AS x(key text, value jsonb)', [id, JSON.stringify(k.values), actor]);
     if (k.rows.length) await c.query(`INSERT INTO case_rows (case_id,set_id,group_id,row,row_time,status,error_reason,entered_by,entered_at)
       SELECT $1, x.set_id, x.group_id, x.row, x.row_time, x.status, x.error_reason, $3, now() + x.ord * interval '1 microsecond'
@@ -404,7 +405,7 @@ async function commitImport(c, out, actor) {
  * requireAuth (from auth.js) identifies the user from the session cookie. `getActor` is a TEST-ONLY override (returns {id, role}); it is refused when
  * NODE_ENV=production, so a deployed server can only ever use real sessions.
  */
-function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
+function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter }) {   // llm: a provider object, or null for none; left out = built from LLM_* in the environment
   if (getActor && process.env.NODE_ENV === 'production') throw new Error('getActor is for tests only and is not allowed when NODE_ENV=production');
   if (!getActor && !(requireAuth && requireCsrf)) throw new Error('mountApi needs requireAuth and requireCsrf');
   const r = guardRouter(express.Router());            // every route below must have an action in permissions.js ROUTE_ACTIONS
@@ -1133,6 +1134,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   }));
 
   // ================= patients, encounters, case link (chunk 34a; routes live in patients.js) =================
+  mountLlm(r, { db, ApiError, wrap, parse, audit, provider: llm === undefined ? createProvider(process.env) : llm, limiter: aiLimiter });
   mountPatients(r, { db, ApiError, wrap, parse, idParam, iso, audit, auditOnce, can, loadCase });
 
   // consistent errors (server.js also has a final handler for non-API paths)

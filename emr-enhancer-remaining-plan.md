@@ -35,7 +35,9 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 
 - 35c: `GET /rules-in-force` and `/rules-in-force.csv` (action `rules.inforce`, admin and doctor): every rule that is enabled and approved and every verified protocol, with a plain sentence built from what was typed, approver, time and source; filters `set` and `source`; the CSV is formula-safe and writes one `rules_inforce_export` audit row; viewing writes none. Tools > Rules in force is read-only. 6 new tests in `rules-inforce.test.js`.
 
-**Next up:** 36a onward in the order below.
+- 36a: `007_app_settings.sql` (AI switch, off by default, app role may SELECT/INSERT/UPDATE); new root file `llm.js` (provider for Anthropic or OpenRouter from `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL`; the three prompts; output validators; routes); `POST /llm/schema`, `/llm/suggest`, `/llm/rule-draft`, `GET/PUT /admin/ai`; new actions `ai.admin`, `ai.schema`, `ai.suggest`, `ai.rule_draft`; per-user in-memory rate limit; one `ai.call` audit row per call, no content. The model is no longer asked for `derived.flag` thresholds (permanent rule). Not done until 36b: de-identification, browser buttons, `/api/me` AI flag. Keep AI switched off until 36b. Also fixed: `alert-acks.test.js` (35b) called old URLs and shapes and failed on a clean checkout; import now keeps duplicate acknowledgements once. 246 tests pass.
+
+**Next up:** 36b onward in the order below.
 
 **Manual work that is not a chunk (do soon, needs two real browsers):**
 - [ ] (a) Force a conflict on one row and confirm the side-by-side screen appears.
@@ -247,7 +249,7 @@ Tools > Rules in force (admin and doctor). Lists approved rules and protocols: p
 **Done when:** Admin sees every rule in force with approver and time; screen is read-only.
 
 
-### [ ] 36a. AI proxy 1: server routes, admin switch, limits, audit
+### [x] 36a. AI proxy 1: server routes, admin switch, limits, audit
 
 **Goal:** /api/llm/* routes with the key in the server environment; off by default.
 

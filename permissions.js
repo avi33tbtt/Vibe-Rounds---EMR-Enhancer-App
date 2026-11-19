@@ -48,6 +48,10 @@ const ACTIONS = {
   'import.run': ['admin'],
   'migrate.run': ['admin'],                          // one-time turn of typed demo patients into real patient and encounter records (chunk 34c)
   'rules.inforce': CLIN,                             // GET /rules-in-force and its CSV: read-only list of approved rules and verified protocols (chunk 35c)
+  'ai.admin': ['admin'],                             // GET/PUT /admin/ai: the AI switch (chunk 36a). AI is off until an admin turns it on.
+  'ai.schema': ['admin', 'doctor', 'informatician'], // POST /llm/schema: draft an element set (same people who author sets)
+  'ai.suggest': CLIN,                                // POST /llm/suggest: suggest sets for a case narrative (same people who apply sets)
+  'ai.rule_draft': CLIN,                             // POST /llm/rule-draft: draft an alert rule (same people who write rules); a draft is never approved
   'audit.read': ['admin'],                           // GET /audit and /audit.csv: the log itself is admin only (chunk 33d)
   // user.manage and password.change have routes since chunk 32e1; content.review and package.install arrive with Phase 6
   'user.manage': ['admin'],                          // admin users routes (chunk 32e1)
@@ -65,7 +69,7 @@ const ACTION_LABELS = {
   'row.add': 'add readings', 'row.amend_own': 'amend readings', 'row.amend_any': 'amend other people\'s readings', 'value.write': 'save these values',
   'note.write': 'write notes', 'note.sign': 'sign notes', 'set.write': 'edit element sets and pathways', 'code.write': 'edit verified codes', 'binding.write': 'edit code bindings',
   'rule.write': 'edit alert rules', 'rule.approve': 'approve alert rules', 'protocol.write': 'edit protocols', 'protocol.approve': 'verify protocols',
-  'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'migrate.run': 'migrate demo patients', 'audit.read': 'read the audit log', 'rules.inforce': 'see the rules in force', 'user.manage': 'manage users', 'password.change': 'change this password',
+  'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'migrate.run': 'migrate demo patients', 'audit.read': 'read the audit log', 'rules.inforce': 'see the rules in force', 'ai.admin': 'change the AI setting', 'ai.schema': 'draft an element set with AI', 'ai.suggest': 'get AI suggestions', 'ai.rule_draft': 'draft a rule with AI', 'user.manage': 'manage users', 'password.change': 'change this password',
   'content.review': 'review content', 'package.install': 'install packages',
   'patient.read': 'see patient records', 'patient.write': 'register or correct patients', 'patient.merge': 'merge patients', 'encounter.write': 'change encounters', 'case.link': 'link a case to a patient', 'case.export': 'export a patient record',
 };
@@ -101,6 +105,7 @@ const ROUTE_ACTIONS = {
   'POST /patients/:id/encounters': 'encounter.write', 'PATCH /encounters/:id': 'encounter.write', 'POST /encounters/:id/close': 'encounter.write', 'POST /encounters/:id/cancel': 'encounter.write',
   'POST /cases/:id/link': 'case.link', 'GET /cases/:id/alert-acks': 'case.read', 'POST /cases/:id/alert-acks': 'alert.ack', 'GET /cases/:id/export': 'case.export',
   'POST /admin/migrate-demo-patients': 'migrate.run',
+  'GET /admin/ai': 'ai.admin', 'PUT /admin/ai': 'ai.admin', 'POST /llm/schema': 'ai.schema', 'POST /llm/suggest': 'ai.suggest', 'POST /llm/rule-draft': 'ai.rule_draft',
 };
 
 function can(user, action) {

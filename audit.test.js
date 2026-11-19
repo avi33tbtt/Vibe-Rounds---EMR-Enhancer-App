@@ -37,7 +37,7 @@ test.before(async () => {
   await owner.query(`ALTER ROLE emr_app LOGIN PASSWORD '${pw}'`);          // what an admin does once (see 003_audit_grants.sql)
   const u = new URL(withDb(name)); u.username = 'emr_app'; u.password = pw;
   appDb = createDb(u.toString());
-  app = createApp({ db: appDb, getActor });
+  app = createApp({ db: appDb, getActor, llm: aiMock });
 });
 test.after(async () => {
   if (appDb) await appDb.close();
@@ -46,6 +46,10 @@ test.after(async () => {
   await a.connect(); await a.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`); await a.end();
 });
 
+// chunk 36a: a model stand-in that answers each of the three AI routes with a valid reply (no network)
+const aiMock = { name: 'mock', model: 'mock-1', complete: async ({ system }) => JSON.stringify(system.startsWith('You are a clinical informatics') ? { sections: [{ title: 'A', fields: [{ id: 'hr', label: 'Heart rate', type: 'number' }] }] }
+  : system.startsWith('You help a clinician') ? { suggestions: [{ setId: 'user.t', reason: 'fits' }], pathways: [] }
+  : { fieldRef: 'user.t/f', op: '>', threshold: 5, indicator: 'warning', summary: 'Review f' }) };
 const NO_AUDIT = ['POST /import/dry-run', 'PATCH /element-sets/:setId', 'DELETE /element-sets/:setId'];   // write nothing, so there is nothing to audit
 const mkCase = (id, extra = {}) => ({ id, patient: { name: 'Demo', ageSex: '40 F', bed: 'B2', mrn: 'M1' }, narrative: 'n', applied: [], pathways: [], values: {}, notes: [], ...extra });
 
@@ -66,6 +70,10 @@ test('every write route writes exactly one audit row, attributed to the logged-i
     ['POST /cases/:id/notes/:nid/sign', 'note.sign', 200, () => P(`${c()}/notes/${st.n.id}/sign`, { expectedVersion: 2 })],
     ['POST /cases/:id/notes/:nid/amend', 'note.amend', 201, () => P(`${c()}/notes/${st.n.id}/amend`, { reason: 'typo fix', text: 'amended' })],
     ['POST /element-sets', 'set.save', 201, () => P('/api/element-sets', { setId: 'user.t', kind: 'custom', body: {} })],
+    ['PUT /admin/ai', 'ai.setting', 200, () => api().put('/api/admin/ai').send({ enabled: true })],
+    ['POST /llm/schema', 'ai.call', 200, () => P('/api/llm/schema', { diagnosis: 'Test disease' })],
+    ['POST /llm/suggest', 'ai.call', 200, () => P('/api/llm/suggest', { narrative: 'Test narrative' })],
+    ['POST /llm/rule-draft', 'ai.call', 200, () => P('/api/llm/rule-draft', { owner: 'user.t', text: 'Review f when above 5', fields: [{ ref: 'user.t/f', label: 'F', unit: '', type: 'number' }] })],
     ['POST /usage/:setId', 'usage.count', 200, () => P('/api/usage/care.t', {})],
     ['DELETE /usage', 'usage.clear', 204, () => api().delete('/api/usage')],
     ['POST /codes', 'code.add', 201, () => P('/api/codes', { system: 'snomed', code: '123456', display: 'x' })],

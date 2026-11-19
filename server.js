@@ -94,7 +94,7 @@ async function migrate(db, dir) {
 // Only these files are public. The folder also holds server.js, .env and SQL, which must never be served.
 const STATIC_FILES = ['enhancer.html', 'element-sets.js', 'cds-rules.js', 'store.js'];
 
-function createApp({ db, getActor, authOptions }) {
+function createApp({ db, getActor, authOptions, llm, aiLimiter }) {
   const app = express();
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -118,7 +118,7 @@ function createApp({ db, getActor, authOptions }) {
   const auth = createAuth(Object.assign({ db }, authOptions));       // chunk 32a/32b: login, logout, session; every data route requires a session and a permitted role
   app.locals.auth = auth;
   app.use('/api', auth.router);
-  mountApi(app, { db, getActor, requireAuth: auth.requireAuth, requireCsrf: auth.requireCsrf });
+  mountApi(app, { db, getActor, requireAuth: auth.requireAuth, requireCsrf: auth.requireCsrf, llm, aiLimiter });
 
   const sendStatic = (name) => (req, res) => res.sendFile(name, { root: __dirname, dotfiles: 'deny' }, (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: { code: 'not_found', message: 'Not found' } });
