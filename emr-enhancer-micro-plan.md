@@ -2,7 +2,7 @@
 
 *19 Nov 2026. Repo: github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App. Replaces the chunk list in `emr-enhancer-remaining-plan.md` from 37c onward. Chunks 1-37b are built. Data contracts v5-v7 stay in the old plan file as reference; each task below carries the few facts it needs, so you rarely paste a contract.*
 
-**Next up: 37c1**
+**Next up: 37c2**
 
 ---
 
@@ -62,7 +62,7 @@ Reply format: edits only (exact old text to find + new text), never whole files.
 
 ## 37c. Ward 3: shift summary and ward board
 
-### [ ] 37c1. Shift sum: pure function
+### [x] 37c1. Shift sum: pure function
 **File:** enhancer.html | **Paste:** how a flowsheet row looks (one example row), the `care.intake_output` entry
 ```text
 Add one pure function sumByType(rows, fromMs, toMs) returning {type: number} summed from io_volume for rows whose io_time is in the window and whose status is active (skip entered_in_error). Plain numbers only, no targets. Add a 5-case test (vm or node) for window edges and entered_in_error.
