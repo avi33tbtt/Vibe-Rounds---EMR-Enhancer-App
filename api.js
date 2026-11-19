@@ -577,6 +577,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   // ================= values =================
   r.put('/cases/:id/values', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.valuePut, req.body);
+    if (/\/__protocol$/.test(b.key) && isObj(b.value)) b.value = { ...b.value, verifiedBy: '', ...('verifiedAt' in b.value ? { verifiedAt: '' } : {}) };   // a typed verifier is never stored in a case value: verification is stamped by POST /protocols/:setId/approve (35a)
     if (!(await db.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
     const out = await db.withTx(async (c) => {
       const old = (await c.query('SELECT value, version, updated_by, updated_at FROM case_values WHERE case_id=$1 AND key=$2 FOR UPDATE', [id, b.key])).rows[0] || null;
@@ -821,6 +822,10 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   const ruleToggle = (enable) => wrap(async (req, res) => {
     const owner = identParam(req.params.owner), rid = identParam(req.params.ruleId), b = parse(S.ruleAct, req.body);
     const row = await db.withTx(async (c) => {
+      if (enable) {   // approving a rule that already runs would silently replace its approver: refuse (35a)
+        const cur = (await c.query('SELECT enabled,version FROM cds_rules WHERE owner_set_id=$1 AND rule_id=$2 FOR UPDATE', [owner, rid])).rows[0];
+        if (cur && cur.enabled && cur.version === b.expectedVersion) throw new ApiError(409, 'already_approved', 'This rule is already approved and running. Edit it first if it needs to change.');
+      }
       const q = enable
         ? await c.query(`UPDATE cds_rules SET enabled=true, verified_by_user=$4, verified_at=now(), version=version+1, updated_at=now() WHERE owner_set_id=$1 AND rule_id=$2 AND version=$3 RETURNING *`, [owner, rid, b.expectedVersion, req.actor.id])
         : await c.query(`UPDATE cds_rules SET enabled=false, version=version+1, updated_at=now() WHERE owner_set_id=$1 AND rule_id=$2 AND version=$3 RETURNING *`, [owner, rid, b.expectedVersion]);
@@ -870,6 +875,11 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
   r.post('/protocols/:setId/approve', wrap(async (req, res) => {
     const sid = identParam(req.params.setId), b = parse(S.ruleAct, req.body);
     const row = await db.withTx(async (c) => {
+      const cur = (await c.query('SELECT body,verified_by_user,version FROM protocols WHERE set_id=$1 FOR UPDATE', [sid])).rows[0];
+      if (cur && cur.version === b.expectedVersion) {   // 35a: never replace an approver silently; never verify an empty protocol
+        if (cur.verified_by_user) throw new ApiError(409, 'already_approved', 'This protocol is already verified. Edit it first if it needs to change.');
+        if (!cur.body || !Array.isArray(cur.body.bands) || !cur.body.bands.length) throw new ApiError(400, 'validation', 'A protocol with no bands cannot be verified. Enter the bands first.');
+      }
       const q = await c.query(`UPDATE protocols SET verified_by_user=$3, verified_at=now(), version=version+1, updated_at=now() WHERE set_id=$1 AND version=$2 RETURNING *`, [sid, b.expectedVersion, req.actor.id]);
       if (!q.rows.length) await protoConflict(sid);
       await audit(c, { action: 'protocol.approve', entity: 'protocol', entity_id: sid, before: { version: b.expectedVersion }, after: { version: q.rows[0].version } });

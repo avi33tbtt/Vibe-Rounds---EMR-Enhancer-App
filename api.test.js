@@ -227,11 +227,11 @@ test('rules: approval is stamped by the server; editing resets it; unapproved ne
 });
 
 test('protocols: bands saved unapproved; editing clears approval', async () => {
-  const p = await api().put('/api/protocols/care.sliding_scale_insulin').send({ body: { bands: [] }, expectedVersion: 0 });
+  const p = await api().put('/api/protocols/care.sliding_scale_insulin').send({ body: { bands: [{ min: '', max: '', instruction: 'typed text' }] }, expectedVersion: 0 });
   assert.equal(p.status, 200); assert.equal(p.body.verifiedBy, null);
   const ap = await api().post('/api/protocols/care.sliding_scale_insulin/approve').send({ expectedVersion: 1 });
   assert.ok(ap.body.verifiedBy);
-  const ed = await api().put('/api/protocols/care.sliding_scale_insulin').send({ body: { bands: [] }, expectedVersion: 2 });
+  const ed = await api().put('/api/protocols/care.sliding_scale_insulin').send({ body: { bands: [{ min: '', max: '', instruction: 'typed text 2' }] }, expectedVersion: 2 });
   assert.equal(ed.body.verifiedBy, null);
   assert.equal((await api().put('/api/protocols/care.sliding_scale_insulin').send({ body: {}, expectedVersion: 2 })).status, 409);
 });
@@ -520,4 +520,47 @@ test('import: validation of the body and a body larger than 1 MB is accepted (10
   const r = await imp({ cases: big }, true); assert.equal(r.status, 200); assert.equal(r.body.counts.cases, 10);
   assert.equal((await api().post('/api/cases').send({ narrative: 'y'.repeat(1100000) })).status, 413);                  // other routes keep the 1 MB cap
   const empty = await imp({}); assert.equal(empty.status, 201); assert.equal(empty.body.counts.cases, 0);
+});
+
+
+// ---- chunk 35a: approval is a server action; no silent re-stamp; no typed verifier anywhere ----
+test('35a: approving a rule that already runs is refused and keeps the first approver; an edit resets it, then a new approver may approve', async () => {
+  const doc = (m, u, b) => api()[m](u).set('x-test-role', 'doctor').send(b);
+  assert.equal((await api().put('/api/rules/care.a35/r1').send({ body: { op: '>=', threshold: 1 }, expectedVersion: 0 })).status, 200);
+  const first = await api().post('/api/rules/care.a35/r1/approve').send({ expectedVersion: 1 });
+  assert.equal(first.status, 200);
+  const again = await doc('post', '/api/rules/care.a35/r1/approve', { expectedVersion: 2 });
+  assert.equal(again.status, 409); assert.equal(again.body.error.code, 'already_approved');
+  const cur = (await api().get('/api/rules')).body['care.a35'][0];
+  assert.equal(cur.verifiedBy, first.body.verifiedBy, 'the first approver is kept'); assert.equal(cur.version, 2);
+  const ed = await doc('put', '/api/rules/care.a35/r1', { body: { op: '>=', threshold: 2 }, expectedVersion: 2 });
+  assert.equal(ed.body.enabled, false); assert.equal(ed.body.verifiedBy, null);
+  const ap2 = await doc('post', '/api/rules/care.a35/r1/approve', { expectedVersion: 3 });
+  assert.equal(ap2.status, 200); assert.notEqual(ap2.body.verifiedBy, first.body.verifiedBy);
+});
+
+test('35a: a protocol with no bands cannot be verified; a verified protocol is not re-stamped; viewer and nurse are refused', async () => {
+  assert.equal((await api().put('/api/protocols/care.p35').send({ body: { bands: [] }, expectedVersion: 0 })).status, 200);
+  const empty = await api().post('/api/protocols/care.p35/approve').send({ expectedVersion: 1 });
+  assert.equal(empty.status, 400); assert.equal(empty.body.error.code, 'validation');
+  assert.equal((await api().get('/api/protocols')).body['care.p35'].verifiedBy, null);
+  const put = await api().put('/api/protocols/care.p35').send({ body: { bands: [{ min: '', max: '', instruction: 'typed text' }] }, expectedVersion: 1 });
+  for (const role of ['nurse', 'viewer', 'informatician']) assert.equal((await api().post('/api/protocols/care.p35/approve').set('x-test-role', role).send({ expectedVersion: put.body.version })).status, 403, role);
+  const ok = await api().post('/api/protocols/care.p35/approve').send({ expectedVersion: put.body.version });
+  assert.equal(ok.status, 200); assert.ok(ok.body.verifiedBy);
+  const dup = await api().post('/api/protocols/care.p35/approve').set('x-test-role', 'doctor').send({ expectedVersion: ok.body.version });
+  assert.equal(dup.status, 409); assert.equal(dup.body.error.code, 'already_approved');
+  assert.equal((await api().get('/api/protocols')).body['care.p35'].verifiedBy, ok.body.verifiedBy);
+});
+
+test('35a: a typed verifier inside a case protocol value is never stored', async () => {
+  const c = await newCase({});
+  const key = 'care.p35/__protocol';
+  const put = await api().put(`/api/cases/${c.id}/values`).send({ key, value: { verifiedBy: 'Dr Forged', verifiedAt: '2020-01-01', bands: [{ min: '1', max: '2', instruction: 'typed text' }] }, expectedVersion: 0 });
+  assert.equal(put.status, 200);
+  const got = (await api().get(`/api/cases/${c.id}`)).body.values[key];
+  assert.equal(got.verifiedBy, ''); assert.equal(got.verifiedAt, ''); assert.equal(got.bands[0].instruction, 'typed text');
+  assert.ok(!JSON.stringify(got).includes('Dr Forged'));
+  const upd = await api().put(`/api/cases/${c.id}/values`).send({ key, value: { verifiedBy: 'Dr Forged', bands: [] }, expectedVersion: put.body.version });
+  assert.equal(upd.status, 200); assert.equal(upd.body.value.verifiedBy, '');
 });

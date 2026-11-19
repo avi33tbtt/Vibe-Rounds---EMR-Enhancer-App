@@ -1113,7 +1113,7 @@ h+=`<label>${esc(f.label)}${f.required?' *':''}${f.unit?' ('+esc(f.unit)+')':''}
 function SRV(){return Store.mode==='server'&&!!Store.me}
 function mayDo(a){return Store.can(a)}
 function me(){return Store.who()||''}
-function protoOf(sid){const p=CUR.values[vk(sid,'__protocol')];return p&&Array.isArray(p.bands)?p:{verifiedBy:'',bands:[]}}
+function protoOf(sid){const p=CUR.values[vk(sid,'__protocol')],b=p&&Array.isArray(p.bands)?p:{verifiedBy:'',bands:[]};if(!SRV())return b;const sp=Store.protocol(sid);return Object.assign({},b,{verifiedBy:sp&&sp.verifiedBy?sp.verifiedBy:''})}   // 35a: in server mode the verifier shown is the server-stamped one, never a copy typed into the case
 function saveProto(sid,p){Store.saveProtocol(sid,p)}
 function protoVerify(id,p){if(!SRV())return`<label>Protocol verified by</label><input data-p="${id}" data-f="verifiedBy" value="${esc(p.verifiedBy)}" placeholder="name / role / date">`;
 const v=String(p.verifiedBy||'').trim();return`<div class="mu" style="margin-top:6px">${v?'Verified by <b>'+esc(v)+'</b>':'Not verified'}${v&&mayDo('protocol.write')?` <button class="b sm" data-pverify="${id}" data-pv="0">Remove verification</button>`:''}${!v&&mayDo('protocol.approve')?` <button class="b sm" data-pverify="${id}" data-pv="1">Verify as ${esc(me())}</button>`:''}${!v&&!mayDo('protocol.approve')?' · your role cannot verify protocols':''}</div>`}

@@ -29,9 +29,10 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 
 - 34c: the case now carries read-only `patientRecord` and `encounterRecord` (real patient and open encounter, merged duplicates shown as the kept record, none for an informatician). `patientView(c)` in `enhancer.html` is the one place the banner, Patients rows and case pickers read from; in server mode the Edit patient popover is hidden, Demo mode is unchanged. `POST /admin/migrate-demo-patients` (admin, idempotent, audited per case, `dryRun`) turns typed demo patients into real ones.
 
+- 35a: approve routes (built in 32d2) hardened: a rule that already runs or a verified protocol answers `409 already_approved` (approver never silently replaced); a protocol with no bands cannot be verified; `PUT /cases/:id/values` clears any typed `verifiedBy`/`verifiedAt` in a `__protocol` value; `protoOf` shows the server-stamped verifier. 215 tests pass.
 - 34d: `GET /cases/:id/export` (admin, doctor) returns the real FHIR Patient (MRN, name, gender, birthDate) and Encounter and writes one audit row per export (ids only); `Store.patients.exportCase`; `bundle()` in `enhancer.html` uses them in server mode, Demo mode keeps the placeholder. An unlinked chart is refused (`case_not_linked`).
 
-**Next up:** 35a onward in the order below.
+**Next up:** 35b onward in the order below.
 
 **Manual work that is not a chunk (do soon, needs two real browsers):**
 - [ ] (a) Force a conflict on one row and confirm the side-by-side screen appears.
@@ -204,7 +205,7 @@ enhancer.html only. Fill in onPatientChosen(patient): list the patient's open en
 **Done when:** FHIR Patient/Encounter export works and writes an audit row; national id is not in the audit log.
 
 
-### [ ] 35a. Server rules 1: approve rules and protocols on the server
+### [x] 35a. Server rules 1: approve rules and protocols on the server
 
 **Goal:** Approval is a server action: role check, stamp user and time, audit.
 

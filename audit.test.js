@@ -76,7 +76,7 @@ test('every write route writes exactly one audit row, attributed to the logged-i
     ['POST /rules/:owner/:ruleId/approve', 'rule.approve', 200, () => P('/api/rules/care.t/r1/approve', { expectedVersion: 1 })],
     ['POST /rules/:owner/:ruleId/disable', 'rule.disable', 200, () => P('/api/rules/care.t/r1/disable', { expectedVersion: 2 })],
     ['DELETE /rules/:owner/:ruleId', 'rule.delete', 204, () => api().delete('/api/rules/care.t/r1?expectedVersion=3')],
-    ['PUT /protocols/:setId', 'protocol.save', 200, () => api().put('/api/protocols/care.t').send({ body: {}, expectedVersion: 0 })],
+    ['PUT /protocols/:setId', 'protocol.save', 200, () => api().put('/api/protocols/care.t').send({ body: { bands: [{ min: '', max: '', instruction: 'typed text' }] }, expectedVersion: 0 })],
     ['POST /protocols/:setId/approve', 'protocol.approve', 200, () => P('/api/protocols/care.t/approve', { expectedVersion: 1 })],
     ['PUT /prefs/:key', 'pref.set', 200, () => api().put('/api/prefs/theme').send({ value: 'dark' })],
     ['POST /patients', 'patient.create', 201, async () => { const r = await P('/api/patients', { name: 'Aud Patient', sex: 'female', dateOfBirth: '1990-01-01' }); st.p = r.body; return r; }],

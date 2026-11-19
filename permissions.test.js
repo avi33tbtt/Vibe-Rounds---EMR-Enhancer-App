@@ -195,7 +195,7 @@ test('FORGERY: entered_by, created_by, verified_by, signed_by and added_by come 
     ['POST', `/api/cases/${c.id}/notes/${note.id}/sign`, { expectedVersion: 1 }, d, `SELECT signed_by v FROM case_notes WHERE id='${note.id}'`],
     ['PUT', '/api/rules/care.t/rf', { body: { field: 'care.t/x', op: '>', threshold: 1 }, expectedVersion: 0 }, d, "SELECT created_by v FROM cds_rules WHERE rule_id='rf'"],
     ['POST', '/api/rules/care.t/rf/approve', { expectedVersion: 1 }, d, "SELECT verified_by_user v FROM cds_rules WHERE rule_id='rf'"],
-    ['PUT', '/api/protocols/care.t', { body: { bands: [] }, expectedVersion: 0 }, d, null],
+    ['PUT', '/api/protocols/care.t', { body: { bands: [{ min: '', max: '', instruction: 'typed text' }] }, expectedVersion: 0 }, d, null],
     ['POST', '/api/protocols/care.t/approve', { expectedVersion: 1 }, d, "SELECT verified_by_user v FROM protocols WHERE set_id='care.t'"],
     ['POST', '/api/codes', { system: 'loinc', code: '8867-4', display: 'Heart rate' }, d, "SELECT added_by v FROM verified_codes WHERE code='8867-4'"],
     ['POST', '/api/element-sets', { setId: 'care.forge', kind: 'care', body: {} }, d, "SELECT created_by v FROM element_sets WHERE set_id='care.forge'"],

@@ -63,9 +63,9 @@ Seed sets (loaded by `node seed.js`) and any set with `readOnly: true` (marketpl
 
 **Code validation (codes and bindings):** `system` is `snomed` or `loinc`. SNOMED CT code: 6 to 18 digits, no leading zero. LOINC code: 1 to 7 digits, a hyphen, one check digit. `display` 1 to 300 characters. These are format checks only. They cannot tell whether a code is the right concept, so compare the display with a SNOMED or LOINC browser.
 | `GET /rules`, `PUT /rules/:owner/:ruleId {body,expectedVersion}` | saving or editing leaves the rule **unapproved and disabled** |
-| `POST /rules/:owner/:ruleId/approve {expectedVersion}` | server stamps approver and time; only then `enabled: true` |
+| `POST /rules/:owner/:ruleId/approve {expectedVersion}` | server stamps approver and time; only then `enabled: true`; a rule that already runs answers `409 already_approved` (the first approver is kept) |
 | `POST /rules/:owner/:ruleId/disable {expectedVersion}`, `DELETE ...?expectedVersion=n` | |
-| `GET /protocols`, `PUT /protocols/:setId {body,expectedVersion}`, `POST /protocols/:setId/approve {expectedVersion}` | bands ship empty; editing clears approval |
+| `GET /protocols`, `PUT /protocols/:setId {body,expectedVersion}`, `POST /protocols/:setId/approve {expectedVersion}` | bands ship empty; editing clears approval; approving a protocol with no bands is `400 validation`, approving a verified one is `409 already_approved` |
 | `GET /prefs`, `PUT /prefs/:key {value}` | per user |
 
 ## Import of browser data (chunk 31a)
@@ -75,6 +75,7 @@ Seed sets (loaded by `node seed.js`) and any set with `readOnly: true` (marketpl
 - **Import** runs the same checks, then writes everything in one transaction or nothing. Valid → `201 {status:"committed", importId, cases:[{legacyId,id}], ...report}`. Any `invalid` item → `422 import_invalid` with `report`, nothing inserted except an `imports` row with status `failed`.
 - **Idempotent:** a case is identified by its browser id (`legacy_id`); a case already imported, or whose id is already a server case id, is skipped and listed under `collisions`. Sets, codes, rules, protocols, usage and the default quick bar that already exist are skipped, never overwritten. Items listed twice in one file are invalid.
 - **Cases:** repeat groups (`setId/@group`) become one row record each (`entered_by` = the importing user, `entered_at` = now); more than 500 rows in a group is invalid. Row time = `__time` if present, else the group's first date/datetime column read from the set definition (this file's `sets` or the server's), with zone-less times read at `utcOffsetMinutes` (browser offset in minutes east of UTC, `-new Date().getTimezoneOffset()`; default 0 = UTC). Unreadable times are kept as no time and counted in a warning. Keys starting `__` in a row (server metadata) are ignored; rows marked `__status: "entered_in_error"` stay hidden. Notes keep status, text, times and `amends` links (an amendment needs a reason, a signed note needs `signedAt`). A signed note's signer becomes the importing user; the typed `signedBy` is kept in the `imports` report.
+- **Typed verifiers are never stored (35a):** `PUT /cases/:id/values` clears `verifiedBy` and `verifiedAt` inside a `setId/__protocol` value; in server mode the screen shows the verifier from the server's protocol record.
 - **Approvals are never imported:** rules are saved disabled and unapproved (a doctor or admin must approve), protocols unverified, `verifiedBy` inside a case's `setId/__protocol` value is cleared. Rules stored inside a set body are dropped.
 - **Sets:** user sets keep their `version` (later `POST /element-sets` continues from it); an id already on the server is never replaced. **Codes** use the same format checks as `POST /codes`; imported codes join the verified table, so check them against SNOMED or LOINC.
 
