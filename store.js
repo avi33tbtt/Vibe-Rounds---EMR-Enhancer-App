@@ -155,7 +155,7 @@
       const v = sc.values[k], i = k.indexOf('/@');
       if (i > 0 && Array.isArray(v)) {
         c.values[k] = v.map((r) => {
-          const row = strip(r); row.__id = r.__id; row.__by = r.__by; row.__at = r.__at;
+          const row = strip(r); row.__id = r.__id; row.__by = r.__by; row.__byName = r.__byName || null; row.__at = r.__at;
           SN['row:' + id + '|' + r.__id] = { ver: r.__v, data: strip(r), time: r.__time || null, setId: k.slice(0, i), groupId: k.slice(i + 2) };
           return row;
         });
@@ -365,7 +365,7 @@
       const key = it.setId + '/@' + it.groupId, arr = (merged.values[key] = merged.values[key] || []), i = arr.findIndex((r) => r.__id === it.ref);
       const mr = ((mine.values || {})[key] || []).find((r) => r.__id === it.ref);
       if (!mr) { if (i >= 0) arr.splice(i, 1); }                       // I removed it: the queue sends "entered in error" with the reason typed earlier
-      else { const c = clone(mr); if (i >= 0) { c.__by = arr[i].__by; c.__at = arr[i].__at; arr[i] = c; } else arr.push(c); }
+      else { const c = clone(mr); if (i >= 0) { c.__by = arr[i].__by; c.__byName = arr[i].__byName; c.__at = arr[i].__at; arr[i] = c; } else arr.push(c); }
     } else if (it.kind === 'note') {
       const mn = (mine.notes || []).find((n) => n.id === it.ref), i = merged.notes.findIndex((n) => n.id === it.ref);
       if (!mn) { if (i >= 0) merged.notes.splice(i, 1); } else if (i >= 0) Object.assign(merged.notes[i], { text: mn.text, status: mn.status, signedBy: mn.signedBy, signedAt: mn.signedAt }); else merged.notes.push(clone(mn));
@@ -741,7 +741,7 @@
         for (const t of targets) if (Array.isArray(t.values[gk])) { const n0 = t.values[gk].length; t.values[gk] = t.values[gk].filter((x) => x && x.__id !== r.id); if (t.values[gk].length < n0) gone = true; }
         delete snap[key]; if (gone) sum.rows++; continue;                  // the same answer comes again inside the overlap: nothing left to remove, nothing to report
       }
-      const o = Object.assign({}, r.row, { __id: r.id, __by: r.enteredBy, __at: r.enteredAt });
+      const o = Object.assign({}, r.row, { __id: r.id, __by: r.enteredBy, __byName: r.enteredByName || null, __at: r.enteredAt });
       for (const t of targets) { const a = t.values[gk] || (t.values[gk] = []), i = a.findIndex((x) => x && x.__id === r.id); if (i >= 0) a[i] = clone(o); else a.push(clone(o)); }
       snap[key] = { ver: r.version, data: clone(r.row), time: r.rowTime || null, setId: r.setId, groupId: r.groupId }; sum.rows++;
     }

@@ -121,8 +121,9 @@ async function loadCase(q, id, { includeErrors = false } = {}) {
   if (!c) return null;
   const [vals, rows, notes, recs, acks] = await Promise.all([
     q.query('SELECT key,value,version FROM case_values WHERE case_id=$1', [id]),
-    q.query(`SELECT * FROM case_rows WHERE case_id=$1 ${includeErrors ? '' : "AND status='active'"}
-             ORDER BY row_time NULLS LAST, entered_at, id`, [id]),
+    q.query(`SELECT cr.*, eu.name AS entered_by_name FROM case_rows cr LEFT JOIN users eu ON eu.id=cr.entered_by
+             WHERE cr.case_id=$1 ${includeErrors ? '' : "AND cr.status='active'"}
+             ORDER BY cr.row_time NULLS LAST, cr.entered_at, cr.id`, [id]),
     q.query('SELECT * FROM case_notes WHERE case_id=$1 ORDER BY created_at, id', [id]),
     recordsOf(q, c.patient_id, c.encounter_id),
     q.query(`SELECT * FROM (SELECT a.id, a.set_id, a.rule_id, a.sig, a.user_id, a.source, a.acked_at, u.name AS user_name FROM alert_acks a LEFT JOIN users u ON u.id=a.user_id
@@ -132,7 +133,7 @@ async function loadCase(q, id, { includeErrors = false } = {}) {
   for (const v of vals.rows) { values[v.key] = v.value; valueVersions[v.key] = v.version; }
   for (const r of rows.rows) {
     const k = `${r.set_id}/@${r.group_id}`;
-    (values[k] = values[k] || []).push({ ...r.row, __id: r.id, __v: r.version, __by: r.entered_by, __at: iso(r.entered_at), __status: r.status, __time: iso(r.row_time) });
+    (values[k] = values[k] || []).push({ ...r.row, __id: r.id, __v: r.version, __by: r.entered_by, __byName: r.entered_by_name || null, __at: iso(r.entered_at), __status: r.status, __time: iso(r.row_time) });
   }
   return {
     id: c.id, patient: c.demo_patient || { name: '', ageSex: '', bed: '', mrn: '' }, patientId: c.patient_id, encounterId: c.encounter_id,
@@ -504,7 +505,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     const c = (await db.query('SELECT id, version, narrative, applied, pathways, pinned, patient_id, encounter_id, demo_patient, updated_at FROM cases WHERE id=$1', [id])).rows[0];
     if (!c) throw new ApiError(404, 'not_found', 'Case not found');
     const [rows, vals, notes, acks] = await Promise.all([
-      db.query(`SELECT cr.*, u.name AS by_name, COALESCE(cr.updated_at, cr.entered_at) AS changed_at FROM case_rows cr LEFT JOIN users u ON u.id = COALESCE(cr.updated_by, cr.entered_by)
+      db.query(`SELECT cr.*, u.name AS by_name, eu.name AS entered_by_name, COALESCE(cr.updated_at, cr.entered_at) AS changed_at FROM case_rows cr LEFT JOIN users u ON u.id = COALESCE(cr.updated_by, cr.entered_by) LEFT JOIN users eu ON eu.id = cr.entered_by
                  WHERE cr.case_id=$1 AND COALESCE(cr.updated_at, cr.entered_at) > $2 ORDER BY changed_at, cr.id LIMIT ${MAX_CHANGES + 1}`, [id, q.since]),
       db.query(`SELECT v.key, v.value, v.version, v.updated_at AS changed_at, v.updated_by AS by_id, u.name AS by_name FROM case_values v LEFT JOIN users u ON u.id=v.updated_by
                  WHERE v.case_id=$1 AND v.updated_at > $2 ORDER BY v.updated_at, v.key LIMIT ${MAX_CHANGES + 1}`, [id, q.since]),
@@ -521,7 +522,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
         version: c.version, narrative: c.narrative, applied: c.applied, pathways: c.pathways, pinned: c.pinned, patient: c.demo_patient, patientId: c.patient_id, encounterId: c.encounter_id,
         updatedAt: iso(c.updated_at), ...(can(req.actor, 'patient.read') ? await recordsOf(db, c.patient_id, c.encounter_id) : { patientRecord: null, encounterRecord: null }) },
       rows: rows.rows.map((r) => (hidden(r) ? { id: r.id, setId: r.set_id, groupId: r.group_id, status: r.status, version: r.version, changedAt: iso(r.changed_at) }
-        : { ...rowOut(r), byName: r.by_name, changedAt: iso(r.changed_at) })),
+        : { ...rowOut(r), byName: r.by_name, enteredByName: r.entered_by_name || null, changedAt: iso(r.changed_at) })),
       values: vals.rows.map((v) => ({ key: v.key, value: v.value, version: v.version, byName: v.by_name, changedAt: iso(v.changed_at) })),
       notes: notes.rows.map((n) => ({ id: n.id, caseId: n.case_id, type: n.type, setId: n.set_id, text: n.text, status: n.status, signedBy: n.signed_by, signedByName: n.signed_by_name,
         signedAt: iso(n.signed_at), amends: n.amends_id, reason: n.reason, createdAt: iso(n.created_at), version: n.version, byName: n.by_name, changedAt: iso(n.updated_at) })),

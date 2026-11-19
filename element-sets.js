@@ -175,6 +175,24 @@ window.SEED_SETS=[
   {"title":"Glucose target range (display only)","fields":[
    {"id":"tgt_low","label":"Glucose target low (entered by clinician)","type":"number","unit":"mg/dL","meta":true,"rationale":"No default is supplied. The band is drawn only when both numbers are typed."},
    {"id":"tgt_high","label":"Glucose target high (entered by clinician)","type":"number","unit":"mg/dL","meta":true,"rationale":"No default is supplied."}]}]}
+,{
+ "setId":"care.intake_output",
+ "direct":true,
+ "quick":{"order":6,"short":"Intake/output"},
+ "view":{"type":"flowsheet","timeField":"io_time"},
+ "kind":"care",
+ "version":1,
+ "title":"Intake / output",
+ "description":"Fluid intake and output entries, one row per entry. Volumes are recorded as entered; no targets or limits are supplied.",
+ "contexts":["care"],
+ "requires":[],
+ "suggests":[],
+ "sections":[
+  {"title":"Intake and output","fields":[
+   {"id":"io_time","label":"Time recorded","type":"datetime","repeat":true,"group":"io","rationale":"Timestamp for this entry."},
+   {"id":"io_type","label":"Type","type":"select","options":["Intake oral","Intake IV","Urine","Drain","Stool","Other"],"repeat":true,"group":"io","rationale":"Which kind of intake or output this is."},
+   {"id":"io_volume","label":"Volume","type":"number","unit":"mL","repeat":true,"group":"io","rationale":"Shown as entered; never compared with a target here.","fhir":{"resource":"Observation","valueType":"valueQuantity"}},
+   {"id":"io_note","label":"Note","type":"text","repeat":true,"group":"io"}]}]}
 /* Seed pathways (chunk 23): member lists only. No doses, bands, thresholds or rules. */
 ,{
  "setId":"pathway.dka",
