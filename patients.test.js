@@ -272,3 +272,124 @@ test('records are never deleted: not by the app role, not even by the owner', as
   }
   await assert.rejects(owner.query("UPDATE patients SET merged_into=id, active=false, merged_at=now(), merged_by=(SELECT id FROM users LIMIT 1) WHERE id=(SELECT id FROM patients LIMIT 1)"), /patients_merge_shape/, 'a record cannot be merged into itself');
 });
+
+// ---------------------------------------------------------------- chunk 34c: real patient and encounter on the case; migration of typed demo patients
+const { parseAgeSex, splitWardBed } = require('./patients.js');
+const demoCase = async (dp) => (await owner.query('INSERT INTO cases (demo_patient) VALUES ($1) RETURNING id', [JSON.stringify(dp)])).rows[0].id;
+const MIG = '/api/admin/migrate-demo-patients';
+
+test('34c: parseAgeSex and splitWardBed read typed text without inventing anything', () => {
+  assert.deepEqual(parseAgeSex('42 / Female'), { age: 42, sex: 'female' });
+  assert.deepEqual(parseAgeSex('42 y · male'), { age: 42, sex: 'male' });
+  assert.deepEqual(parseAgeSex('about 7 y · other'), { age: 7, sex: 'other' });
+  assert.deepEqual(parseAgeSex('6 months F'), { age: null, sex: 'female' }, 'months are not years: unknown, never 6');
+  assert.deepEqual(parseAgeSex('200 / M'), { age: null, sex: 'male' });
+  assert.deepEqual(parseAgeSex(''), { age: null, sex: 'unknown' });
+  assert.deepEqual(parseAgeSex(null), { age: null, sex: 'unknown' });
+  assert.deepEqual(splitWardBed('Ward A / 12'), { ward: 'Ward A', bed: '12' });
+  assert.deepEqual(splitWardBed('Ward A · 12'), { ward: 'Ward A', bed: '12' });
+  assert.deepEqual(splitWardBed('ICU'), { ward: 'ICU', bed: null }, 'one part is a ward; a bed needs a ward');
+  assert.deepEqual(splitWardBed('  '), { ward: null, bed: null });
+});
+
+test('34c: only an admin may run the migration; everyone else is 403 and nothing is written', async () => {
+  const before = await maxId();
+  for (const role of ['doctor', 'nurse', 'viewer', 'informatician']) {
+    const r = await who[role].agent.post(MIG).send({}); assert.equal(r.status, 403, role); assert.equal(r.body.error.action, 'migrate.run');
+  }
+  assert.equal((await since(before)).length, 0);
+  assert.equal((await who.admin.agent.post(MIG).send({ dryRun: 'yes' })).status, 400, 'strict body');
+  assert.equal((await who.admin.agent.post(MIG).send({ extra: 1 })).status, 400);
+});
+
+test('34c: migration makes a real patient and encounter per typed demo patient, links the case, audits each step, and is idempotent', async () => {
+  const dry = await demoCase({ name: 'Mig Dry', ageSex: '42 / Female', bed: 'MigWardD / 1', mrn: 'DEMO-1' });
+  const ok = await demoCase({ name: '  Mig   Alpha  ', ageSex: '42 / Female', bed: 'MigWard / 7', mrn: 'DEMO-77' });
+  const noAge = await demoCase({ name: 'Mig Beta', ageSex: 'adult', bed: '', mrn: '' });
+  const months = await demoCase({ name: 'Mig Gamma', ageSex: '6 months M', bed: 'MigWard2', mrn: '' });
+  const noName = await demoCase({ name: '', ageSex: '30 / M', bed: 'MigWard3 / 1', mrn: '' });
+  const nullDemo = (await owner.query("INSERT INTO cases (legacy_id) VALUES ('mig-legacy') RETURNING id")).rows[0].id;
+  const patientsBefore = Number((await owner.query('SELECT count(*) n FROM patients')).rows[0].n);
+
+  // dry run: reports, writes nothing
+  const a0 = await maxId();
+  const d = await who.admin.agent.post(MIG).send({ dryRun: true });
+  assert.equal(d.status, 200); assert.equal(d.body.dryRun, true); assert.ok(d.body.candidates >= 5);
+  assert.equal(Number((await owner.query('SELECT count(*) n FROM patients')).rows[0].n), patientsBefore); assert.equal((await since(a0)).length, 0);
+  assert.ok(d.body.skipped.some((x) => x.caseId === noName && x.reason === 'no_name'));
+
+  // real run
+  const a1 = await maxId(), r = await who.admin.agent.post(MIG).send({});
+  assert.equal(r.status, 200, JSON.stringify(r.body)); assert.deepEqual(r.body.failed, []); assert.equal(r.body.dryRun, false);
+  assert.ok(r.body.skipped.some((x) => x.caseId === noName && x.reason === 'no_name'), 'no typed name: left alone and reported');
+  assert.ok(!r.body.skipped.some((x) => x.caseId === nullDemo), 'a case without any demo patient is not even a candidate');
+  const row = async (id) => (await owner.query('SELECT patient_id, encounter_id, version, demo_patient FROM cases WHERE id=$1', [id])).rows[0];
+
+  const c1 = await row(ok), p1 = (await owner.query('SELECT * FROM patients WHERE id=$1', [c1.patient_id])).rows[0];
+  assert.equal(p1.name, 'Mig Alpha', 'name tidied'); assert.ok(mrnValid(p1.mrn), 'server-made MRN'); assert.notEqual(p1.mrn, 'DEMO-77');
+  assert.equal(p1.sex, 'female'); assert.equal(p1.age_estimated, true); assert.equal(p1.created_by, who.admin.id);
+  assert.equal((await owner.query("SELECT date_of_birth = (CURRENT_DATE - make_interval(years => 42))::date AS ok FROM patients WHERE id=$1", [p1.id])).rows[0].ok, true, 'an age becomes an estimated date of birth');
+  const e1 = (await owner.query('SELECT * FROM encounters WHERE id=$1', [c1.encounter_id])).rows[0];
+  assert.equal(e1.patient_id, p1.id); assert.equal(e1.ward, 'MigWard'); assert.equal(e1.bed, '7'); assert.equal(e1.type, 'admission'); assert.equal(e1.status, 'open');
+  assert.equal(c1.version, 2, 'the case version moved on so a stale browser gets a conflict, not an overwrite');
+  assert.equal(c1.demo_patient.mrn, 'DEMO-77', 'the typed copy is left as it was');
+
+  const c2 = await row(noAge), p2 = (await owner.query('SELECT * FROM patients WHERE id=$1', [c2.patient_id])).rows[0];
+  assert.equal(p2.date_of_birth, null, 'an unreadable age stays unknown'); assert.equal(p2.age_estimated, false); assert.equal(p2.sex, 'unknown'); assert.equal(c2.encounter_id, null, 'no ward typed: no encounter');
+  const c3 = await row(months), p3 = (await owner.query('SELECT * FROM patients WHERE id=$1', [c3.patient_id])).rows[0];
+  assert.equal(p3.date_of_birth, null, '6 months is not 6 years'); assert.equal(p3.sex, 'male');
+  const e3 = (await owner.query('SELECT * FROM encounters WHERE id=$1', [c3.encounter_id])).rows[0]; assert.equal(e3.ward, 'MigWard2'); assert.equal(e3.bed, null);
+  assert.equal((await row(dry)).patient_id !== null, true, 'the dry-run case is migrated by the real run');
+  assert.equal((await row(noName)).patient_id, null);
+
+  // audit: patient.create, encounter.create, case.link for a case with a ward; no national id anywhere; one summary row; actor is the admin
+  const rows = await since(a1), mineRows = rows.filter((x) => x.entity_id === c1.patient_id || x.entity_id === c1.encounter_id || x.entity_id === ok);
+  assert.deepEqual(mineRows.map((x) => x.action).sort(), ['case.link', 'encounter.create', 'patient.create']);
+  const pc = mineRows.find((x) => x.action === 'patient.create'); assert.equal(pc.after.demoMrn, 'DEMO-77'); assert.equal(pc.after.migratedFromDemo, true); assert.equal(pc.after.mrn, p1.mrn);
+  assert.equal(pc.patient_id, p1.id); assert.ok(pc.reason);
+  for (const x of rows) { assert.equal(x.user_id, who.admin.id); assert.ok(!JSON.stringify(x).includes('nationalId":"'), 'no national id in the audit log'); }
+  const sum = rows.filter((x) => x.action === 'migration.demo_patients'); assert.equal(sum.length, 1); assert.equal(sum[0].after.migrated, r.body.migrated);
+
+  // idempotent: nothing already linked is touched, no new patients, no per-case audit rows; only the summary row
+  const pCount = Number((await owner.query('SELECT count(*) n FROM patients')).rows[0].n), a2 = await maxId();
+  const again = await who.admin.agent.post(MIG).send({});
+  assert.equal(again.status, 200); assert.equal(again.body.migrated, 0); assert.equal(again.body.encountersCreated, 0); assert.deepEqual(again.body.failed, []);
+  assert.equal(Number((await owner.query('SELECT count(*) n FROM patients')).rows[0].n), pCount);
+  assert.deepEqual((await since(a2)).map((x) => x.action), ['migration.demo_patients']);
+  assert.equal((await row(ok)).version, 2); assert.equal((await row(ok)).patient_id, c1.patient_id);
+});
+
+test('34c: a bed already taken by an open encounter does not stop the migration: the case is linked without an encounter and the bed is reported', async () => {
+  const other = await mkPatient();
+  assert.equal((await who.doctor.agent.post(`/api/patients/${other.id}/encounters`).send({ type: 'admission', ward: 'ClashW', bed: '9' })).status, 201);
+  const cid = await demoCase({ name: 'Mig Clash', ageSex: '50 / F', bed: 'ClashW / 9', mrn: '' });
+  const r = await who.admin.agent.post(MIG).send({});
+  assert.equal(r.status, 200); assert.deepEqual(r.body.failed, []);
+  assert.ok(r.body.bedConflicts.some((x) => x.caseId === cid && x.typedBed === 'ClashW / 9'));
+  const c = (await owner.query('SELECT patient_id, encounter_id FROM cases WHERE id=$1', [cid])).rows[0];
+  assert.ok(c.patient_id); assert.equal(c.encounter_id, null);
+  assert.equal(Number((await owner.query("SELECT count(*) n FROM encounters WHERE lower(ward)='clashw' AND bed='9' AND status='open'")).rows[0].n), 1, 'the other patient keeps the bed');
+});
+
+test('34c: GET /cases/:id carries the real patient and encounter (display fields only), follows mergedInto, and an informatician gets none', async () => {
+  const p = await mkPatient({ phone: '+91 98200 22222', nationalId: 'ZZ-9999' });
+  const enc = (await who.doctor.agent.post(`/api/patients/${p.id}/encounters`).send({ type: 'admission', ward: 'RecW', bed: '3' })).body;
+  const cs = (await who.doctor.agent.post('/api/cases').send({})).body;
+  const link = await who.doctor.agent.post(`/api/cases/${cs.id}/link`).send({ expectedVersion: cs.version, patientId: p.id, encounterId: enc.id });
+  assert.equal(link.status, 200);
+  const g = (await who.nurse.agent.get('/api/cases/' + cs.id)).body;
+  assert.deepEqual(g.patientRecord, { id: p.id, mrn: p.mrn, name: p.name, sex: 'female', dateOfBirth: '1980-05-17', ageEstimated: false });
+  assert.equal(g.encounterRecord.ward, 'RecW'); assert.equal(g.encounterRecord.bed, '3'); assert.equal(g.encounterRecord.status, 'open'); assert.equal(g.encounterRecord.id, enc.id);
+  assert.ok(!JSON.stringify(g.patientRecord).includes('ZZ-9999') && !('phone' in g.patientRecord) && !('nationalId' in g.patientRecord), 'no phone or national id on the case');
+  // merged: the record that was kept is shown, and it says where it came from
+  const keep = await mkPatient();
+  assert.equal((await who.admin.agent.post(`/api/patients/${p.id}/merge`).send({ intoPatientId: keep.id, reason: 'same person twice' })).status, 200);
+  const m = (await who.doctor.agent.get('/api/cases/' + cs.id)).body;
+  assert.equal(m.patientRecord.id, keep.id); assert.equal(m.patientRecord.mrn, keep.mrn); assert.equal(m.patientRecord.mergedFrom, p.id);
+  // roles without patient.read do not get the identity
+  const inf = (await who.informatician.agent.get('/api/cases/' + cs.id)).body;
+  assert.equal(inf.patientRecord, null); assert.equal(inf.encounterRecord, null); assert.equal(inf.patientId, p.id, 'the link itself is unchanged by a merge');
+  // an unlinked case has none
+  const bare = (await who.doctor.agent.post('/api/cases').send({})).body;
+  assert.equal((await who.doctor.agent.get('/api/cases/' + bare.id)).body.patientRecord, null);
+});

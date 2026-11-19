@@ -19,15 +19,17 @@ A standalone, context-aware, trajectory-aware, pathway-aware EMR. This file keep
 
 ## 1. Where the project stands
 
-**Built (chunks 1-34a, 34b1-34b3):**
+**Built (chunks 1-34a, 34b1-34b3, 34c):**
 - Single-file prototype `enhancer.html`: quick bar, fever chart, insulin grid, flowsheets, notes (draft/sign/amend), pathways, rules and alerts, EMR shell, FHIR export.
 - Server in the repo root: PostgreSQL schema, REST API, `store.js` cache-first client layer, import from browser, conflict screen, login and sessions, roles and permissions, CSRF, users screen, forced password change, audit log with admin screen and CSV export, entered-in-error history drawer, sign-in audit events, patients/encounters/merge/duplicate-check API (`patients.js`).
-- **187 server tests pass** on PostgreSQL 16, plus 9 new store tests (47 in `store.test.js`).
+- **202 tests pass** on PostgreSQL 16 (`npm test`): 187 server tests, the store tests (48 in `store.test.js`), and the 34c tests.
 - 34b3 filled in `onPatientChosen`: list open encounters or start one (type, ward, bed), create the chart, link it with `Store.patients.link`, open Summary; the case picker shows name and MRN. The chart's typed `patient` fields are a display copy of the real patient until 34c reads the real record.
 - 34b2 added the Find or register a patient dialog (`#ptFind`) in `enhancer.html`, opened by + New patient in server mode; it ends at `onPatientChosen(patient)`, which 34b3 fills in. Demo mode keeps the typed flow.
 - 34b1 added `Store.patients` (search, get, create, update, encounters, link) to `store.js`; server mode only, nothing cached, Demo mode rejects with `demo_mode`.
 
-**Next up:** 34c, 34d, then 35a onward in the order below.
+- 34c: the case now carries read-only `patientRecord` and `encounterRecord` (real patient and open encounter, merged duplicates shown as the kept record, none for an informatician). `patientView(c)` in `enhancer.html` is the one place the banner, Patients rows and case pickers read from; in server mode the Edit patient popover is hidden, Demo mode is unchanged. `POST /admin/migrate-demo-patients` (admin, idempotent, audited per case, `dryRun`) turns typed demo patients into real ones.
+
+**Next up:** 34d, then 35a onward in the order below.
 
 **Manual work that is not a chunk (do soon, needs two real browsers):**
 - [ ] (a) Force a conflict on one row and confirm the side-by-side screen appears.
@@ -174,7 +176,7 @@ enhancer.html only. Fill in onPatientChosen(patient): list the patient's open en
 **Done when:** A chosen patient plus encounter is linked to the case and Summary opens; a bed conflict gives a plain message.
 
 
-### [ ] 34c. Patients 3: banner and Patients screen use real data; migrate demo_patient
+### [x] 34c. Patients 3: banner and Patients screen use real data; migrate demo_patient
 
 **Goal:** Replace free-typed banner fields with patient and encounter data.
 

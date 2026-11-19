@@ -265,3 +265,18 @@ A patient in answers: `{id, mrn, name, sex, dateOfBirth, ageEstimated, active, m
 **Never deleted:** patients and encounters have no DELETE route, a trigger refuses DELETE and TRUNCATE for everyone, and the app database role has no such right.
 
 **Decisions to confirm:** (1) an informatician cannot search or open patients (content review does not need identities); (2) a nurse may register and correct patients (a correction needs a reason); (3) merging moves nothing and reads follow the pointer, which is reversible but means chunks 34b to 37 must follow `mergedInto`; (4) an estimated age is stored as a date of birth with `ageEstimated: true`; (5) the attending must be a doctor or admin; (6) searches are not written to the audit log (opening a record is); (7) one open encounter per bed is enforced for every encounter type that has a ward and bed.
+
+## Real patient on the case, and the demo-patient migration (chunk 34c)
+
+**The case carries the real patient and encounter.** `GET /cases/:id` (and every other answer that returns a case) has two more read-only fields, next to the older typed `patient`:
+
+- `patientRecord`: `{id, mrn, name, sex, dateOfBirth, ageEstimated, mergedFrom?}` or `null`. Display fields only: no phone, no national id. A case whose patient was merged into another shows the record that was **kept** (`mergedFrom` is the duplicate's id); the link itself is not changed.
+- `encounterRecord`: `{id, type, status, ward, bed, startAt, endAt}` or `null`.
+
+`GET /cases/:id` sends both as `null` to a role without `patient.read` (an informatician). The browser caches them on the case but never diffs or sends them back; `Store.patients.link` takes optional `patient` and `encounter` display objects so the banner shows the chosen record at once. `GET /cases` (the list) is unchanged.
+
+| Route | Body | What it does |
+|---|---|---|
+| `POST /admin/migrate-demo-patients` | `{dryRun?: boolean}` | Admin only (`migrate.run`). For every case with **no patient** and a typed `demo_patient` name: makes a real patient (server MRN; the typed MRN is kept only in the audit row; typed `age / sex` is read when clear, otherwise the age stays **unknown** and the sex `unknown`), an open `admission` encounter when a ward was typed (`Ward / bed`, one part is a ward only), and links the case (`version + 1`). `demo_patient` is left untouched. Each case is one transaction with its own audit rows (`patient.create`, `encounter.create`, `case.link`, all marked `migratedFromDemo`); a final `migration.demo_patients` row holds the counts. **Idempotent**: only unlinked cases are touched, so a second run migrates 0. A bed that already has an open encounter does not stop it: the case is linked without an encounter and listed in `bedConflicts`. A case with no usable name is listed in `skipped` (`no_name`) and left alone. A case that fails rolls back whole and is listed in `failed`; run it again. Answer: `{dryRun, candidates, migrated, encountersCreated, skipped:[{caseId,reason}], bedConflicts:[{caseId,typedBed}], failed:[{caseId,reason}]}`. `dryRun:true` writes nothing. Duplicate patients are **not** detected: two charts with the same typed name become two patients; an admin merges them afterwards. |
+
+**Decisions to confirm:** (1) the migration is admin only; (2) it never guesses an age (months, ages above 120 and unreadable text stay unknown); (3) the typed `demo_patient` stays on the case as a record of what was typed.

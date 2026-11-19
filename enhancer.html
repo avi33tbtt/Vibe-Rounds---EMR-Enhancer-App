@@ -1151,7 +1151,7 @@ $('slist').innerHTML=h||'<span class="mu">No matching sets.</span>';
 const sg2=SUGG.id==CUR.id?SUGG.items.filter(x=>getSet(x.setId)&&!done.has(x.setId)):[];
 $('sugs').innerHTML=sg2.map(x=>{const t=getSet(x.setId);return`<button class="chip" data-add="${esc(x.setId)}" title="${esc(x.reason)}">+ ${esc(t.title||x.setId)}</button><div class="mu" style="margin:-2px 0 4px 8px">${esc(x.reason)}</div>`}).join('')+sgp.map(x=>{const t=getSet(x.pathwayId);return`<button class="chip" data-pw="${esc(x.pathwayId)}" title="${esc(x.reason)}">Preview pathway: ${esc(t.title||x.pathwayId)}</button><div class="mu" style="margin:-2px 0 4px 8px">${esc(x.reason)}</div>`+(PWPV==x.pathwayId?pwPrev(t):'')}).join('')}
 $('sb').addEventListener('click',e=>{const a=e.target.closest('[data-add]');if(a){addSet(a.dataset.add);$('addPanel').classList.remove('open');return}const pw=e.target.closest('[data-pw]');if(pw){pwOpen(pw.dataset.pw);return}const pg=e.target.closest('[data-pwgo]');if(pg){pwGo(pg.dataset.pwgo);$('addPanel').classList.remove('open');return}const pc=e.target.closest('[data-pwcl]');if(pc){pwOpen('');return}});
-function picker(){const c=getC().filter(x=>!x.syn),lab=x=>((x.patient&&x.patient.name?x.patient.name+(x.patient.mrn?' ('+x.patient.mrn+')':'')+' · ':'')+(x.saved||x.updatedAt||'').slice(0,10))+' · '+((x.narrative||'').trim().slice(0,28)||(x.applied||[]).map(a=>{const s=getSet(a.setId);return s&&s.title}).filter(Boolean).join(', ').slice(0,28)||'(empty)');
+function picker(){const c=getC().filter(x=>!x.syn),lab=x=>(pvLabel(x)+(x.saved||x.updatedAt||'').slice(0,10))+' · '+((x.narrative||'').trim().slice(0,28)||(x.applied||[]).map(a=>{const s=getSet(a.setId);return s&&s.title}).filter(Boolean).join(', ').slice(0,28)||'(empty)');
 $('cpick').innerHTML='<option value="">— current / new case —</option>'+c.map(x=>`<option value="${esc(x.id)}">${esc(lab(x))}</option>`).join('');$('cpick').value=c.some(x=>x.id==CUR.id)?CUR.id:''}
 function addSet(id){const had=CUR.applied.some(a=>a.setId==id);if(!applySet(CUR,id))return toast('Set not found: '+id);if(!had)bumpUsage(id);persist();renderCase();renderPatientBanner()}
 function rmSet(id){if(!getSet(id))CUR.applied=CUR.applied.filter(a=>a.setId!=id);else if(!removeSet(CUR,id))return;persist();renderCase();renderPatientBanner()}
@@ -1159,7 +1159,7 @@ function ensureRowIds(c){Object.keys(c.values||{}).forEach(k=>{if(/\/@[^/]+$/.te
 /* Deleting a reading = mark it entered in error with a required reason. It leaves the chart; the server keeps it, hidden, with the reason. */
 function dropRow(rows,i){const r=rows[i];if(!r)return false;const why=prompt('Mark this reading as entered in error. Reason (required):');if(why===null)return false;if(!why.trim()){toast('A reason is required to mark a reading as entered in error.');return false}
 if(Store.mode==='server'&&r.__id)Store.reasons[r.__id]=why.trim();rows.splice(i,1);return true}
-function persist(msg){if(!CUR)return;clearTimeout(PT);const c=getC(),i=c.findIndex(x=>x.id==CUR.id),p=CUR.patient||{},hasPatient=!!(p.name||p.ageSex||p.bed||p.mrn),empty=!(CUR.narrative||'').trim()&&!CUR.applied.length&&!(CUR.pathways||[]).length&&!hasPatient;
+function persist(msg){if(!CUR)return;clearTimeout(PT);const c=getC(),i=c.findIndex(x=>x.id==CUR.id),p=CUR.patient||{},hasPatient=!!(p.name||p.ageSex||p.bed||p.mrn||CUR.patientId),empty=!(CUR.narrative||'').trim()&&!CUR.applied.length&&!(CUR.pathways||[]).length&&!hasPatient;
 if(empty){if(i>=0){c.splice(i,1);setC(c)}picker();return}
 CUR.updatedAt=new Date().toISOString();patientOf(CUR);ensureRowIds(CUR);const cp=JSON.parse(JSON.stringify(CUR));if(i<0)c.push(cp);else c[i]=cp;if(!setC(c)){$('sv').textContent='NOT SAVED';return}
 $('sv').textContent=Store.status().text;if(msg)toast('Saved ('+c.length+' cases)');picker();pwRefresh();alertsRender();if($('ov')&&$('ov').classList.contains('on'))summaryWorkspace();renderPatientBanner();if(!CASE_OPEN)renderPatients()}
@@ -1756,35 +1756,50 @@ window.addEventListener('storage',e=>{if(e.key=='cases')toast('Cases were change
 /* ---------------- Phase 4B / chunk 25A: patient-centred shell ---------------- */
 let CASE_OPEN=false;
 function patientOf(c){if(!c.patient||typeof c.patient!=='object')c.patient={name:'',ageSex:'',bed:'',mrn:''};return c.patient}
+/* Chunk 34c: the ONE place that decides what the banner, the Patients rows and the case pickers show about a patient.
+   Server mode with a linked chart: the real patient and open encounter the server sent (read-only copies; a merged duplicate already arrives as the kept record).
+   Otherwise (Demo mode, or a chart not linked yet): the typed demo fields, as before. */
+function patientView(c){
+  c=c||{};const t=patientOf(c),r=SRV()?c.patientRecord:null;
+  if(r){
+    const e=c.encounterRecord&&c.encounterRecord.status==='open'?c.encounterRecord:null,ward=(e&&e.ward)||'',bed=(e&&e.bed)||'';
+    return{real:true,linked:true,name:r.name||'',ageSex:[pfAge(r),r.sex&&r.sex!=='unknown'?r.sex:''].filter(Boolean).join(' · '),mrn:r.mrn||'',ward,bed,wardBed:[ward,bed].filter(Boolean).join(' / '),mergedFrom:r.mergedFrom||null};
+  }
+  const bt=String(t.bed||'').trim(),w=(bt.split(/\s*\/\s*|\s+[·|]\s+/)[0]||'').trim()||bt;
+  return{real:false,linked:!!(SRV()&&c.patientId),name:t.name||'',ageSex:t.ageSex||'',mrn:t.mrn||'',ward:w,bed:bt,wardBed:bt,mergedFrom:null};
+}
+function pvLabel(c){const v=patientView(c);return v.name?v.name+(v.mrn?' ('+v.mrn+')':'')+' · ':''}
 function renderPatientBanner(){
   const bar=$('patientbar');if(!bar)return;
   bar.classList.toggle('open',!!CASE_OPEN&&!!CUR);
   document.documentElement.style.setProperty('--patientbar-height',CASE_OPEN&&CUR?(bar.offsetHeight||0)+'px':'0px');
   if(!CASE_OPEN||!CUR)return;
-  const p=patientOf(CUR),name=(p.name||'Unnamed demo patient').trim();
+  const p=patientView(CUR),name=(p.name||(SRV()?'Unnamed patient':'Unnamed demo patient')).trim();
   $('ptName').textContent=name;
-  $('ptMeta').textContent=[p.ageSex,p.bed?'Ward / bed: '+p.bed:'',p.mrn?'MRN: '+p.mrn:''].filter(Boolean).join(' · ')||'Demo patient details not entered';
+  $('ptMeta').textContent=[p.ageSex,p.wardBed?'Ward / bed: '+p.wardBed:'',p.mrn?'MRN: '+p.mrn:'',p.mergedFrom?'merged record':''].filter(Boolean).join(' · ')||(SRV()?'Not linked to a patient record':'Demo patient details not entered');
   const ds=(CUR.applied||[]).map(a=>getSet(a.setId,a)).filter(s=>s&&s.kind==='disease');
   $('ptDiagnosis').innerHTML=ds.map(s=>`<span class="ptchip">${esc(s.title||s.setId)}</span>`).join('');
   const ps=(CUR.pathways||[]).map(x=>getSet(x.pathwayId,x)).filter(Boolean);
   $('ptPathways').innerHTML=ps.map(s=>`<span class="ptchip">Pathway: ${esc(s.title||s.setId)}</span>`).join('');
   let n=0;try{if(window.CDS&&CDS.evalRules)n=CDS.evalRules(CUR,ruleReg()).length}catch(e){}
   $('ptAlerts').textContent='Alerts '+n;
-  $('pt_name').value=p.name||'';$('pt_ageSex').value=p.ageSex||'';$('pt_bed').value=p.bed||'';$('pt_mrn').value=p.mrn||'';
+  const eb=$('ptEditBtn');if(eb)eb.style.display=SRV()?'none':'';          // chunk 34c: in server mode the banner shows the real record; the typed-details popover is Demo mode only
+  if(SRV())$('patientedit').classList.remove('open');
+  else{const t=patientOf(CUR);$('pt_name').value=t.name||'';$('pt_ageSex').value=t.ageSex||'';$('pt_bed').value=t.bed||'';$('pt_mrn').value=t.mrn||''}
 }
 function refreshLandingPicker(){
   const el=$('landingPicker');if(!el)return;
   const cases=getC().filter(x=>!x.syn);
   el.innerHTML='<option value="">Select an existing case…</option>'+cases.map(c=>{
-    const p=c.patient||{},label=(p.name||'Unnamed patient')+(p.mrn?' · '+p.mrn:'')+' · '+String(c.updatedAt||'').slice(0,10);
+    const p=patientView(c),label=(p.name||'Unnamed patient')+(p.mrn?' · '+p.mrn:'')+' · '+String(c.updatedAt||'').slice(0,10);
     return `<option value="${esc(c.id)}">${esc(label)}</option>`;
   }).join('');
 }
 /* ---------------- Phase 4B / chunk 25F: Patients landing screen ---------------- */
 const MYPTS_KEY='mypts';
 function myPatientIds(){try{const a=JSON.parse(localStorage.getItem(MYPTS_KEY)||'[]');return Array.isArray(a)?a.filter(x=>typeof x==='string'):[]}catch(e){return[]}}
-function wardOf(c){const b=String((c&&c.patient&&c.patient.bed)||'').trim();if(!b)return'';return b.split(/\s*\/\s*|\s+[·|]\s+/)[0].trim()||b}
-function patientBedKey(c){return String((c.patient||{}).bed||'').trim().toLowerCase()||'~'}
+function wardOf(c){return patientView(c).ward}                 /* chunk 34c: real encounter ward, or the typed one in Demo mode */
+function patientBedKey(c){return patientView(c).bed.toLowerCase()||'~'}
 function patientLatestTime(c,s){
   let best=null;const fs=flS(s),groups=[...new Set(fs.filter(f=>f.repeat).map(f=>f.group||f.id))];
   groups.forEach(g=>{const fields=grp(s,g),tc=tcol(fields);if(!tc)return;rowsOf(c,s.setId,g).forEach(r=>{const t=rowT(r,tc);if(!Number.isFinite(t))return;const hasValue=fields.some(f=>f!==tc&&!f.meta&&r[f.id]!==undefined&&String(r[f.id]).trim()!=='');if(hasValue&&(best===null||t>best))best=t})});
@@ -1796,7 +1811,7 @@ function patientDueItems(c){const out=[];(c.applied||[]).forEach(a=>{const s=get
 function patientDueLabel(x){if(x.set==='care.hba1c_monitoring'&&x.field.toLowerCase().includes('hba1c')){const n=Math.round((new Date(x.value).getTime()-new Date().setHours(0,0,0,0))/864e5);return n<0?'HbA1c overdue '+(-n)+' d':n===0?'HbA1c due today':'HbA1c due in '+n+' d'}return x.field+': '+x.value}
 function pinListFor(c){let p=c&&Array.isArray(c.pinned)?c.pinned:null;if(!p){const l=Store.pref('pinned',null);if(Array.isArray(l))p=l}if(!p)p=registry().filter(x=>x.direct).sort((a,b)=>((a.quick||{}).order||99)-((b.quick||{}).order||99)).map(x=>x.setId);return p.filter(id=>getSet(id))}
 function patientRowModel(c){
-  const p=patientOf(c),ap=new Set((c.applied||[]).map(a=>a.setId)),diagnoses=(c.applied||[]).map(a=>getSet(a.setId)).filter(s=>s&&s.kind==='disease'),pathways=(c.pathways||[]).map(x=>getSet(x.pathwayId)).filter(Boolean);
+  const p=patientView(c),ap=new Set((c.applied||[]).map(a=>a.setId)),diagnoses=(c.applied||[]).map(a=>getSet(a.setId)).filter(s=>s&&s.kind==='disease'),pathways=(c.pathways||[]).map(x=>getSet(x.pathwayId)).filter(Boolean);
   let alerts=[];try{if(window.CDS&&CDS.evalRules)alerts=CDS.evalRules(c,ruleReg())}catch(e){}
   const log=Array.isArray(c.alertLog)?c.alertLog:[],isAck=a=>{for(let i=log.length-1;i>=0;i--){const l=log[i];if(l&&l.ruleId===a.ruleId&&l.setId===a.setId)return l.sig===a.sig}return false};alerts=alerts.filter(a=>!isAck(a));
   const pins=pinListFor(c),minuteAlerts=alerts.filter(a=>a.op==='minutes_since_gt'),reading=pins.map(id=>{const s=getSet(id);if(!s)return'';const a=minuteAlerts.find(x=>x.setId===id);if(a)return`<span class="patient-chip">${esc(shortOf(s))}: No reading for ${esc(a.value)} min</span>`;if(!ap.has(id))return`<span class="patient-chip">${esc(shortOf(s))}: not added</span>`;const t=patientLatestTime(c,s);return`<span class="patient-chip">${esc(shortOf(s))} ${t==null?'—':esc(patientAgeLabel(t))}</span>`}).join('');
@@ -1902,7 +1917,7 @@ function pfEncRender(hiddenN){
   const o=$('pfOpen');if(o)o.disabled=PF_BUSY||!mayDo('case.link');
 }
 function pfEncPick(){const c=document.querySelector('input[name="pfe"]:checked');$('pfNewEnc').hidden=!(c&&c.value==='new')}
-function pfChartMeta(p,e){return{name:p.name,ageSex:[pfAge(p),p.sex].filter(Boolean).join(' · '),bed:e?[e.ward,e.bed].filter(Boolean).join(' / '):'',mrn:p.mrn||''}}   // display copy for the banner and lists until 34c reads the real record
+function pfChartMeta(p,e){return{name:p.name,ageSex:[pfAge(p),p.sex].filter(Boolean).join(' · '),bed:e?[e.ward,e.bed].filter(Boolean).join(' / '):'',mrn:p.mrn||''}}   // typed display copy; since 34c the banner and lists read the real record (patientView) and this copy only keeps an old chart from looking empty
 async function pfSaved(){
   await Promise.race([Store.flush(),new Promise((_,rej)=>setTimeout(()=>rej({message:'The chart could not be saved in time. Check the connection and try again.'}),20000))]);
   const st=Store.status();if(st.state!=='saved')throw{message:st.text};
@@ -1926,7 +1941,7 @@ async function pfOpenChart(){
     c.patient=pfChartMeta(p,enc);
     if(!setC(all))throw{message:'The chart could not be saved here. Try again.'};
     await pfSaved();
-    await Store.patients.link(c.id,encId?{patientId:p.id,encounterId:encId}:{patientId:p.id});
+    await Store.patients.link(c.id,encId?{patientId:p.id,encounterId:encId,patient:p,encounter:enc}:{patientId:p.id,patient:p});   // the chosen records go to the cache so the banner shows the real data at once (34c)
     const fresh=getC().find(x=>x.id===c.id);
     pfBusy(false);pfClose();enterCase(JSON.parse(JSON.stringify(fresh)),'ov');toast('Chart opened for '+p.name+' (MRN '+(p.mrn||'')+').');
   }catch(er){
@@ -2511,7 +2526,7 @@ function cfmPaint(msg){
   const box=$('cfmBox'),rv=CFM.rv;
   if(!rv){box.innerHTML='<h2 id="cfmT">This patient was changed by someone else</h2><p>'+esc(msg||'Loading…')+'</p><div class="acts"><button class="b" type="button" data-cfm="close">Close</button></div>';return}
   const cf=rv.items.filter(i=>i.state==='conflict'),mine=rv.items.filter(i=>i.state==='mine'),info=rv.items.filter(i=>i.state==='theirs');
-  const nm=(getC().find(x=>x.id===CFM.id)||{}).patient;
+  const nm=patientView(getC().find(x=>x.id===CFM.id));
   let h='<h2 id="cfmT">'+esc(nm&&nm.name?nm.name:'This patient')+' was changed by someone else</h2><p><b>Your changes are not saved yet.</b> Nothing is overwritten until you choose. Pick which version to keep for each item that differs.</p>';
   if(cf.length)h+=cf.map(it=>'<div class="cfmit"><b>'+esc(cfmLabel(it))+'</b><label><input type="radio" name="cfm-'+esc(it.key)+'" value="mine"> <span><i>Keep mine</i><pre>'+esc(it.mine==null?'(removed by me)':cfmTxt(it.mine))+'</pre></span></label><label><input type="radio" name="cfm-'+esc(it.key)+'" value="theirs"> <span><i>Keep theirs</i><pre>'+esc(it.theirs==null?'(removed by them)':cfmTxt(it.theirs))+'</pre></span></label></div>').join('');
   else h+='<p>Nothing you changed clashes with their changes.</p>';

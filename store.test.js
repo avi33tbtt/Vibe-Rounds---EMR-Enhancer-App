@@ -692,3 +692,33 @@ test('34b1: a server 403 for a role is passed on unchanged and nothing is cached
   assert.equal(t.Store.status().state, 'saved'); assert.equal(Object.keys(t.Store._test.failed).length, 0);
   assert.ok(!JSON.stringify([t.Store._test.S, [...t.ls.entries()]]).includes('Asha'), 'the search text is not stored');
 });
+
+// ---------------------------------------------------------------- chunk 34c: real patient and encounter records on a cached case
+test('34c: records from the server are cached on the case, are never sent back, and a link keeps only records that match the new ids', async () => {
+  const h = happy(); let caseVer = 1;
+  const PREC = { id: PID, mrn: '10000008', name: 'Real Name', sex: 'female', dateOfBirth: '1980-05-17', ageEstimated: false };
+  const t = boot(async (m, p, b) => {
+    if (m === 'POST' && p === '/cases') { caseVer = 1; return [201, { version: 1 }]; }
+    if (m === 'POST' && p === '/cases/' + CID + '/link') { caseVer++; return [200, { id: CID, patientId: b.patientId, encounterId: b.encounterId || null, version: caseVer }]; }
+    if (m === 'PATCH' && p === '/cases/' + CID) return [200, { version: ++caseVer }];
+    return h(m, p, b);
+  });
+  await t.Store.init(); t.Store.setCases([mkCase(CID)]); await t.Store.flush();
+  // from the server's case shape
+  const c0 = t.Store._test.fromServerCase({ id: 'srv-1', version: 3, patientId: PID, encounterId: EID, patientRecord: PREC, encounterRecord: { id: EID, type: 'admission', status: 'open', ward: 'W', bed: '4' }, values: {}, notes: [] }, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(c0.patientRecord)), PREC); assert.equal(c0.encounterRecord.bed, '4');
+  assert.equal(t.Store._test.fromServerCase({ id: 'srv-2', version: 1, values: {}, notes: [] }, true).patientRecord, null);
+  assert.ok(!('patientRecord' in t.Store._test.metaOf(c0)), 'never part of what is diffed or sent');
+  // link handing over the chosen patient and encounter: shown at once; a record for a different id is dropped
+  await t.Store.patients.link(CID, { patientId: PID, encounterId: EID, patient: Object.assign({ phone: '123', nationalId: 'X' }, PREC), encounter: { id: EID, type: 'admission', status: 'open', ward: 'W', bed: '4', attendingId: 'u' } });
+  let c = t.Store.getCases()[0];
+  const J = (x) => JSON.parse(JSON.stringify(x));
+  assert.deepEqual(J(c.patientRecord), PREC, 'only the display fields are kept: no phone, no national id'); assert.deepEqual(Object.keys(c.encounterRecord).sort(), ['bed', 'id', 'status', 'type', 'ward']);
+  edit(t.Store, CID, (x) => { x.narrative = 'after'; }); await t.Store.flush();
+  const body = t.writes().filter((x) => x.method === 'PATCH' && x.path === '/cases/' + CID).pop().body;
+  assert.ok(!JSON.stringify(body).includes('Real Name') && !('patientRecord' in body) && !('encounterRecord' in body), 'records are never written back');
+  assert.equal(t.Store.getCases()[0].patientRecord.name, 'Real Name', 'a normal save keeps the records');
+  await t.Store.patients.link(CID, { patientId: PID, patient: { id: '99999999-9999-4999-8999-999999999999', name: 'Someone Else' } });
+  c = t.Store.getCases()[0]; assert.equal(c.patientRecord.name, 'Real Name', 'a record for another id is ignored; the matching cached one stays');
+  assert.equal(c.encounterRecord, null, 'linking without that encounter clears its record');
+});

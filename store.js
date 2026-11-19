@@ -147,6 +147,7 @@
       pathways: sc.pathways || [], alertLog: sc.alertLog || [], values: {}, notes: [], ns: true, rp: true, updatedAt: sc.updatedAt, saved: sc.updatedAt };
     if (Array.isArray(sc.pinned)) c.pinned = sc.pinned;
     c.patientId = sc.patientId || null; c.encounterId = sc.encounterId || null;     // chunk 34b1: set by the server's link route, never typed
+    c.patientRecord = sc.patientRecord || null; c.encounterRecord = sc.encounterRecord || null;   // chunk 34c: read-only display copies of the real patient and encounter; never diffed or sent back
     if (!dry) for (const k of Object.keys(snap)) if (grpOf(k) === id) delete snap[k];
     SN['case:' + id] = { ver: sc.version, data: metaOf(c) };
     for (const k of Object.keys(sc.values || {})) {
@@ -666,7 +667,15 @@
       if (!Number.isInteger(ver) || ver < 1) throw pfail('version_required', 'The version you last saw of this chart is required');
       const r = await api('POST', '/cases/' + cid + '/link', Object.assign({ expectedVersion: ver, patientId: b.patientId }, b.encounterId ? { encounterId: b.encounterId } : {}));
       const s2 = snap['case:' + caseId]; if (s2) s2.ver = r.version;
-      const c = caseById(caseId); if (c) { c.patientId = r.patientId || null; c.encounterId = r.encounterId || null; }
+      const c = caseById(caseId);
+      if (c) {
+        c.patientId = r.patientId || null; c.encounterId = r.encounterId || null;
+        // chunk 34c: the caller may hand over the patient and encounter it just chose, so the banner shows real data at once; anything else is dropped, never kept stale
+        const pr = b.patient && b.patient.id === c.patientId ? pick(b.patient, ['id', 'mrn', 'name', 'sex', 'dateOfBirth', 'ageEstimated']) : null;
+        const er = b.encounter && b.encounter.id === c.encounterId ? pick(b.encounter, ['id', 'type', 'status', 'ward', 'bed', 'startAt', 'endAt']) : null;
+        c.patientRecord = pr || (c.patientRecord && c.patientRecord.id === c.patientId ? c.patientRecord : null);
+        c.encounterRecord = er || (c.encounterRecord && c.encounterRecord.id === c.encounterId ? c.encounterRecord : null);
+      }
       notify(); return r;
     }),
   };

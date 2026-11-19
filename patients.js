@@ -12,6 +12,8 @@
  *  - Identity changes (name, sex, date of birth, phone, national id) need a reason. national_id is never written to the audit log (it is append-only), only the fact it changed.
  *  - One open encounter per ward and bed (unique index), so a bed cannot belong to two patients at once.
  *  - A case already linked to a patient cannot be moved to another patient; the fix for a duplicate is a merge.
+ *  - Chunk 34c: POST /admin/migrate-demo-patients (admin) turns each unlinked case's typed demo_patient into a real patient (and an open encounter when a ward is typed)
+ *    and links the case. It is idempotent (only cases with no patient are touched), one transaction and audit rows per case, and invents nothing: an unreadable age stays unknown.
  */
 const { z } = require('zod');
 
@@ -31,6 +33,22 @@ function luhnDigit(payload) {
 }
 const mrnFor = (n) => { const s = String(n).padStart(7, '0'); return s + luhnDigit(s); };
 const mrnValid = (m) => /^\d{8}$/.test(m) && luhnDigit(m.slice(0, 7)) === +m[7];
+
+// ---------- demo_patient migration helpers (chunk 34c) ----------
+/** Typed 'age / sex' text -> {age, sex}. Never guesses: no readable whole-year age gives null, no clear sex gives 'unknown'. */
+function parseAgeSex(text) {
+  const t = String(text || '').toLowerCase(), m = t.match(/\d{1,3}/), words = t.match(/[a-z]+/g) || [];
+  const notYears = words.some((w) => ['month', 'months', 'mo', 'day', 'days', 'week', 'weeks', 'wk', 'wks', 'm/o'].includes(w));
+  const age = m && !notYears && +m[0] <= 120 ? +m[0] : null;
+  const has = (...a) => words.some((w) => a.includes(w));
+  const sex = has('female', 'f', 'woman', 'girl') ? 'female' : has('male', 'm', 'man', 'boy') ? 'male' : has('other') ? 'other' : 'unknown';
+  return { age, sex };
+}
+/** Typed 'Ward / bed' text -> {ward, bed}, split the same way the screen's wardOf() does. One part is a ward only (a bed needs a ward). */
+function splitWardBed(text) {
+  const parts = String(text || '').split(/\s*\/\s*|\s+[·|]\s+/).map((x) => x.trim()).filter(Boolean);
+  return { ward: parts.length ? parts[0].slice(0, 50) : null, bed: parts.length > 1 ? parts.slice(1).join(' / ').slice(0, 50) : null };
+}
 
 // ---------- validators ----------
 const uuid = z.string().uuid(), ver = z.number().int().min(1);
@@ -62,6 +80,7 @@ const S = {
   encClose: z.object({ expectedVersion: ver, endAt: isoTime.optional() }).strict(),
   encCancel: z.object({ expectedVersion: ver, reason: reasonText }).strict(),
   link: z.object({ expectedVersion: ver, patientId: uuid, encounterId: uuid.optional() }).strict(),
+  migrate: z.object({ dryRun: z.boolean().optional() }).strict(),
 };
 
 function mountPatients(r, { db, ApiError, wrap, parse, idParam, iso, audit, auditOnce, can, loadCase }) {
@@ -248,6 +267,50 @@ function mountPatients(r, { db, ApiError, wrap, parse, idParam, iso, audit, audi
     });
     res.json({ id: out.id, patientId: out.patient_id, encounterId: out.encounter_id, version: out.version });
   }));
+  // ================= one-time migration of typed demo patients (chunk 34c) =================
+  // Each unlinked case with a typed name becomes a real patient (server-made MRN; the typed MRN is kept only in the audit row), plus an open
+  // admission encounter when a ward was typed, and the case is linked. demo_patient is left as it is. Running it again touches nothing already linked.
+  r.post('/admin/migrate-demo-patients', wrap(async (req, res) => {
+    const b = parse(S.migrate, req.body || {});
+    const ids = (await db.query('SELECT id FROM cases WHERE patient_id IS NULL AND demo_patient IS NOT NULL ORDER BY created_at, id')).rows.map((x) => x.id);
+    const out = { dryRun: !!b.dryRun, candidates: ids.length, migrated: 0, encountersCreated: 0, skipped: [], bedConflicts: [], failed: [] };
+    for (const id of ids) {
+      try {
+        const o = await db.withTx(async (c) => {
+          const cs = (await c.query('SELECT id, demo_patient, created_at FROM cases WHERE id=$1 AND patient_id IS NULL FOR UPDATE', [id])).rows[0];
+          if (!cs) return { skip: 'already_linked' };                                    // a parallel run got there first
+          const d = cs.demo_patient || {}, nm = String(d.name || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+          if (nm.length < 2) return { skip: 'no_name' };
+          if (b.dryRun) return { ok: true };
+          const { age, sex } = parseAgeSex(d.ageSex), { ward, bed } = splitWardBed(d.bed);
+          const mrn = mrnFor(Number((await c.query("SELECT nextval('patient_mrn_seq') AS n")).rows[0].n));
+          const p = (await c.query(`INSERT INTO patients (mrn, name, sex, date_of_birth, age_estimated, created_by)
+            VALUES ($1,$2,$3, CASE WHEN $4::int IS NULL THEN NULL ELSE (CURRENT_DATE - make_interval(years => $4::int))::date END, $4::int IS NOT NULL, $5) RETURNING ${PCOLS}`, [mrn, nm, sex, age, req.actor.id])).rows[0];
+          await audit(c, { action: 'patient.create', entity: 'patient', entity_id: p.id, patient_id: p.id, case_id: id, reason: 'Migrated from the typed demo patient of a case',
+            after: { mrn, ...snap(p), migratedFromDemo: true, demoMrn: String(d.mrn || '').slice(0, 40), ageUnknown: age === null } });
+          let enc = null, bedConflict = null;
+          if (ward) {
+            await c.query('SAVEPOINT mig_enc');
+            try {
+              enc = (await c.query(`INSERT INTO encounters (patient_id, type, start_at, ward, bed, created_by) VALUES ($1,'admission',$2,$3,$4,$5) RETURNING ${ECOLS}`, [p.id, cs.created_at, ward, bed, req.actor.id])).rows[0];
+              await c.query('RELEASE SAVEPOINT mig_enc');
+              await audit(c, { action: 'encounter.create', entity: 'encounter', entity_id: enc.id, patient_id: p.id, after: { type: enc.type, startAt: iso(enc.start_at), ...ESNAP(enc), migratedFromDemo: true } });
+            } catch (e) {
+              if (!(e && e.code === '23505' && e.constraint === 'encounters_open_bed_uq')) throw e;
+              await c.query('ROLLBACK TO SAVEPOINT mig_enc'); bedConflict = String(d.bed);   // the bed already has an open encounter: link without one and report it
+            }
+          }
+          const n = (await c.query('UPDATE cases SET patient_id=$2, encounter_id=$3, version=version+1, updated_at=now() WHERE id=$1 RETURNING patient_id, encounter_id', [id, p.id, enc ? enc.id : null])).rows[0];
+          await audit(c, { action: 'case.link', entity: 'case', entity_id: id, case_id: id, patient_id: p.id, before: { patientId: null, encounterId: null }, after: { patientId: n.patient_id, encounterId: n.encounter_id, migratedFromDemo: true } });
+          return { ok: true, enc: !!enc, bedConflict };
+        });
+        if (o.skip) out.skipped.push({ caseId: id, reason: o.skip }); else { out.migrated++; if (o.enc) out.encountersCreated++; if (o.bedConflict) out.bedConflicts.push({ caseId: id, typedBed: o.bedConflict }); }
+      } catch (e) { out.failed.push({ caseId: id, reason: 'error' }); console.error('migrate-demo-patients: case ' + id + ' failed:', e && e.message); }   // that case rolled back whole; the others go on, a rerun retries it
+    }
+    if (!b.dryRun) await db.withTx((c) => audit(c, { action: 'migration.demo_patients', entity: 'system', entity_id: 'demo_patients',
+      after: { candidates: out.candidates, migrated: out.migrated, encountersCreated: out.encountersCreated, skipped: out.skipped.length, bedConflicts: out.bedConflicts.length, failed: out.failed.length } }));
+    res.json(out);
+  }));
 }
 
-module.exports = { mountPatients, mrnFor, mrnValid, luhnDigit };
+module.exports = { mountPatients, mrnFor, mrnValid, luhnDigit, parseAgeSex, splitWardBed };

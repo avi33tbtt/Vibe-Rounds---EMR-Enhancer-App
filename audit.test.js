@@ -54,6 +54,7 @@ test('every write route writes exactly one audit row, attributed to the logged-i
   const P = (u, b) => api().post(u).send(b), c = () => '/api/cases/' + st.c.id;
   // [route key as in permissions.js, expected audit action, expected HTTP status, request]
   const S = [
+    ['POST /admin/migrate-demo-patients', 'migration.demo_patients', 200, () => P('/api/admin/migrate-demo-patients', {})],   // first: nothing with a typed name exists yet, so only the summary row is written (the per-case rows are tested in patients.test.js)
     ['POST /cases', 'case.create', 201, async () => (st.c = (await P('/api/cases', { patient: { name: 'A', ageSex: '1 M', bed: '1', mrn: '1' }, narrative: 'x' })).body, { status: 201 })],
     ['PATCH /cases/:id', 'case.update', 200, () => api().patch(c()).send({ expectedVersion: 1, narrative: 'y' })],
     ['POST /cases/:id/rows', 'row.add', 201, async () => { const r = await P(c() + '/rows', { setId: 'care.t', groupId: 'vitals', row: { hr: '80' } }); st.row = r.body; return r; }],

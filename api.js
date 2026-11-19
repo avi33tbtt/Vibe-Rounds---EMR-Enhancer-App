@@ -93,15 +93,32 @@ const iso = (d) => (d ? new Date(d).toISOString() : null);
 const stable = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.keys(x).sort().reduce((o, kk) => (o[kk] = x[kk], o), {}) : x));
 const hashOf = (v) => 'sha256:' + crypto.createHash('sha256').update(stable(v)).digest('hex');
 
+// ---------- the real patient and encounter of a case (chunk 34c) ----------
+// Display fields only (no phone, no national id). A patient merged into another is shown as the record that was kept: every screen follows mergedInto.
+async function recordsOf(q, patientId, encounterId) {
+  let patientRecord = null, encounterRecord = null;
+  if (patientId) {
+    let p = (await q.query("SELECT id, mrn, name, sex, to_char(date_of_birth,'YYYY-MM-DD') AS dob, age_estimated, merged_into FROM patients WHERE id=$1", [patientId])).rows[0], from = null;
+    for (let i = 0; p && p.merged_into && i < 10; i++) { from = from || p.id; p = (await q.query("SELECT id, mrn, name, sex, to_char(date_of_birth,'YYYY-MM-DD') AS dob, age_estimated, merged_into FROM patients WHERE id=$1", [p.merged_into])).rows[0]; }
+    if (p && !p.merged_into) patientRecord = { id: p.id, mrn: p.mrn, name: p.name, sex: p.sex, dateOfBirth: p.dob, ageEstimated: p.age_estimated, ...(from ? { mergedFrom: from } : {}) };
+  }
+  if (encounterId) {
+    const e = (await q.query('SELECT id, type, status, ward, bed, start_at, end_at FROM encounters WHERE id=$1', [encounterId])).rows[0];
+    if (e) encounterRecord = { id: e.id, type: e.type, status: e.status, ward: e.ward, bed: e.bed, startAt: iso(e.start_at), endAt: iso(e.end_at) };
+  }
+  return { patientRecord, encounterRecord };
+}
+
 // ---------- case assembly: the exact shape the prototype uses ----------
 async function loadCase(q, id, { includeErrors = false } = {}) {
   const c = (await q.query('SELECT * FROM cases WHERE id=$1', [id])).rows[0];
   if (!c) return null;
-  const [vals, rows, notes] = await Promise.all([
+  const [vals, rows, notes, recs] = await Promise.all([
     q.query('SELECT key,value,version FROM case_values WHERE case_id=$1', [id]),
     q.query(`SELECT * FROM case_rows WHERE case_id=$1 ${includeErrors ? '' : "AND status='active'"}
              ORDER BY row_time NULLS LAST, entered_at, id`, [id]),
     q.query('SELECT * FROM case_notes WHERE case_id=$1 ORDER BY created_at, id', [id]),
+    recordsOf(q, c.patient_id, c.encounter_id),
   ]);
   const values = {}, valueVersions = {};
   for (const v of vals.rows) { values[v.key] = v.value; valueVersions[v.key] = v.version; }
@@ -111,6 +128,7 @@ async function loadCase(q, id, { includeErrors = false } = {}) {
   }
   return {
     id: c.id, patient: c.demo_patient || { name: '', ageSex: '', bed: '', mrn: '' }, patientId: c.patient_id, encounterId: c.encounter_id,
+    patientRecord: recs.patientRecord, encounterRecord: recs.encounterRecord,      // chunk 34c: read-only copies for the banner and lists
     narrative: c.narrative, applied: c.applied, pathways: c.pathways, pinned: c.pinned, alertLog: c.alert_log,
     values, valueVersions,
     notes: notes.rows.map((n) => ({ id: n.id, type: n.type, setId: n.set_id, text: n.text, status: n.status, signedBy: n.signed_by, signedAt: iso(n.signed_at),
@@ -416,6 +434,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf }) {
     if (wantErrors && !can(req.actor, 'case.read_errors')) return denied(res, req.actor, 'see rows entered in error', 'case.read_errors');   // doctors and admins only
     const c = await loadCase(db, idParam(req.params.id), { includeErrors: wantErrors });
     if (!c) throw new ApiError(404, 'not_found', 'Case not found');
+    if (!can(req.actor, 'patient.read')) { c.patientRecord = null; c.encounterRecord = null; }      // chunk 34c: real identities only for roles that may read patients (an informatician may not)
     // Chunk 33c1: opening a case is logged (who, which patient, which case; never any content), at most once per user per case per VIEW_THROTTLE_MIN minutes
     // on the database clock. A refused or missing case never reaches this line. DECISION: if the view row cannot be written the read FAILS (500, no case data
     // sent): for a medical record, an unlogged read is worse than an unavailable one.
