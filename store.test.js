@@ -680,7 +680,7 @@ test('34b1: Demo mode: every method says it is not available, calls no server an
   const t = boot(happy(), { mode: 'local' }); await t.Store.init(); const P = t.Store.patients;
   const all = [() => P.search('Asha'), () => P.get(PID), () => P.create({ name: 'A' }), () => P.update(PID, { expectedVersion: 1, reason: 'r' }), () => P.encounters(PID),
     () => P.createEncounter(PID, {}), () => P.updateEncounter(EID, { expectedVersion: 1 }), () => P.closeEncounter(EID, { expectedVersion: 1 }),
-    () => P.cancelEncounter(EID, { expectedVersion: 1, reason: 'r' }), () => P.link(CID, { patientId: PID })];
+    () => P.cancelEncounter(EID, { expectedVersion: 1, reason: 'r' }), () => P.link(CID, { patientId: PID }), () => P.exportCase(CID)];
   for (const f of all) await assert.rejects(f(), (e) => e.code === 'demo_mode' && /not available in demo mode/.test(e.message));
   assert.equal(t.calls.length, 0); assert.ok(![...t.ls.keys()].some((k) => /patient|encounter/i.test(k)), 'nothing patient-related in localStorage');
 });
@@ -721,4 +721,62 @@ test('34c: records from the server are cached on the case, are never sent back, 
   await t.Store.patients.link(CID, { patientId: PID, patient: { id: '99999999-9999-4999-8999-999999999999', name: 'Someone Else' } });
   c = t.Store.getCases()[0]; assert.equal(c.patientRecord.name, 'Real Name', 'a record for another id is ignored; the matching cached one stays');
   assert.equal(c.encounterRecord, null, 'linking without that encounter clears its record');
+});
+
+test('34d: exportCase asks the export route every time (never cached), refuses a bad id, and passes a 409 case_not_linked on unchanged', async () => {
+  const t = await readyServerStore(); const P = t.Store.patients;
+  let n = 0; t.custom = async (m, p) => (m === 'GET' && p === '/cases/' + CID + '/export') ? [200, { exportedAt: 'x' + (++n), patientFullUrl: 'urn:uuid:a', bundle: { resourceType: 'Bundle', entry: [] } }] : null;
+  assert.equal((await P.exportCase(CID)).exportedAt, 'x1'); assert.equal((await P.exportCase(CID)).exportedAt, 'x2');
+  assert.equal(t.calls.filter((c) => c.path === '/cases/' + CID + '/export').length, 2, 'two exports, two requests');
+  await assert.rejects(async () => P.exportCase('../x'), (e) => e.code === 'bad_id');
+  t.custom = async (m, p) => p.endsWith('/export') ? err(409, 'case_not_linked', 'Link this chart to a patient before exporting it.') : null;
+  await assert.rejects(P.exportCase(CID), (e) => e.status === 409 && e.code === 'case_not_linked');
+});
+
+// ---------------------------------------------------------------- chunk 34d: bundle() in enhancer.html uses the server's Patient and Encounter
+// The real bundle() source is cut out of enhancer.html and run in a vm with small stubs for the page (no browser, no database).
+function loadBundle({ server, exportCase }) {
+  const html = fs.readFileSync(path.join(__dirname, 'enhancer.html'), 'utf8').split('\n');
+  const line = (re) => { const l = html.find((x) => re.test(x)); assert.ok(l, 'enhancer.html no longer has ' + re); return l; };
+  const a = html.findIndex((x) => x.startsWith('const isoOf=')), b = html.findIndex((x) => x.startsWith('function dl()'));
+  assert.ok(a > 0 && b > a, 'bundle() block not found');
+  const src = [/^const flS=/, /^const vk=/, /^const esc=/, /^const fnum=/, /^const grp=/, /^const tcol=/, /^const rowsOf=/, /^const SYSU=/, /^function st\(f\)/, /^const isPw=/].map(line).join('\n') + '\n' + html.slice(a, b).join('\n');
+  const els = {}, toasts = [], set = { setId: 's1', title: 'S1', kind: 'care', version: 1, sections: [{ fields: [{ id: 'cc', label: 'Complaint', type: 'text', fhir: { resource: 'Observation', valueType: 'valueString' } }] }] };
+  const sb = { crypto, console, toasts, els, CUR: { id: 'c1', applied: [{ setId: 's1' }], pathways: [], notes: [], narrative: 'n', values: { 's1/cc': 'cough', 's1/__protocol': { bands: [{ lo: 111, hi: 222, text: 'BANDTEXT' }] }, '__protocol': 'PROTOTEXT' } },
+    $: (id) => els[id] || (els[id] = { textContent: '', innerHTML: '' }), toast: (m) => toasts.push(m), getSet: () => set, ensureNotes() {}, pwMembers: () => [],
+    codes: () => ({}), ck: () => '', SRV: () => server, Store: { patients: { exportCase } } };
+  vm.createContext(sb); vm.runInContext(src + '\nthis.bundle = bundle;', sb);
+  return sb;
+}
+const X34 = (over) => ({ patientFullUrl: 'urn:uuid:p1', encounterFullUrl: 'urn:uuid:e1', bundle: { resourceType: 'Bundle', type: 'transaction', entry: [
+  { fullUrl: 'urn:uuid:p1', resource: { resourceType: 'Patient', identifier: [{ value: '10000008' }], name: [{ text: 'Real Person' }], gender: 'female', birthDate: '1980-05-17' }, request: { method: 'POST', url: 'Patient' } },
+  { fullUrl: 'urn:uuid:e1', resource: { resourceType: 'Encounter', status: 'in-progress', subject: { reference: 'urn:uuid:p1' } }, request: { method: 'POST', url: 'Encounter' } }] }, ...over });
+
+test('34d: server mode: the bundle holds the real Patient and Encounter, clinical resources point at them, no placeholder and no protocol data', async () => {
+  const sb = loadBundle({ server: true, exportCase: async (id) => { assert.equal(id, 'c1'); return X34(); } });
+  await sb.bundle();
+  const B = JSON.parse(sb.els.bj.textContent), types = B.entry.map((e) => e.resource.resourceType);
+  assert.deepEqual(sb.toasts, []); assert.equal(types[0], 'Patient'); assert.equal(types[1], 'Encounter');
+  assert.equal(B.entry[0].resource.identifier[0].value, '10000008'); assert.equal(B.entry.filter((e) => e.resource.resourceType === 'Patient').length, 1);
+  const obs = B.entry.find((e) => e.resource.resourceType === 'Observation').resource;
+  assert.equal(obs.subject.reference, 'urn:uuid:p1'); assert.equal(obs.encounter.reference, 'urn:uuid:e1');
+  const prov = B.entry.find((e) => e.resource.resourceType === 'Provenance').resource;
+  assert.ok(prov.target.some((t) => t.reference === 'urn:uuid:p1') && !('encounter' in prov), 'Provenance is not tied to the encounter');
+  const txt = sb.els.bj.textContent;
+  assert.ok(!txt.includes('SYNTHETIC-001') && !txt.includes('BANDTEXT') && !txt.includes('PROTOTEXT') && !txt.includes('222'), 'no placeholder patient, no protocol bands');
+  assert.match(sb.els.bchk.innerHTML, /audit log/);
+});
+
+test('34d: server mode: an export refused by the server (chart not linked) builds nothing and says why; Demo mode keeps the placeholder and never calls the server', async () => {
+  const bad = loadBundle({ server: true, exportCase: async () => { const e = new Error('Link this chart to a patient before exporting it.'); e.code = 'case_not_linked'; throw e; } });
+  await bad.bundle(); assert.deepEqual(bad.toasts, ['Link this chart to a patient before exporting it.']); assert.ok(!bad.els.bj || !bad.els.bj.textContent, 'no bundle');
+  const other = loadBundle({ server: true, exportCase: async () => { throw new Error('Network down'); } });
+  await other.bundle(); assert.match(other.toasts[0], /^Export failed: Network down/);
+  let called = 0; const demo = loadBundle({ server: false, exportCase: async () => { called++; } });
+  await demo.bundle(); assert.equal(called, 0); assert.ok(demo.els.bj.textContent.includes('SYNTHETIC-001')); assert.match(demo.els.bchk.innerHTML, /^Demo mode: placeholder patient/);
+});
+
+test('34d: if the open chart changes while the export is being prepared, nothing is built', async () => {
+  let sb; sb = loadBundle({ server: true, exportCase: async () => { sb.CUR = { id: 'c2', applied: [], pathways: [], notes: [], narrative: 'x', values: {} }; return X34(); } });
+  await sb.bundle(); assert.match(sb.toasts[0], /changed while the export/); assert.ok(!sb.els.bj || !sb.els.bj.textContent);
 });

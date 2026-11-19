@@ -83,6 +83,30 @@ const S = {
   migrate: z.object({ dryRun: z.boolean().optional() }).strict(),
 };
 
+
+// ---------- FHIR R4 Patient and Encounter for the export (chunk 34d) ----------
+// Export only. Built from the real records: the MRN, name, sex and birth date. Never the phone, the national id or any audit content.
+const MRN_SYSTEM = 'urn:emr-enhancer:mrn';
+const FHIR_CLASS = { admission: ['IMP', 'inpatient encounter'], OPD: ['AMB', 'ambulatory'], emergency: ['EMER', 'emergency'] };
+const FHIR_ENC_STATUS = { open: 'in-progress', closed: 'finished', cancelled: 'cancelled' };
+function fhirPatient(p) {
+  const r = { resourceType: 'Patient', identifier: [{ use: 'usual', type: { coding: [{ system: 'http://terminology.hl7.org/CodeSystem/v2-0203', code: 'MR' }] }, system: MRN_SYSTEM, value: p.mrn }],
+    active: true, name: [{ use: 'official', text: p.name }], gender: p.sex };
+  // an estimated age is stored as a date of birth with age_estimated = true; the export gives only the year, so it never claims a day it does not know
+  if (p.dob) r.birthDate = p.age_estimated ? p.dob.slice(0, 4) : p.dob;
+  return r;
+}
+function fhirEncounter(e, patientUrl, attendingName) {
+  const [code, display] = FHIR_CLASS[e.type] || ['AMB', 'ambulatory'];
+  const r = { resourceType: 'Encounter', status: FHIR_ENC_STATUS[e.status] || 'unknown',
+    class: { system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode', code, display }, subject: { reference: patientUrl } };
+  if (e.start_at) { r.period = { start: new Date(e.start_at).toISOString() }; if (e.end_at) r.period.end = new Date(e.end_at).toISOString(); }
+  const place = [e.ward, e.bed].filter(Boolean).join(' / ');
+  if (place) r.location = [{ location: { display: place } }];
+  if (attendingName) r.participant = [{ type: [{ coding: [{ system: 'http://terminology.hl7.org/CodeSystem/v3-ParticipationType', code: 'ATND' }] }], individual: { display: attendingName } }];
+  return r;
+}
+
 function mountPatients(r, { db, ApiError, wrap, parse, idParam, iso, audit, auditOnce, can, loadCase }) {
   const fail = (s, c, m, x) => new ApiError(s, c, m, x);
   const patOut = (p, { detail = false, nid: showNid = false } = {}) => ({
@@ -246,6 +270,37 @@ function mountPatients(r, { db, ApiError, wrap, parse, idParam, iso, audit, audi
     return { sets: "status='cancelled', cancel_reason=$2", vals: [b.reason], reason: b.reason, after: ESNAP };
   }));
 
+  // ================= audited FHIR export of a case's patient and encounter (chunk 34d) =================
+  // Returns a FHIR transaction Bundle holding the REAL Patient (MRN, name, gender, birthDate) and, when the case has one, its Encounter, with the urn:uuid
+  // each has inside the bundle. The browser adds the clinical resources (it holds the element-set registry) and points them at patientFullUrl.
+  // The export is written to the audit log in the same transaction as the read: if the row cannot be written, nothing is sent (as for opening a case).
+  // The audit row holds ids and the format only: no name, MRN, national id or clinical content. A merged duplicate is exported as the record that was kept.
+  r.get('/cases/:id/export', wrap(async (req, res) => {
+    const id = idParam(req.params.id);
+    const out = await db.withTx(async (c) => {
+      const cs = (await c.query('SELECT id, patient_id, encounter_id, version FROM cases WHERE id=$1', [id])).rows[0];
+      if (!cs) throw fail(404, 'not_found', 'Case not found');
+      if (!cs.patient_id) throw fail(409, 'case_not_linked', 'Link this chart to a patient before exporting it. An export never invents a patient.');
+      const COLS = "id, mrn, name, sex, to_char(date_of_birth,'YYYY-MM-DD') AS dob, age_estimated, merged_into";
+      let p = (await c.query(`SELECT ${COLS} FROM patients WHERE id=$1`, [cs.patient_id])).rows[0], from = null;
+      for (let i = 0; p && p.merged_into && i < 10; i++) { from = from || p.id; p = (await c.query(`SELECT ${COLS} FROM patients WHERE id=$1`, [p.merged_into])).rows[0]; }
+      if (!p || p.merged_into) throw fail(409, 'patient_unavailable', 'The patient record for this chart could not be found');
+      let e = null, attending = null;
+      if (cs.encounter_id) {
+        e = (await c.query('SELECT id, type, status, ward, bed, start_at, end_at, attending FROM encounters WHERE id=$1', [cs.encounter_id])).rows[0] || null;
+        if (e && e.attending) attending = ((await c.query('SELECT name FROM users WHERE id=$1', [e.attending])).rows[0] || {}).name || null;
+      }
+      const patientFullUrl = 'urn:uuid:' + require('node:crypto').randomUUID();
+      const entry = [{ fullUrl: patientFullUrl, resource: fhirPatient(p), request: { method: 'POST', url: 'Patient' } }];
+      let encounterFullUrl = null;
+      if (e) { encounterFullUrl = 'urn:uuid:' + require('node:crypto').randomUUID(); entry.push({ fullUrl: encounterFullUrl, resource: fhirEncounter(e, patientFullUrl, attending), request: { method: 'POST', url: 'Encounter' } }); }
+      await audit(c, { action: 'export', entity: 'case', entity_id: cs.id, case_id: cs.id, patient_id: p.id,
+        after: { format: 'fhir-r4', patientId: p.id, encounterId: e ? e.id : null, caseVersion: cs.version, ...(from ? { mergedFrom: from } : {}) } });
+      return { exportedAt: new Date().toISOString(), case: { id: cs.id, version: cs.version }, patientFullUrl, encounterFullUrl, bundle: { resourceType: 'Bundle', type: 'transaction', entry } };
+    });
+    res.set('Cache-Control', 'no-store').json(out);
+  }));
+
   // ================= attach a case to a patient and encounter =================
   r.post('/cases/:id/link', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.link, req.body);
@@ -313,4 +368,4 @@ function mountPatients(r, { db, ApiError, wrap, parse, idParam, iso, audit, audi
   }));
 }
 
-module.exports = { mountPatients, mrnFor, mrnValid, luhnDigit, parseAgeSex, splitWardBed };
+module.exports = { mountPatients, fhirPatient, fhirEncounter, mrnFor, mrnValid, luhnDigit, parseAgeSex, splitWardBed };

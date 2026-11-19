@@ -393,3 +393,85 @@ test('34c: GET /cases/:id carries the real patient and encounter (display fields
   const bare = (await who.doctor.agent.post('/api/cases').send({})).body;
   assert.equal((await who.doctor.agent.get('/api/cases/' + bare.id)).body.patientRecord, null);
 });
+
+// ---------------------------------------------------------------- chunk 34d: audited FHIR export of the real Patient and Encounter
+const linkCase = async (p, encId) => {
+  const cs = (await who.doctor.agent.post('/api/cases').send({})).body;
+  const l = await who.doctor.agent.post(`/api/cases/${cs.id}/link`).send({ expectedVersion: cs.version, patientId: p.id, ...(encId ? { encounterId: encId } : {}) });
+  assert.equal(l.status, 200, JSON.stringify(l.body)); return cs;
+};
+const BANNED = /fever|threshold|band|target|sliding|upper_limit|lower_limit/i;   // no protocol bands or thresholds are ever read into the server half of the bundle
+
+test('34d: export gives a FHIR Patient with the MRN, name, gender and birth date, plus the Encounter, and writes exactly one audit row', async () => {
+  const p = await mkPatient({ phone: '+91 98200 33333', nationalId: 'EXPORT-NID-1' });
+  const enc = (await who.doctor.agent.post(`/api/patients/${p.id}/encounters`).send({ type: 'admission', ward: 'ExpW', bed: '1' })).body;
+  const cs = await linkCase(p, enc.id);
+  const before = await maxId(), r = await who.doctor.agent.get(`/api/cases/${cs.id}/export`);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.headers['cache-control'], 'no-store');
+  const B = r.body.bundle; assert.equal(B.resourceType, 'Bundle'); assert.equal(B.type, 'transaction');
+  const pe = B.entry.find((e) => e.resource.resourceType === 'Patient'), ee = B.entry.find((e) => e.resource.resourceType === 'Encounter');
+  assert.equal(pe.fullUrl, r.body.patientFullUrl); assert.match(pe.fullUrl, /^urn:uuid:/);
+  assert.equal(pe.resource.identifier[0].value, p.mrn); assert.equal(pe.resource.identifier[0].type.coding[0].code, 'MR');
+  assert.equal(pe.resource.name[0].text, p.name); assert.equal(pe.resource.gender, 'female'); assert.equal(pe.resource.birthDate, '1980-05-17');
+  assert.equal(ee.resource.status, 'in-progress'); assert.equal(ee.resource.class.code, 'IMP'); assert.equal(ee.resource.subject.reference, pe.fullUrl);
+  assert.equal(ee.resource.location[0].location.display, 'ExpW / 1'); assert.equal(ee.fullUrl, r.body.encounterFullUrl);
+  assert.ok(!JSON.stringify(B).includes('SYNTHETIC-001'), 'no placeholder identifier');
+  const txt = JSON.stringify(r.body);
+  assert.ok(!txt.includes('EXPORT-NID-1') && !txt.includes('98200 33333'), 'neither the national id nor the phone is exported');
+  assert.ok(!BANNED.test(JSON.stringify(B.entry.map((e) => Object.keys(e.resource)))), 'no band or threshold fields');
+  const rows = await since(before);
+  assert.equal(rows.length, 1); assert.equal(rows[0].action, 'export'); assert.equal(rows[0].entity, 'case'); assert.equal(rows[0].entity_id, cs.id);
+  assert.equal(rows[0].user_id, who.doctor.id); assert.equal(rows[0].role, 'doctor'); assert.equal(rows[0].patient_id, p.id); assert.ok(rows[0].ip);
+  assert.deepEqual(rows[0].after, { format: 'fhir-r4', patientId: p.id, encounterId: enc.id, caseVersion: cs.version + 1 });
+  const logged = JSON.stringify(rows[0]);
+  for (const s of [p.name, p.mrn, 'EXPORT-NID-1', '98200 33333']) assert.ok(!logged.includes(s), 'the audit row holds ids only, never ' + s);
+  // each export is its own audit row (no throttle: every download is a disclosure)
+  const b2 = await maxId(); assert.equal((await who.doctor.agent.get(`/api/cases/${cs.id}/export`)).status, 200); assert.equal((await since(b2)).length, 1);
+});
+
+test('34d: who may export: admin and doctor; nurse, viewer and informatician get 403 and nothing is written; an unknown case is 404', async () => {
+  const p = await mkPatient(), cs = await linkCase(p);
+  for (const role of ['nurse', 'viewer', 'informatician']) {
+    const before = await maxId(), r = await who[role].agent.get(`/api/cases/${cs.id}/export`);
+    assert.equal(r.status, 403, role); assert.equal(r.body.error.code, 'forbidden'); assert.equal((await since(before)).length, 0, role + ': no audit row for a refused export');
+  }
+  assert.equal((await who.admin.agent.get(`/api/cases/${cs.id}/export`)).status, 200);
+  assert.equal((await request(app).get(`/api/cases/${cs.id}/export`)).status, 401);
+  assert.equal((await who.doctor.agent.get('/api/cases/not-a-uuid/export')).status, 404);
+  assert.equal((await who.doctor.agent.get(`/api/cases/${crypto.randomUUID()}/export`)).status, 404);
+});
+
+test('34d: a chart not linked to a patient is refused (409 case_not_linked), nothing is invented and nothing is audited', async () => {
+  const bare = (await who.doctor.agent.post('/api/cases').send({})).body, before = await maxId();
+  const r = await who.doctor.agent.get(`/api/cases/${bare.id}/export`);
+  assert.equal(r.status, 409); assert.equal(r.body.error.code, 'case_not_linked'); assert.equal((await since(before)).length, 0);
+});
+
+test('34d: a patient linked with no encounter exports the Patient alone; an estimated age exports the year only; a closed encounter is finished', async () => {
+  const est = await mkPatient({ dateOfBirth: undefined, ageYears: 40 }), cs = await linkCase(est);
+  const r = await who.doctor.agent.get(`/api/cases/${cs.id}/export`), pe = r.body.bundle.entry[0].resource;
+  assert.equal(r.body.bundle.entry.length, 1); assert.equal(r.body.encounterFullUrl, null);
+  assert.match(pe.birthDate, /^\d{4}$/, 'year only, no invented day'); assert.equal(pe.birthDate, String(new Date().getUTCFullYear() - 40));
+  const p = await mkPatient(), enc = (await who.doctor.agent.post(`/api/patients/${p.id}/encounters`).send({ type: 'OPD' })).body, c2 = await linkCase(p, enc.id);
+  assert.equal((await who.doctor.agent.post(`/api/encounters/${enc.id}/close`).send({ expectedVersion: enc.version })).status, 200);
+  const e = (await who.doctor.agent.get(`/api/cases/${c2.id}/export`)).body.bundle.entry.find((x) => x.resource.resourceType === 'Encounter').resource;
+  assert.equal(e.status, 'finished'); assert.equal(e.class.code, 'AMB'); assert.ok(e.period.start && e.period.end); assert.equal(e.location, undefined);
+});
+
+test('34d: a merged duplicate is exported as the record that was kept (its MRN), and the audit row says where it came from', async () => {
+  const dup = await mkPatient(), keep = await mkPatient(), cs = await linkCase(dup);
+  assert.equal((await who.admin.agent.post(`/api/patients/${dup.id}/merge`).send({ intoPatientId: keep.id, reason: 'same person twice' })).status, 200);
+  const before = await maxId(), r = await who.doctor.agent.get(`/api/cases/${cs.id}/export`);
+  assert.equal(r.status, 200); assert.equal(r.body.bundle.entry[0].resource.identifier[0].value, keep.mrn);
+  const row = (await since(before))[0]; assert.equal(row.patient_id, keep.id); assert.equal(row.after.mergedFrom, dup.id);
+});
+
+test('34d: the Patient and Encounter builders copy only what they are given (unit)', () => {
+  const { fhirPatient, fhirEncounter } = require('./patients.js');
+  const pt = fhirPatient({ mrn: '12345678', name: 'A B', sex: 'unknown', dob: '1990-01-02', age_estimated: false, phone: 'X', national_id: 'Y' });
+  assert.deepEqual(Object.keys(pt).sort(), ['active', 'birthDate', 'gender', 'identifier', 'name', 'resourceType']);
+  assert.ok(!JSON.stringify(pt).includes('"X"') && !JSON.stringify(pt).includes('"Y"'));
+  const en = fhirEncounter({ type: 'emergency', status: 'cancelled', ward: 'W', bed: null, start_at: '2026-01-01T00:00:00Z', end_at: null }, 'urn:uuid:x', 'Dr Who');
+  assert.equal(en.status, 'cancelled'); assert.equal(en.class.code, 'EMER'); assert.equal(en.location[0].location.display, 'W'); assert.equal(en.participant[0].individual.display, 'Dr Who');
+});

@@ -447,7 +447,7 @@ body.compact label{margin:7px 0 2px}
 <div class="mu" style="margin-top:8px">Add a code you verified yourself in the SNOMED / LOINC browsers:</div>
 <select id="afld" style="width:auto;max-width:260px"><option value="">Field to attach to (optional)</option></select> <select id="asys" style="width:110px"><option>snomed</option><option>loinc</option></select> <input id="acode" placeholder="code" style="width:130px"> <input id="adisp" placeholder="display (as in browser)" style="width:260px"> <button class="b" onclick="addCode()">Add</button></div>
 </div>
-<div class="pane" id="ex"><div class="cd"><b>FHIR R4 bundle</b> <span class="mu">(from the current case values; unverified codes are left out, text kept)</span><br>
+<div class="pane" id="ex"><div class="cd"><b>FHIR R4 bundle</b> <span class="mu">(from the current case values; unverified codes are left out, text kept. In server mode each build is recorded in the audit log, and the chart must be linked to a patient.)</span><br>
 <button class="b" onclick="bundle()">Build bundle</button><button class="b" onclick="navigator.clipboard.writeText($('bj').textContent)">Copy</button><button class="b" onclick="dl()">Download</button>
 <div id="bchk" class="mu"></div><pre id="bj"></pre></div></div>
 <div class="pane" id="an"><div class="cd"><button class="b" onclick="synth()">Load 12 synthetic cases</button><button class="b" onclick="clearSyn()">Clear synthetic</button><span id="acnt" class="mu"></span>
@@ -1224,10 +1224,15 @@ Store.saveCodes(t);confirmed.forEach(([sy,cd,d])=>Store.saveLiveResult(sy,cd,tru
 /* FHIR bundle: Patient, optional Composition (narrative), Condition per disease set, one resource per value / per repeat row, Provenance.
    Protocol data (setId/__protocol bands) is never read here, so sliding-scale bands cannot reach the bundle. Doses are copied exactly as typed. */
 const isoOf=(f,x)=>{if(f.type=='date')return String(x);const d=new Date(x);return isNaN(d)?null:d.toISOString()};
-function bundle(){const sets=(CUR.applied||[]).map(a=>getSet(a.setId,a)).filter(Boolean);if(!sets.length&&!(CUR.notes||[]).length&&!(CUR.narrative||'').trim())return toast('Add a note or an element set first');
-const v=CUR.values,pid='urn:uuid:'+crypto.randomUUID(),E=[],per={},urls={};let sk=0,skipped=0,nots=0;
-const add=(r,sid)=>{const u='urn:uuid:'+crypto.randomUUID();E.push({fullUrl:u,resource:r,request:{method:'POST',url:r.resourceType}});if(sid){per[sid]=(per[sid]||0)+1;(urls[sid]=urls[sid]||[]).push(u)}return u};
-E.push({fullUrl:pid,resource:{resourceType:'Patient',identifier:[{value:'SYNTHETIC-001'}]},request:{method:'POST',url:'Patient'}});
+/* Chunk 34d: in server mode the Patient (MRN, name, gender, birth date) and the Encounter come from GET /cases/:id/export, which writes an audit row for every build.
+   A chart with no patient is refused there (never an invented one). Demo mode keeps the synthetic placeholder. Everything below the Patient and Encounter is built here as before. */
+const ENC_FIELD={Observation:'encounter',Procedure:'encounter',Composition:'encounter',Condition:'encounter',CarePlan:'encounter',MedicationAdministration:'context'};
+async function bundle(){const sets=(CUR.applied||[]).map(a=>getSet(a.setId,a)).filter(Boolean);if(!sets.length&&!(CUR.notes||[]).length&&!(CUR.narrative||'').trim())return toast('Add a note or an element set first');
+let X=null;if(SRV()){const cur=CUR;try{X=await Store.patients.exportCase(cur.id)}catch(er){return toast(er&&er.code==='case_not_linked'?er.message:'Export failed: '+((er&&er.message)||'error'))}
+if(CUR!==cur)return toast('The open chart changed while the export was prepared. Build the bundle again.')}
+const v=CUR.values,pid=X?X.patientFullUrl:'urn:uuid:'+crypto.randomUUID(),E=[],per={},urls={};let sk=0,skipped=0,nots=0;
+const add=(r,sid)=>{const u='urn:uuid:'+crypto.randomUUID(),ef=X&&X.encounterFullUrl&&ENC_FIELD[r.resourceType];if(ef)r[ef]={reference:X.encounterFullUrl};E.push({fullUrl:u,resource:r,request:{method:'POST',url:r.resourceType}});if(sid){per[sid]=(per[sid]||0)+1;(urls[sid]=urls[sid]||[]).push(u)}return u};
+if(X)X.bundle.entry.forEach(e=>E.push(e));else E.push({fullUrl:pid,resource:{resourceType:'Patient',identifier:[{value:'SYNTHETIC-001'}]},request:{method:'POST',url:'Patient'}});
 ensureNotes(CUR);
 const noteRecords=(CUR.notes||[]).filter(n=>(n.text||'').trim()||n.setId);
 const nar=(CUR.narrative||'').trim();
@@ -1293,7 +1298,7 @@ add({resourceType:'Provenance',target:E.map(e=>({reference:e.fullUrl})),recorded
 entity:sets.map(s=>({role:'source',what:{display:(s.title||s.setId)+' ['+(s.kind||'custom')+', v'+(s.version||1)+', '+s.setId+']'}})).concat(pws.map(x=>{const p=getSet(x.pathwayId,x);return{role:'source',what:{display:'Pathway: '+(p?p.title||p.setId:x.pathwayId)+' [pathway, v'+(+x.version||1)+', '+x.pathwayId+', started '+x.startedAt+']'}}}))});
 const B={resourceType:'Bundle',type:'transaction',entry:E};$('bj').textContent=JSON.stringify(B,null,1);
 const bad=E.filter(e=>{const r=e.resource,t=r.resourceType;return !t||(['Observation','Procedure'].includes(t)&&(!r.code||!r.subject))||(t=='MedicationAdministration'&&(!r.medicationCodeableConcept||!r.subject))||(t=='Provenance'&&!(r.target||[]).length)||(t=='CarePlan'&&(!r.subject||!r.status||!r.intent))}).length;
-$('bchk').innerHTML=`${E.length} entries · per set: ${sets.map(x=>esc(x.title||x.setId)+' '+(per[x.setId]||0)).join(' · ')} · ${noteRecords.length?'Notes '+noteRecords.length:(nar?'Composition 1':'no narrative, no Composition')} · CarePlans ${cps}${pwMiss?' ('+pwMiss+' pathway not in registry, listed without activities)':''} · ${sk} resources without verified coding (text only)${skipped?' · <b>'+skipped+' row value(s) skipped: no valid row timestamp (administrations need a time)</b>':''}${nots?' · '+nots+' resource(s) emitted without effectiveDateTime (no timestamp)':''} · structural problems: ${bad}. Run through a FHIR validator before real use.`}
+$('bchk').innerHTML=`${X?'Patient and Encounter from the registered record; this export was written to the audit log · ':'Demo mode: placeholder patient · '}${E.length} entries · per set: ${sets.map(x=>esc(x.title||x.setId)+' '+(per[x.setId]||0)).join(' · ')} · ${noteRecords.length?'Notes '+noteRecords.length:(nar?'Composition 1':'no narrative, no Composition')} · CarePlans ${cps}${pwMiss?' ('+pwMiss+' pathway not in registry, listed without activities)':''} · ${sk} resources without verified coding (text only)${skipped?' · <b>'+skipped+' row value(s) skipped: no valid row timestamp (administrations need a time)</b>':''}${nots?' · '+nots+' resource(s) emitted without effectiveDateTime (no timestamp)':''} · structural problems: ${bad}. Run through a FHIR validator before real use.`}
 function dl(){const t=$('bj').textContent;if(!t)return toast('Build a bundle first');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='bundle.json';a.click()}
 /* chunk 29c: cases live in Store (memory cache + queued server writes, or Demo-mode localStorage). Same shapes as before. */
 const getC=()=>Store.getCases();

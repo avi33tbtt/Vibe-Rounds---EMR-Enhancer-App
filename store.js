@@ -655,6 +655,9 @@
     updateEncounter: serverOnly((id, b) => api('PATCH', '/encounters/' + pid(id, 'encounter'), Object.assign({ expectedVersion: needVer(b, 'encounter') }, pick(b, ['ward', 'bed', 'attendingId'])))),
     closeEncounter: serverOnly((id, b) => api('POST', '/encounters/' + pid(id, 'encounter') + '/close', Object.assign({ expectedVersion: needVer(b, 'encounter') }, pick(b, ['endAt'])))),
     cancelEncounter: serverOnly((id, b) => api('POST', '/encounters/' + pid(id, 'encounter') + '/cancel', { expectedVersion: needVer(b, 'encounter'), reason: needReason(b) })),
+    /** Chunk 34d: the audited export. Answers {exportedAt, case, patientFullUrl, encounterFullUrl, bundle} with the REAL FHIR Patient (and Encounter). Every call writes an audit row on the server,
+     *  so nothing is cached: ask again for each export. 409 case_not_linked when the chart has no patient yet. */
+    exportCase: serverOnly((caseId) => api('GET', '/cases/' + pid(caseId, 'case') + '/export')),
     /** Attach an open chart to a patient (and one of that patient's open encounters). expectedVersion is optional: it defaults to the version this
      *  browser last confirmed. The server moves the case version by one; Store records it so the next save of the chart does not conflict. */
     link: serverOnly(async (caseId, b) => {

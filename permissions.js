@@ -29,6 +29,7 @@ const ACTIONS = {
   'patient.merge': ['admin'],                        // merge and unmerge duplicate records
   'encounter.write': ['admin', 'doctor', 'nurse'],   // start, move, close or cancel an encounter
   'case.link': ['admin', 'doctor', 'nurse'],         // attach a case to a patient and an encounter
+  'case.export': ['admin', 'doctor'],                // GET /cases/:id/export: identified FHIR Patient and Encounter, audited (chunk 34d). An informatician never sees identities.
   'case.read_errors': CLIN,                          // GET /cases/:id?include_errors=true: see rows marked entered in error (chunk 33b)
   'case.narrative': CLIN,
   'case.apply': CLIN,                                // applied sets and pathways
@@ -65,7 +66,7 @@ const ACTION_LABELS = {
   'rule.write': 'edit alert rules', 'rule.approve': 'approve alert rules', 'protocol.write': 'edit protocols', 'protocol.approve': 'verify protocols',
   'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'migrate.run': 'migrate demo patients', 'audit.read': 'read the audit log', 'user.manage': 'manage users', 'password.change': 'change this password',
   'content.review': 'review content', 'package.install': 'install packages',
-  'patient.read': 'see patient records', 'patient.write': 'register or correct patients', 'patient.merge': 'merge patients', 'encounter.write': 'change encounters', 'case.link': 'link a case to a patient',
+  'patient.read': 'see patient records', 'patient.write': 'register or correct patients', 'patient.merge': 'merge patients', 'encounter.write': 'change encounters', 'case.link': 'link a case to a patient', 'case.export': 'export a patient record',
 };
 /** The actions a user may take, in the order of ACTIONS. Sent with GET /me so the screen can hide controls; the server stays the control. */
 const allowedActions = (user) => Object.keys(ACTIONS).filter((a) => can(user, a));
@@ -96,7 +97,7 @@ const ROUTE_ACTIONS = {
   'GET /patients': 'patient.read', 'GET /patients/:id': 'patient.read', 'GET /patients/:id/encounters': 'patient.read',
   'POST /patients': 'patient.write', 'PATCH /patients/:id': 'patient.write', 'POST /patients/:id/merge': 'patient.merge', 'POST /patients/:id/unmerge': 'patient.merge',
   'POST /patients/:id/encounters': 'encounter.write', 'PATCH /encounters/:id': 'encounter.write', 'POST /encounters/:id/close': 'encounter.write', 'POST /encounters/:id/cancel': 'encounter.write',
-  'POST /cases/:id/link': 'case.link',
+  'POST /cases/:id/link': 'case.link', 'GET /cases/:id/export': 'case.export',
   'POST /admin/migrate-demo-patients': 'migrate.run',
 };
 

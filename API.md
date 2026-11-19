@@ -280,3 +280,24 @@ A patient in answers: `{id, mrn, name, sex, dateOfBirth, ageEstimated, active, m
 | `POST /admin/migrate-demo-patients` | `{dryRun?: boolean}` | Admin only (`migrate.run`). For every case with **no patient** and a typed `demo_patient` name: makes a real patient (server MRN; the typed MRN is kept only in the audit row; typed `age / sex` is read when clear, otherwise the age stays **unknown** and the sex `unknown`), an open `admission` encounter when a ward was typed (`Ward / bed`, one part is a ward only), and links the case (`version + 1`). `demo_patient` is left untouched. Each case is one transaction with its own audit rows (`patient.create`, `encounter.create`, `case.link`, all marked `migratedFromDemo`); a final `migration.demo_patients` row holds the counts. **Idempotent**: only unlinked cases are touched, so a second run migrates 0. A bed that already has an open encounter does not stop it: the case is linked without an encounter and listed in `bedConflicts`. A case with no usable name is listed in `skipped` (`no_name`) and left alone. A case that fails rolls back whole and is listed in `failed`; run it again. Answer: `{dryRun, candidates, migrated, encountersCreated, skipped:[{caseId,reason}], bedConflicts:[{caseId,typedBed}], failed:[{caseId,reason}]}`. `dryRun:true` writes nothing. Duplicate patients are **not** detected: two charts with the same typed name become two patients; an admin merges them afterwards. |
 
 **Decisions to confirm:** (1) the migration is admin only; (2) it never guesses an age (months, ages above 120 and unreadable text stay unknown); (3) the typed `demo_patient` stays on the case as a record of what was typed.
+
+## Audited FHIR export of the real Patient and Encounter (chunk 34d)
+
+FHIR R4 stays **export only**: nothing is read from or written to another system.
+
+**Permission.** `case.export` (admin, doctor). A nurse, a viewer and an informatician get `403` and nothing is written. Exporting identified data is a disclosure, so it is narrower than `patient.read`.
+
+| Route | What it does |
+|---|---|
+| `GET /cases/:id/export` | Answers `{exportedAt, case: {id, version}, patientFullUrl, encounterFullUrl, bundle}`. `bundle` is a FHIR `transaction` Bundle holding the **real** `Patient` (`identifier` = MRN with type `MR`, `name`, `gender`, `birthDate`) and, when the case has one, its `Encounter` (status `in-progress`, `finished` or `cancelled`; class `IMP`, `AMB` or `EMER`; period; ward and bed as a location display; attending as `ATND` display name). `patientFullUrl` and `encounterFullUrl` are the `urn:uuid:` ids used inside the bundle; the browser adds the clinical resources (it holds the element-set registry) and points them at these. `Cache-Control: no-store`. |
+
+Rules:
+- **Every export writes one audit row** (`action: export`, `entity: case`, `patient_id` set) in the same transaction as the read. If the row cannot be written, nothing is sent. There is no throttle: each build is one disclosure. The row holds ids, the format and the case version only: **no name, MRN, phone, national id or clinical content**.
+- A chart with **no patient** is refused: `409 case_not_linked`. An export never invents a patient.
+- A merged duplicate is exported as the record that was **kept** (its MRN); the audit row records `mergedFrom`.
+- An estimated age (`ageEstimated`) is exported as a birth **year** only (FHIR allows `YYYY`), so no day is claimed that nobody knows.
+- Phone and national id are never exported. The server half of the bundle carries no protocol bands, thresholds or rules.
+- Browser: `Store.patients.exportCase(caseId)` (server mode only, never cached). In `enhancer.html` the Export tab's **Build bundle** calls it; clinical resources then carry `encounter` (or `context` for `MedicationAdministration`). Demo mode keeps the synthetic placeholder patient and calls no server.
+- Analytics already show "Case N" and never a name or MRN; the shared analytics export (chunk 38b) must keep that.
+
+**Decisions to confirm:** (1) only admin and doctor may export (the plan did not say; a nurse could be added in `permissions.js`); (2) building the bundle is the audited event, not the later Copy or Download of the same text; (3) an unlinked chart cannot be exported in server mode (run the 34c migration or link it first).
