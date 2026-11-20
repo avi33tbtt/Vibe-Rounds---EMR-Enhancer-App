@@ -8,7 +8,7 @@ Goal: what 37c and 37d built by hand becomes seed data plus generic renderers, w
 
 ### V0. Housekeeping and inventory
 
-#### [ ] V0a. Put the five orphan tests into `npm test`
+#### [x] V0a. Put the five orphan tests into `npm test`
 **File:** package.json | **Paste:** the `"test"` line only
 ```text
 Add sum-by-type.test.js, board-no-reading.test.js, handover-data.test.js, handover-view.test.js and handover-print.test.js to the test script. Change nothing else. Tell me if any of them fail (do not fix them in this task).

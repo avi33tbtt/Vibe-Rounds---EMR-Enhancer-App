@@ -2,7 +2,7 @@
 
 *v6 split into files, 20 Nov 2026. EMR repo: github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App. Analytics repo: github.com/avi33tbtt/VibeRounds-Clinical-Analytics-App. Registry repo: `emr-enhancer-registry` (built in this project).*
 
-**Latest `npm test` (EMR repo, commit `86d8259`, 20 Nov 2026): 285 tests, 285 pass.** V0a adds five more test files; after it, write the new total here.
+**Latest `npm test` (EMR repo, after V0a, 20 Nov 2026): 312 tests, 312 pass.** Tests now run one file at a time (`--test-concurrency=1`) because the test files share one database role (`emr_app`). The database must be running first (`npm run db:up`, with `POSTGRES_PASSWORD` in `.env`).
 
 ## How to use (every chat, nothing to remember)
 
