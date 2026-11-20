@@ -1,16 +1,13 @@
 'use strict';
 // node --test sum-by-type.test.js
-// Chunk 37c1: sumByType in enhancer.html is a plain sum of entered rows; no target, no comparison.
+// V4a: sumBy in views.js is a plain sum of entered rows per key; no target, no comparison.
+// The I/O field names are passed in here, as the seed data does. views.js names no set or field.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
+const { sumBy } = require('./views.js');
 
-const html = fs.readFileSync('./enhancer.html', 'utf8');
-const grab = (re) => { const m = html.match(re); assert.ok(m, 'not found: ' + re); return m[0]; };
-const code = grab(/const fnum=.*\n/) + grab(/function sumByType\(.*\n/);
-const ctx = {}; vm.createContext(ctx); vm.runInContext(code + ';this.sumByType=sumByType;', ctx);
-const sumByType = ctx.sumByType;
+const IO = { timeField: 'io_time', keyField: 'io_type', valueField: 'io_volume' };
+const sumByType = (rows, from, to) => sumBy(rows, IO, from, to);
 
 const T = (h) => '2026-11-19T' + String(h).padStart(2, '0') + ':00';
 const at = (h) => new Date(T(h)).getTime();
@@ -37,4 +34,13 @@ test('rows with no valid time or number are skipped; blank type is grouped apart
 test('empty or missing input gives an empty result', () => {
   assert.equal(Object.keys(sumByType([], 0, 1e15)).length, 0);
   assert.equal(Object.keys(sumByType(null, 0, 1e15)).length, 0);
+  assert.equal(Object.keys(sumBy([row(8, 'Urine', 1)], null, 0, 1e15)).length, 0);
+});
+test('a different made-up set works with no code change: only the spec changes', () => {
+  const spec = { timeField: 'when', keyField: 'kind', valueField: 'amt' };
+  const r = [
+    { when: T(8), kind: 'A', amt: '2.5' }, { when: T(9), kind: 'A', amt: 1 },
+    { when: T(9), kind: 'B', amt: 4 }, { when: T(9), kind: 'B', amt: 9, __status: 'entered_in_error' },
+    { when: T(20), kind: 'B', amt: 100 }, { io_time: T(9), io_type: 'Urine', io_volume: 999 }];
+  assert.deepEqual(JSON.parse(JSON.stringify(sumBy(r, spec, at(0), at(12)))), { A: 3.5, B: 4 });
 });

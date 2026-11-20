@@ -9,6 +9,7 @@ const crypto = require('node:crypto');
 const request = require('supertest');
 const { Client } = require('pg');
 const { createDb, migrate, createApp } = require('./server.js');
+const { validateView } = require('./views.js');
 
 const sandbox = { window: {} };
 vm.runInNewContext(fs.readFileSync('./element-sets.js', 'utf8'), sandbox);
@@ -35,9 +36,18 @@ test('care.intake_output has zero rules, thresholds, bands, targets, limits and 
   })(io, 'io');
   for (const k of ['derived', 'flag', 'rules', 'protocol', 'bands', 'default', 'meta', 'thresholdField', 'min', 'max', 'low', 'high', 'target'])
     assert.ok(!keys.has(k), 'must not have a "' + k + '" key');
-  assert.equal(numbers.join(','), 'io.quick.order,io.version', 'the only numbers in the set are its quick-bar position and version');
+  assert.equal(numbers.join(','), 'io.quick.order,io.view.summary[0].windowsHours[0],io.view.summary[0].windowsHours[1],io.view.summary[0].windowsHours[2],io.version',
+    'the only numbers in the set are its quick-bar position, the three display windows (hours) and its version');
   const ids = fields().map((f) => f.id).join(' ');
   assert.ok(!/thr|tgt|target|limit|goal/i.test(ids), 'no field id for a threshold, target or limit');
+});
+
+test('care.intake_output has a summary block (V4b), version 2, and its view validates', () => {
+  assert.equal(io.version, 2);
+  assert.deepEqual(io.view.summary, [{ type: 'sumBy', timeField: 'io_time', keyField: 'io_type', valueField: 'io_volume', windowsHours: [8, 12, 24], label: 'sum of entered rows' }]);
+  const r = validateView(io);
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.warnings, []);
 });
 
 test('the quick-bar order is unique among the direct sets', () => {
