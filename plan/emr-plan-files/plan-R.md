@@ -6,7 +6,7 @@
 
 *See section 5. Do R1 right after V1a, then continue Phase V. R2 to R7 follow V8. This phase replaces the `entryRoles` idea in 48a0.*
 
-#### [ ] R1. Access vocabulary and the "step 0" checklist (doc only)
+#### [x] R1. Access vocabulary and the "step 0" checklist (doc only)
 **File:** VIEWS.md | **Paste:** section 5 of this plan
 ```text
 Add to VIEWS.md: the access block {view, enter, amend, approve, configure, export}, each a list of roles from permissions.js; default deny; narrow-never-widen; and a "Step 0" line at the top of "How to add a new type": write the access block first. No code.

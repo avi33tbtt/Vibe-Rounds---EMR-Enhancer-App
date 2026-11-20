@@ -28,7 +28,7 @@ Do not change code. From this output list every place that names a clinical set,
 
 ### V1. Write the vocabulary down
 
-#### [ ] V1a. VIEWS.md (doc only)
+#### [x] V1a. VIEWS.md (doc only)
 **File:** new `VIEWS.md` | **Paste:** section 9 of this plan
 ```text
 Write VIEWS.md in the repo root from this text: layers, view block keys, surface types, section types, the three JSON examples, engine rules E1-E7. Add one "How to add a new type" checklist: step 0 access block (see R1), then pure function, made-up-set test, validator entry, doc line. No code.
