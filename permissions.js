@@ -41,6 +41,7 @@ const ACTIONS = {
   // content and reference data
   'set.write': ['admin', 'doctor', 'informatician'],
   'code.write': ['admin', 'doctor', 'informatician'],
+  'codesystem.write': ['admin', 'informatician'],    // P4a: create a local code system and add codes to it (verifying a local code uses code.write, like a standard one)
   'binding.write': ['admin', 'doctor', 'informatician'],
   'rule.write': CLIN, 'rule.approve': CLIN,          // only a doctor or an admin can approve; editing resets approval (api.js)
   'protocol.write': CLIN, 'protocol.approve': CLIN,
@@ -67,7 +68,7 @@ const ACTION_LABELS = {
   'case.create': 'create cases', 'case.patient': 'edit patient banner details', 'case.pin': 'change the quick bar', 'alert.ack': 'acknowledge alerts',
   'case.read_errors': 'see rows entered in error', 'case.history': 'see case history', 'case.narrative': 'edit the narrative', 'case.apply': 'apply sets or pathways', 'case.patch': 'change this case',
   'row.add': 'add readings', 'row.amend_own': 'amend readings', 'row.amend_any': 'amend other people\'s readings', 'value.write': 'save these values',
-  'note.write': 'write notes', 'note.sign': 'sign notes', 'set.write': 'edit element sets and pathways', 'code.write': 'edit verified codes', 'binding.write': 'edit code bindings',
+  'note.write': 'write notes', 'note.sign': 'sign notes', 'set.write': 'edit element sets and pathways', 'code.write': 'edit verified codes', 'codesystem.write': 'create local code systems or add local codes', 'binding.write': 'edit code bindings',
   'rule.write': 'edit alert rules', 'rule.approve': 'approve alert rules', 'protocol.write': 'edit protocols', 'protocol.approve': 'verify protocols',
   'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'migrate.run': 'migrate demo patients', 'audit.read': 'read the audit log', 'rules.inforce': 'see the rules in force', 'ai.admin': 'change the AI setting', 'ai.schema': 'draft an element set with AI', 'ai.suggest': 'get AI suggestions', 'ai.rule_draft': 'draft a rule with AI', 'user.manage': 'manage users', 'password.change': 'change this password',
   'content.review': 'review content', 'package.install': 'install packages',
@@ -89,7 +90,8 @@ const ROUTE_ACTIONS = {
   'POST /element-sets': 'set.write', 'PATCH /element-sets/:setId': 'set.write', 'DELETE /element-sets/:setId': 'set.write',
   'GET /usage': 'ref.read', 'POST /usage/:setId': 'usage.write', 'DELETE /usage': 'usage.write',
   'GET /codes': 'ref.read', 'POST /codes': 'code.write', 'POST /codes/:system/:code/live': 'code.write',
-  'GET /code-systems': 'ref.read',
+  'GET /code-systems': 'ref.read', 'POST /code-systems': 'codesystem.write',
+  'GET /code-systems/:id/codes': 'ref.read', 'POST /code-systems/:id/codes': 'codesystem.write', 'POST /code-systems/:id/codes/:code/verify': 'code.write',
   'GET /bindings': 'ref.read', 'PUT /bindings': 'binding.write', 'DELETE /bindings/:setId/:fieldId': 'binding.write',
   'GET /rules': 'ref.read', 'PUT /rules/:owner/:ruleId': 'rule.write', 'POST /rules/:owner/:ruleId/approve': 'rule.approve',
   'POST /rules/:owner/:ruleId/disable': 'rule.write', 'DELETE /rules/:owner/:ruleId': 'rule.write',

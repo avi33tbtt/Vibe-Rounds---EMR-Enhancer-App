@@ -21,7 +21,12 @@
     reasons: {},                                   // rowId -> reason typed when a reading is removed ("entered in error")
     hooks: { onStatus() {}, onConflict() {}, onUnauthorized() {}, onCaseReloaded() {}, onChanges() {}, onSetVersion() {}, toast() {}, rowTime() { return null; } },
   };
-  const S = { cases: [], sets: [], usage: {}, codes: {}, codeMeta: {}, binds: {}, rules: {}, protocols: {}, prefs: {}, setHist: {} };
+  const S = { cases: [], sets: [], usage: {}, codes: {}, codeMeta: {}, binds: {}, rules: {}, protocols: {}, prefs: {}, setHist: {}, codeSystems: [] };
+  // Demo mode and a failed load: the five standard systems, ids and names only. No codes.
+  const DEMO_CODE_SYSTEMS = [
+    { id: 'snomed', name: 'SNOMED CT', kind: 'standard' }, { id: 'loinc', name: 'LOINC', kind: 'standard' },
+    { id: 'icd10', name: 'ICD-10', kind: 'standard' }, { id: 'icd11', name: 'ICD-11', kind: 'standard' },
+    { id: 'ucum', name: 'UCUM', kind: 'standard' }];
   const snap = {};                                  // entity key -> what the server last confirmed
   const Q = []; let running = false, timer = null, delay = 2000, savedAt = null, retrying = false;
   const failed = {}, conflicts = {};
@@ -441,6 +446,7 @@
   };
 
   Store.codes = () => clone(S.codes);                   // {'system|code': display}
+  Store.codeSystems = () => clone(S.codeSystems);       // [{id, name, kind, uri?, licenceNote?}]; Demo mode: the five standard systems
   Store.codeMeta = () => clone(S.codeMeta);             // {'system|code': {addedBy, addedAt, verifiedLive:{ok,checkedAt,display?}|null}} (server mode; Demo mode keeps live results only)
   const splitKey = (k) => { const i = k.indexOf('|'); return i < 1 ? null : [k.slice(0, i), k.slice(i + 1)]; };
   // A new key is POSTed. If the server already has that code (409) the server's entry wins: nothing is overwritten, the person is told.
@@ -470,13 +476,25 @@
       S.codeMeta[k] = { addedBy: c.addedBy, addedAt: c.addedAt, verifiedLive: c.verifiedLive || null }; });
     return true;
   };
+  // P4d: after a local system is made or a local code is verified on the server, pull the new rows into the cache. Adds and updates only, so a code still waiting to be saved is not lost. Demo mode: nothing to do.
+  Store.refreshCodes = async function () {
+    if (Store.mode === 'local') return false;
+    const [codes, csys] = await Promise.all([api('GET', '/codes'), api('GET', '/code-systems')]);
+    (codes || []).forEach((c) => { const k = c.system + '|' + c.code; S.codes[k] = c.display; snap['code:' + k] = c.display; S.codeMeta[k] = { addedBy: c.addedBy, addedAt: c.addedAt, verifiedLive: c.verifiedLive || null }; });
+    if (Array.isArray(csys)) S.codeSystems = csys;
+    return true;
+  };
   Store.binds = () => clone(S.binds);                   // {'setId|fieldId': {system,code,display}}
   Store.saveBinds = function (b) {
     const old = S.binds; S.binds = clone(b);
     if (Store.mode === 'local') return lsSet(LS.binds, S.binds);
     Object.keys(b).forEach((k) => { if (!eq(old[k], b[k]) && /^[^|]+\|[^|]+$/.test(k)) enqueue('bind:' + k, async () => {
       const x = S.binds[k]; const [setId, fieldId] = k.split('|');
-      if (x) await api('PUT', '/bindings', { setId, fieldId, system: x.system, code: x.code, display: x.display });
+      if (x) {
+        // P4d: the app keeps one binding per field. When its system changes, remove the old system's binding first, so the server does not keep both.
+        const prev = old[k]; if (prev && prev.system && prev.system !== x.system) await api('DELETE', '/bindings/' + setId + '/' + fieldId + '?system=' + encodeURIComponent(prev.system));
+        await api('PUT', '/bindings', { setId, fieldId, system: x.system, code: x.code, display: x.display });
+      }
       else await api('DELETE', '/bindings/' + setId + '/' + fieldId); }); });
     Object.keys(old).forEach((k) => { if (!(k in b) && /^[^|]+\|[^|]+$/.test(k)) enqueue('bind:' + k, async () => { if (S.binds[k]) return; const [s, f] = k.split('|'); await api('DELETE', '/bindings/' + s + '/' + f); }); });
     return true;
@@ -561,7 +579,7 @@
         try { if (!g.localStorage.getItem('cases_corrupt')) g.localStorage.setItem('cases_corrupt', raw); } catch (x) { /* ignore */ }
         Store.hooks.toast('Saved cases could not be read; a raw copy was kept under localStorage key cases_corrupt. Do not clear browser data until you have inspected it.'); cs = [];
       }
-      S.cases = cs; const a = lsGet(LS.sets, []); S.sets = Array.isArray(a) ? a : [];
+      S.cases = cs; S.codeSystems = clone(DEMO_CODE_SYSTEMS); const a = lsGet(LS.sets, []); S.sets = Array.isArray(a) ? a : [];
       S.usage = isObj(lsGet(LS.usage, {})) ? lsGet(LS.usage, {}) : {}; S.codes = isObj(lsGet(LS.codes, {})) ? lsGet(LS.codes, {}) : {}; S.codeMeta = isObj(lsGet(LS.codeMeta, {})) ? lsGet(LS.codeMeta, {}) : {};
       S.binds = isObj(lsGet(LS.binds, {})) ? lsGet(LS.binds, {}) : {}; S.rules = isObj(lsGet(LS.rules, {})) ? lsGet(LS.rules, {}) : {};
       S.protocols = isObj(lsGet(LS.protocols, {})) ? lsGet(LS.protocols, {}) : {}; S.setHist = isObj(lsGet(LS.setHist, {})) ? lsGet(LS.setHist, {}) : {};
@@ -576,6 +594,8 @@
     const [me, list, sets, usage, codes, binds, rules, protos, prefs] = await Promise.all([api('GET', '/me'), api('GET', '/cases'), api('GET', '/element-sets'), api('GET', '/usage'),
       api('GET', '/codes'), api('GET', '/bindings'), api('GET', '/rules'), api('GET', '/protocols'), api('GET', '/prefs')]);
     Store.me = me;
+    let csys = null; try { csys = await api('GET', '/code-systems'); } catch (e) { /* keep the built-in list */ }
+    S.codeSystems = Array.isArray(csys) ? csys : clone(DEMO_CODE_SYSTEMS);
     const full = await pool(list, 6, (x) => api('GET', '/cases/' + x.id));
     Object.keys(snap).forEach((k) => delete snap[k]);
     S.cases = full.map(fromServerCase);
@@ -615,7 +635,7 @@
     csrf = null; needLogin = true; Q.length = 0; clearTimeout(timer); retrying = false; running = false;
     for (const k of Object.keys(failed)) delete failed[k]; for (const k of Object.keys(conflicts)) delete conflicts[k];
     Object.keys(snap).forEach((k) => delete snap[k]);
-    Object.assign(S, { cases: [], sets: [], usage: {}, codes: {}, codeMeta: {}, binds: {}, rules: {}, protocols: {}, prefs: {}, setHist: {} });
+    Object.assign(S, { cases: [], sets: [], usage: {}, codes: {}, codeMeta: {}, binds: {}, rules: {}, protocols: {}, prefs: {}, setHist: {}, codeSystems: [] });
     Store.me = null; Store.ready = false; notify();
   };
 

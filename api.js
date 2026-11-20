@@ -42,7 +42,9 @@ const pinnedArr = z.array(ident).max(50).nullable();
 // Format checks only (does the string look like a SNOMED CT concept id or a LOINC code). They say nothing about whether the code is the RIGHT concept.
 const sysEnum = z.enum(['snomed', 'loinc']);
 const CODE_RE = { snomed: /^[1-9]\d{5,17}$/, loinc: /^\d{1,7}-\d$/ };
+const LOCAL_SYS_RE = /^[a-z][a-z0-9_-]{1,39}$/, LOCAL_CODE_RE = /^[A-Za-z0-9._:-]{1,50}$/;   // P4a: a local system id and a local code (no slash or bar, so they are safe in URLs and audit ids)
 function codeShape(o, ctx) {
+  if (!CODE_RE[o.system]) { if (!LOCAL_CODE_RE.test(o.code)) ctx.addIssue({ code: 'custom', path: ['code'], message: 'not a valid local code (letters, digits, . _ : -)' }); return; }   // P4c: a local system id
   if (!CODE_RE[o.system].test(o.code)) ctx.addIssue({ code: 'custom', path: ['code'], message: o.system === 'snomed' ? 'not a SNOMED CT concept id (6 to 18 digits)' : 'not a LOINC code (digits, a hyphen, one check digit)' });
 }
 const auditFilter = {
@@ -79,8 +81,11 @@ const S = {
     expectedVersion: ver.optional() }).strict(),
   usagePost: z.object({ dx: z.string().max(100).optional(), dxs: z.array(z.string().min(1).max(100)).max(20).optional() }).strict(),
   codePost: z.object({ system: sysEnum, code: z.string().trim().min(1).max(20), display: z.string().trim().min(1).max(300) }).strict().superRefine(codeShape),
+  localSysPost: z.object({ id: z.string().regex(LOCAL_SYS_RE).refine((s) => !['local', 'none', 'any'].includes(s), 'this id is reserved'), name: z.string().trim().min(1).max(100),
+    uri: z.string().regex(/^[A-Za-z][A-Za-z0-9+.-]*:\S{1,190}$/).optional() }).strict(),
+  localCodePost: z.object({ code: z.string().regex(LOCAL_CODE_RE), display: z.string().trim().min(1).max(300) }).strict(),
   codeLive: z.object({ ok: z.boolean(), display: z.string().trim().max(300).optional() }).strict(),
-  bindPut: z.object({ setId: ident, fieldId: ident, system: sysEnum, code: z.string().trim().min(1).max(20), display: z.string().trim().min(1).max(300) }).strict().superRefine(codeShape),
+  bindPut: z.object({ setId: ident, fieldId: ident, system: z.string().regex(LOCAL_SYS_RE), code: z.string().trim().min(1).max(50), display: z.string().trim().min(1).max(300) }).strict().superRefine(codeShape),
   rulePut: z.object({ body: z.record(z.string(), z.any()).refine(jsonSize(20000), 'rule too large'), expectedVersion: z.number().int().min(0) }).strict(),
   ruleAct: z.object({ expectedVersion: ver }).strict(),
   protoPut: z.object({ body: z.record(z.string(), z.any()).refine(jsonSize(50000), 'protocol too large'), expectedVersion: z.number().int().min(0) }).strict(),
@@ -868,6 +873,50 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     res.json((await db.query('SELECT id,uri,name,kind,licence_note FROM code_systems ORDER BY (kind = $1), id', ['local'])).rows
       .map((x) => ({ id: x.id, uri: x.uri, name: x.name, kind: x.kind, licenceNote: x.licence_note })));
   }));
+  // P4a: local code systems. A local system is a code_systems row of kind 'local'; its codes sit in local_codes and join verified_codes only when a person
+  // verifies them (same table and audit as a standard code, no live check, and never through POST /codes, which accepts snomed and loinc only).
+  const localId = (v) => { if (!LOCAL_SYS_RE.test(v)) throw new ApiError(404, 'not_found', 'No such local code system'); return v; };
+  const localCodeParam = (v) => { if (!LOCAL_CODE_RE.test(v)) throw new ApiError(404, 'not_found', 'This code is not in the local list'); return v; };
+  const localSysCheck = async (c, id) => { if (!(await c.query("SELECT 1 FROM code_systems WHERE id=$1 AND kind='local'", [id])).rows.length) throw new ApiError(404, 'not_found', 'No such local code system'); };
+  const localOut = (x) => ({ code: x.code, display: x.display, createdBy: x.created_by, createdAt: iso(x.created_at), verified: !!x.v_by, verifiedBy: x.v_by || null, verifiedAt: iso(x.v_at) });
+  r.post('/code-systems', wrap(async (req, res) => {
+    const b = parse(S.localSysPost, req.body), uri = b.uri || 'urn:local-code-system:' + b.id;
+    const row = await db.withTx(async (c) => {
+      const u = await c.query("INSERT INTO code_systems (id,uri,name,kind,licence_note,created_by) VALUES ($1,$2,$3,'local','',$4) ON CONFLICT DO NOTHING RETURNING id,uri,name,kind,licence_note", [b.id, uri, b.name, req.actor.id]);
+      if (!u.rows.length) throw new ApiError(409, 'conflict', 'A code system with this id or address already exists');
+      await audit(c, { action: 'codesystem.add', entity: 'code_system', entity_id: b.id, after: { name: b.name, uri, kind: 'local' } });
+      return u.rows[0];
+    });
+    res.status(201).json({ id: row.id, uri: row.uri, name: row.name, kind: row.kind, licenceNote: row.licence_note });
+  }));
+  r.get('/code-systems/:id/codes', wrap(async (req, res) => {
+    const id = localId(req.params.id); await localSysCheck(db, id);
+    res.json((await db.query('SELECT l.code,l.display,l.created_by,l.created_at,v.added_by v_by,v.added_at v_at FROM local_codes l LEFT JOIN verified_codes v ON v.system=l.system_id AND v.code=l.code WHERE l.system_id=$1 ORDER BY l.code', [id])).rows.map(localOut));
+  }));
+  r.post('/code-systems/:id/codes', wrap(async (req, res) => {
+    const id = localId(req.params.id), b = parse(S.localCodePost, req.body);
+    const row = await db.withTx(async (c) => {
+      await localSysCheck(c, id);
+      const u = await c.query('INSERT INTO local_codes (system_id,code,display,created_by) VALUES ($1,$2,$3,$4) ON CONFLICT (system_id,code) DO NOTHING RETURNING code,display,created_by,created_at', [id, b.code, b.display, req.actor.id]);
+      if (!u.rows.length) throw new ApiError(409, 'conflict', 'This code is already in the local list');
+      await audit(c, { action: 'localcode.add', entity: 'local_code', entity_id: `${id}/${b.code}`, after: { display: b.display } });
+      return u.rows[0];
+    });
+    res.status(201).json(localOut(row));
+  }));
+  // Verification: a person confirms the code and its display against the facility's own list. The row then joins verified_codes. Not undone here; a second verify is a 409.
+  r.post('/code-systems/:id/codes/:code/verify', wrap(async (req, res) => {
+    const id = localId(req.params.id), code = localCodeParam(req.params.code);
+    const out = await db.withTx(async (c) => {
+      const l = (await c.query('SELECT code,display,created_by,created_at FROM local_codes WHERE system_id=$1 AND code=$2 FOR UPDATE', [id, code])).rows[0];
+      if (!l) throw new ApiError(404, 'not_found', 'This code is not in the local list');
+      const u = await c.query('INSERT INTO verified_codes (system,code,display,added_by) VALUES ($1,$2,$3,$4) ON CONFLICT (system,code) DO NOTHING RETURNING added_by,added_at', [id, code, l.display, req.actor.id]);
+      if (!u.rows.length) throw new ApiError(409, 'conflict', 'This code is already verified');
+      await audit(c, { action: 'localcode.verify', entity: 'verified_code', entity_id: `${id}/${code}`, after: { display: l.display } });
+      return Object.assign({}, l, { v_by: u.rows[0].added_by, v_at: u.rows[0].added_at });
+    });
+    res.json(localOut(out));
+  }));
   r.get('/bindings', wrap(async (req, res) => {
     res.json((await db.query('SELECT set_id,field_id,system,code,display FROM code_bindings ORDER BY set_id,field_id')).rows
       .map((b) => ({ setId: b.set_id, fieldId: b.field_id, system: b.system, code: b.code, display: b.display })));
@@ -884,8 +933,15 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   r.put('/bindings', wrap(async (req, res) => {
     const b = parse(S.bindPut, req.body);
     await db.withTx(async (c) => {
+      if (!CODE_RE[b.system]) {   // P4c: not snomed or loinc, so it must be a local system, and the code must already be verified
+        const sy = (await c.query('SELECT kind FROM code_systems WHERE id=$1', [b.system])).rows[0];
+        if (!sy || sy.kind !== 'local') throw new ApiError(400, 'validation', 'Only SNOMED CT, LOINC and your own local code systems can be attached to a field.');
+        const vc = (await c.query('SELECT display FROM verified_codes WHERE system=$1 AND code=$2', [b.system, b.code])).rows[0];
+        if (!vc) throw new ApiError(422, 'code_not_verified', `The code ${b.code} is not a verified code of ${b.system}. Add it and verify it in the Codes tab first.`);
+        b.display = vc.display;   // the verified display is the one that is kept
+      }
       const allow = await codingAllowOf(c, b.setId, b.fieldId);
-      if (allow && !allow.includes(b.system)) throw new ApiError(422, 'coding_not_allowed', `This field's coding choices do not include ${b.system}. Change the field's coding first, then add the code.`);
+      if (allow && !(allow.includes(b.system) || (!CODE_RE[b.system] && allow.includes('local')))) throw new ApiError(422, 'coding_not_allowed', `This field's coding choices do not include ${b.system}. Change the field's coding first, then add the code.`);
       const old = (await c.query('SELECT system,code,display FROM code_bindings WHERE set_id=$1 AND field_id=$2 AND system=$3 FOR UPDATE', [b.setId, b.fieldId, b.system])).rows[0] || null;
       await c.query(`INSERT INTO code_bindings (set_id,field_id,system,code,display) VALUES ($1,$2,$3,$4,$5)
         ON CONFLICT (set_id,field_id,system) DO UPDATE SET code=EXCLUDED.code, display=EXCLUDED.display`, [b.setId, b.fieldId, b.system, b.code, b.display]);
@@ -895,10 +951,11 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   }));
   r.delete('/bindings/:setId/:fieldId', wrap(async (req, res) => {
     const sid = identParam(req.params.setId), fid = identParam(req.params.fieldId);
-    const sq = req.query.system === undefined ? null : sysEnum.safeParse(req.query.system);
+    const sq = req.query.system === undefined ? null : z.string().regex(LOCAL_SYS_RE).safeParse(req.query.system);
     if (sq && !sq.success) throw new ApiError(400, 'validation', 'Invalid code system');
     const only = sq ? sq.data : null;   // P2b: ?system= removes one binding, none removes every binding of the field
     await db.withTx(async (c) => {
+      if (only && !CODE_RE[only] && !(await c.query("SELECT 1 FROM code_systems WHERE id=$1 AND kind='local'", [only])).rows.length) throw new ApiError(400, 'validation', 'Invalid code system');
       const d = only ? await c.query('DELETE FROM code_bindings WHERE set_id=$1 AND field_id=$2 AND system=$3 RETURNING system,code,display', [sid, fid, only])
         : await c.query('DELETE FROM code_bindings WHERE set_id=$1 AND field_id=$2 RETURNING system,code,display', [sid, fid]);
       await audit(c, { action: 'binding.delete', entity: 'code_binding', entity_id: `${sid}/${fid}`, before: d.rows[0] || null });

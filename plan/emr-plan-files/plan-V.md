@@ -105,17 +105,19 @@ Test: define a made-up set "test.fluids" with different field ids and a sumBy bl
 
 ### V5. Ward board becomes a pathway
 
-#### [ ] V5a. Seed `pathway.emr.ward_board` (data only)
+#### [x] V5a. Seed `pathway.emr.ward_board` (data only)
 **Files:** element-sets.js, new `emr-views.test.js` | **Paste:** the ward_board example from section 9, one seed pathway
 ```text
 Add pathway.emr.ward_board to the seed pathways exactly as in section 9 (members [], rules [], surface patients_columns, columnsFrom pinned). Test: it validates with validatePathwayViews and seeds read-only.
 ```
+*V5a result (20 Nov 2026): the seed entry is in `element-sets.js` (version 1, contexts ['emr'], members [], rules [], surface patients_columns / columnsFrom pinned; title and description added because the other seed pathways carry them). `emr-views.test.js` has two parts. No database: present once; section 9 shape; validates with `validatePathwayViews` (given the seed ids); no banned key and no other set or field named; every EMR pathway has no rules. Database (own database, like `local-codes.test.js`): `seedSets` stores it with source 'seed', read_only true, kind pathway, version 1; a second seeding changes nothing; `GET /element-sets` lists it as a read-only seed; POST, PATCH and DELETE are refused with 403 `read_only` and the row is unchanged. Note: seed rows get tier 'local-reviewed' (the code in `seed.js`), not 'seed' as some plan text says; the tests check source and read_only. Not run by me (no database, and the repo's `views.js` was not available): run `npm test`. Watch: a test that counts seed sets, or lists every seed pathway as care, may now fail. V5b must hide pathways with contexts 'emr' from Add to chart and the AI suggestion list (see V5b).*
 
 #### [ ] V5b. Board columns come from the active surface
 **File:** enhancer.html | **Paste:** `boardRow`, the board part of `renderPatients`, `pinListFor`
 ```text
 Add emrSurfaces(type) returning the active EMR view pathways whose surface.type matches (until V7, treat pathway.emr.ward_board as active when found). boardRow takes its column list from the surface: "pinned" uses pinListFor, otherwise the pathway's members. Output unchanged; update board tests.
 ```
+*Added at V5a (20 Nov 2026): the seed pathway has contexts ['emr'] and kind 'pathway', so the Add-to-chart list (`inCtx`, All contexts) and the AI suggestion list (`availP`, about lines 979 and 1191) would show it as a pathway to start on a case. In this task also hide every pathway whose contexts include 'emr' from those two lists (one helper `isEmrView(s)`), so nothing new appears for the user.*
 
 #### [ ] V5c. Cell content from the set's `board` block
 **File:** enhancer.html | **Paste:** boardRow, the 37c5 no-reading code

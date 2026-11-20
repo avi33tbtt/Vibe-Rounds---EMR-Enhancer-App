@@ -2,7 +2,7 @@
 
 *v6 split into files, 20 Nov 2026. EMR repo: github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App. Analytics repo: github.com/avi33tbtt/VibeRounds-Clinical-Analytics-App. Registry repo: `emr-enhancer-registry` (built in this project).*
 
-**Latest `npm test` (EMR repo, commit `86d8259`, 20 Nov 2026): 285 tests, 285 pass.** V0a adds five more test files; after it, write the new total here.
+**Latest `npm test` (EMR repo, after V0a, 20 Nov 2026): 312 tests, 312 pass.** *(Out of date: P1a to P4c added tests since. Replace this line with the count `npm test` prints after P4c.)* Tests now run one file at a time (`--test-concurrency=1`) because the test files share one database role (`emr_app`). The database must be running first (`npm run db:up`, with `POSTGRES_PASSWORD` in `.env`).
 
 ## How to use (every chat, nothing to remember)
 
@@ -21,11 +21,11 @@ Steps 5, 11, 14 and 16 are different from the old order in section 15.3. The old
 
 | Step | Done | File | Tasks | Decide first (see `plan-ref-decisions.md`) | Gate or check after |
 |---|---|---|---|---|---|
-| 1 | [ ] | `plan-V.md` | V0a to V1a | - | Create the repo-side basics: orphan tests into npm test, hand-code inventory, VIEWS.md. |
-| 2 | [ ] | `plan-R.md` | R1 | - | - |
-| 3 | [ ] | `plan-V.md` | V2a to V4d | 13 | **Gate 1:** the I/O sum looks identical and no hand-named I/O code is left. Then (manual) build one real specialty template as data and note every place it needed a new view type. |
-| 4 | [ ] | `plan-F.md` | F0 to F3b | 24, 25 | **Gate 2:** the coverage report is right on made-up sets and on real seed sets. Then (manual) read the coverage report for each seed set against the example in 7.1. |
-| 5 | [ ] | `plan-P-coding.md` | P0 to P2b, P3, P4a, P4b, P5a | 38, 39 | - |
+| 1 | [x] | `plan-V.md` | V0a to V1a | - | Create the repo-side basics: orphan tests into npm test, hand-code inventory, VIEWS.md. |
+| 2 | [x] | `plan-R.md` | R1 | - | - |
+| 3 | [x] | `plan-V.md` | V2a to V4d | 13 | **Gate 1:** the I/O sum looks identical and no hand-named I/O code is left. Then (manual) build one real specialty template as data and note every place it needed a new view type. |
+| 4 | [x] | `plan-F.md` | F0 to F3b | 24, 25 | **Gate 2:** the coverage report is right on made-up sets and on real seed sets. Then (manual) read the coverage report for each seed set against the example in 7.1. |
+| 5 | [x] | `plan-P-coding.md` | P0 to P2b, P3a to P3d, P4a to P4d, P5a | 38, 39 | - |
 | 6 | [ ] | `plan-V.md` | V5a to V8c | 11, 17 | V8c has the Phase V release gate (checked after step 8). |
 | 7 | [ ] | `plan-R.md` | R2 to R9 | 12, 18, 19 | - |
 | 8 | [ ] | `plan-5-handover.md` | 37d4 to 37d5 | - | **Phase V gate:** I/O sum, ward board and handover look the same as before; no clinical set or field name left in code except the V8a allow-list; switching the Handover pathway off removes its tab. |

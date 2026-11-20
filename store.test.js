@@ -58,7 +58,7 @@ async function readyServerStore(handler = happy()) {
 test('init (server mode) loads /api/me and the reference data, then is ready', async () => {
   const t = await readyServerStore();
   assert.equal(t.Store.ready, true); assert.equal(t.Store.me.name, 'Dev');
-  assert.deepEqual(t.calls.map((c) => c.path).sort(), ['/bindings', '/cases', '/codes', '/element-sets', '/me', '/prefs', '/protocols', '/rules', '/session', '/usage']);
+  assert.deepEqual(t.calls.map((c) => c.path).sort(), ['/bindings', '/cases', '/code-systems', '/codes', '/element-sets', '/me', '/prefs', '/protocols', '/rules', '/session', '/usage']);
 });
 
 test('init fails (never half-loaded) when /api/me is missing; 401 on the session check calls onUnauthorized', async () => {
@@ -849,4 +849,37 @@ test('36b: a 403 ai_disabled switches the AI flag off at once; an admin toggle u
   off = true; await assert.rejects(t.Store.ai.preview('suggest', { narrative: 'x' }), (e) => e.code === 'ai_disabled'); assert.equal(t.Store.ai.available('suggest'), false);
   await t.Store.ai.setEnabled(true); assert.equal(t.Store.me.ai, true); assert.deepEqual(t.calls[t.calls.length - 1].body, { enabled: true });
   await t.Store.ai.setEnabled(false); assert.equal(t.Store.me.ai, false);
+});
+
+test('P3c: Demo mode lists the five standard systems (ids and names), makes no call, and returns a copy', async () => {
+  const { Store } = boot(async () => { throw new Error('no fetch in Demo mode'); }, { mode: 'local' });
+  await Store.init();
+  const a = Store.codeSystems();
+  assert.deepEqual(Array.from(a, (x) => x.id), ['snomed', 'loinc', 'icd10', 'icd11', 'ucum']);
+  assert.ok(a.every((x) => x.name && x.kind === 'standard'));
+  a[0].name = 'changed'; a.pop();
+  assert.equal(Store.codeSystems().length, 5); assert.equal(Store.codeSystems()[0].name, 'SNOMED CT');
+});
+
+test('P3c: server mode loads GET /code-systems at boot, including a local system, and returns a copy', async () => {
+  const h = happy();
+  const list = [{ id: 'snomed', uri: 'http://snomed.info/sct', name: 'SNOMED CT', kind: 'standard', licenceNote: 'n' }, { id: 'ward-x', uri: 'urn:x', name: 'Ward X', kind: 'local', licenceNote: '' }];
+  const t = await readyServerStore(async (m, p, b) => (m === 'GET' && p === '/code-systems' ? [200, list] : h(m, p, b)));
+  assert.ok(t.calls.some((c) => c.method === 'GET' && c.path === '/code-systems'));
+  assert.deepEqual(JSON.parse(JSON.stringify(t.Store.codeSystems())), list);
+  const c = t.Store.codeSystems(); c[1].name = 'x';
+  assert.equal(t.Store.codeSystems()[1].name, 'Ward X');
+});
+
+test('P3c: if GET /code-systems fails the store still becomes ready and uses the built-in five', async () => {
+  const t = await readyServerStore();   // happy() answers 404 for /code-systems
+  assert.equal(t.Store.ready, true);
+  assert.deepEqual(Array.from(t.Store.codeSystems(), (x) => x.id), ['snomed', 'loinc', 'icd10', 'icd11', 'ucum']);
+});
+
+test('P3c: signing out clears the code systems', async () => {
+  const t = await readyServerStore();
+  assert.equal(t.Store.codeSystems().length, 5);
+  await t.Store.logout(true);
+  assert.equal(t.Store.codeSystems().length, 0);
 });

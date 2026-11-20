@@ -229,5 +229,34 @@ window.SEED_SETS=[
  "suggests":[],
  "members":[{"setId":"care.vitals","optional":false},{"setId":"care.fever_chart","optional":false},{"setId":"template.basic_emr","optional":false}],
  "rules":[]
+},
+/* Seed EMR view pathway (V5a). Not a clinical pathway: it only says where a surface appears. Data only; no doses, thresholds, bands or rules. */
+{
+ "setId":"pathway.emr.ward_board",
+ "kind":"pathway",
+ "version":1,
+ "title":"Ward board columns",
+ "description":"Which columns the Patients ward board shows: the sets pinned on the board. A view, not a care pathway; it holds no protocol.",
+ "contexts":["emr"],
+ "requires":[],
+ "suggests":[],
+ "members":[],
+ "rules":[],
+ "surface":{"type":"patients_columns","columnsFrom":"pinned"}
+},
+/* Seed EMR view pathway (V6a). The Handover tab as data: which sections it shows and in what order. Data only; no doses, thresholds, bands or rules. */
+{
+ "setId":"pathway.emr.handover",
+ "kind":"pathway",
+ "version":1,
+ "title":"Handover view",
+ "description":"Which sections the Handover tab shows, in order: narrative, active pathways, latest values, acknowledged alerts and new rows. A view, not a care pathway; it holds no protocol.",
+ "contexts":["emr"],
+ "requires":[],
+ "suggests":[],
+ "members":[],
+ "rules":[],
+ "surface":{"type":"case_tab","id":"ho","label":"Handover","print":true},
+ "sections":[{"type":"narrative"},{"type":"activePathways"},{"type":"latestValues","scope":"applied"},{"type":"ackedAlerts","hours":24},{"type":"newRows","since":"lastHandover"}]
 }
 ];

@@ -471,7 +471,10 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 <div class="pane" id="fh"><div class="cd"><b>Code validation</b><div id="sum" class="mu">Add an element set in the Case tab first.</div><div id="ctab"></div>
 <button class="b" onclick="liveCheck()">Verify live (tx.fhir.org)</button>
 <div class="mu" style="margin-top:8px">Add a code you verified yourself in the SNOMED / LOINC browsers:</div>
-<select id="afld" style="width:auto;max-width:260px"><option value="">Field to attach to (optional)</option></select> <select id="asys" style="width:110px"><option>snomed</option><option>loinc</option></select> <input id="acode" placeholder="code" style="width:130px"> <input id="adisp" placeholder="display (as in browser)" style="width:260px"> <button class="b" onclick="addCode()">Add</button></div>
+<select id="afld" style="width:auto;max-width:260px"><option value="">Field to attach to (optional)</option></select> <select id="asys" style="width:auto;max-width:170px"><option>snomed</option><option>loinc</option></select> <input id="acode" placeholder="code" style="width:130px"> <input id="adisp" placeholder="display (as in browser)" style="width:260px"> <button class="b" onclick="addCode()">Add</button></div>
+<div class="cd" id="lcs"><b>Local code systems</b> <span class="mu">A facility's own codes. A person types them in, then a person verifies them; the app never fills them in. Nothing here is SNOMED CT or LOINC.</span>
+<div id="lcmsg" class="mu"></div><div id="lcl"></div>
+<div id="lcNew" style="margin-top:8px"><input id="lcid" placeholder="id, e.g. ward-a" style="width:150px"> <input id="lcname" placeholder="name" style="width:220px"> <button class="b" onclick="lcAddSystem()">Create local system</button></div></div>
 </div>
 <div class="pane" id="ho"><div class="cd"><b>Handover</b> <span class="mu">Display only. Everything is shown as recorded; no assessment is made.</span><div id="hob"></div></div></div>
 <div class="pane" id="ex"><div class="cd"><b>FHIR R4 bundle</b> <span class="mu">(from the current case values; unverified codes are left out, text kept. In server mode each build is recorded in the audit log, and the chart must be linked to a patient.)</span><br>
@@ -973,7 +976,7 @@ const used=r.filter(s=>sc(s)>0).sort((a,b)=>sc(b)-sc(a)||lu(b).localeCompare(lu(
 const pb=pwBoost(r),def=DEF.map(id=>r.find(s=>s.setId==id)).filter(s=>s&&!used.includes(s)&&!pb.includes(s));return pb.concat(used.filter(s=>!pb.includes(s)),def).slice(0,6)}
 async function suggestSets(){if(aiBlocked('suggest'))return;if(!CUR)return;toast('');const nar=(CUR.narrative||'').trim();
 if(!nar)return toast('Write a case narrative first.');if(nar.length>8000)return toast('The narrative is longer than 8000 characters. Shorten it before asking the AI.');
-const done=new Set(CUR.applied.map(a=>a.setId)),onPw=new Set((CUR.pathways||[]).map(x=>x.pathwayId)),avail=registry().filter(x=>!done.has(x.setId)&&!isPw(x)),availP=registry().filter(x=>isPw(x)&&!onPw.has(x.setId));
+const done=new Set(CUR.applied.map(a=>a.setId)),onPw=new Set((CUR.pathways||[]).map(x=>x.pathwayId)),avail=registry().filter(x=>!done.has(x.setId)&&!isPw(x)),availP=registry().filter(x=>isPw(x)&&!isEmrView(x)&&!onPw.has(x.setId));
 if(!avail.length&&!availP.length)return toast('All registry sets and pathways are already on this case.');
 const b=$('sugb'),cid=CUR.id;b.disabled=true;b.textContent='Preparing…';
 try{let out=[],outP=[];
@@ -995,7 +998,7 @@ function showShellTab(id){
   document.querySelectorAll('[data-shell-t]').forEach(x=>{const active=x.dataset.shellT===id;x.classList.toggle('on',active);if(x.closest('#shellnav')){if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')}});
   const pane=$(id);if(pane)pane.classList.add('on');
   const tools=$('tools');if(tools&&['in','fh','an','ab'].includes(id))tools.open=false;
-  if(id==='an')ana();if(id==='fh')codesUI();if(id==='ov')summaryWorkspace();
+  if(id==='an')ana();if(id==='fh'){codesUI();lcLoad()}if(id==='ov')summaryWorkspace();
   if(id==='cp')renderCase();if(id==='flw'){renderFlowsheets();renderCase()}if(id==='nt')renderNotes();if(id==='pw')pathwayWorkspace();if(id==='al'){cdsRender();alertsRender()}if(id==='ho')handoverRender();
 }
 document.querySelectorAll('[data-shell-t]').forEach(b=>b.addEventListener('click',()=>{if(!CASE_OPEN)return toast('Open or create a case first.');showShellTab(b.dataset.shellT)}));
@@ -1185,7 +1188,7 @@ drawAll();calc();codesUI();sidebar();picker();qbar();cdsRender();pathwayWorkspac
 function sidebar(){if(!CUR)return;const q=($('q').value||'').toLowerCase().trim(),done=new Set(CUR.applied.map(a=>a.setId)),K=['template','disease','care','pathway','custom'],kd=s=>K.includes(s.kind)?s.kind:'custom';
 const chip=s=>`<button class="chip" data-add="${esc(s.setId)}" title="${esc(s.description||'')}">+ ${esc(s.title||s.setId)}</button>`,sg=suggested();
 $('chips').innerHTML=sg.length?sg.map(chip).join(''):'<span class="mu">No suggestions yet. Pick a set below; the most used ones appear here.</span>';
-const r=registry().filter(s=>inCtx(s)&&(!q||[s.title,s.description,s.kind,s.setId].join(' ').toLowerCase().includes(q)));let h='';
+const r=registry().filter(s=>inCtx(s)&&!isEmrView(s)&&(!q||[s.title,s.description,s.kind,s.setId].join(' ').toLowerCase().includes(q)));let h='';
 const sgp=SUGG.id==CUR.id?(SUGG.pw||[]).filter(x=>isPw(getSet(x.pathwayId))&&!(CUR.pathways||[]).some(p=>p.pathwayId==x.pathwayId)):[],sgpIds=new Set(sgp.map(x=>x.pathwayId));
 K.forEach(k=>{const m=r.filter(s=>kd(s)==k);if(!m.length)return;const head=(k=='template'||k=='disease')?'Forms':k=='care'?'Flowsheets':k=='pathway'?'Pathways':'Other';if(k=='template'||k=='care'||k=='pathway'||k=='custom')h+=`<div class="kh">${head}</div>`+m.map(s=>k=='pathway'?pwRow(s)+(PWPV==s.setId&&!sgpIds.has(s.setId)?pwPrev(s):''):done.has(s.setId)?`<div class="row off">✓ ${esc(s.title||s.setId)}</div>`:`<button class="row" data-add="${esc(s.setId)}">${esc(s.title||s.setId)}<span class="mu">${esc(s.description||'')}</span></button>`).join('')});
 $('slist').innerHTML=h||'<span class="mu">No matching sets.</span>';
@@ -1233,6 +1236,10 @@ $('cp').addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.dataset.
 const tc=tcol(grp(s,g)),rows=CUR.values[vk(sid,'@'+g)];if(!tc||t.dataset.rf!=tc.id||!Array.isArray(rows))return;const before=rows.slice();sortRows(rows,tc);if(rows.some((r,i)=>r!==before[i])){persist();refreshGroup(sid,g);protoShow()}});
 $('q').addEventListener('input',sidebar);
 const SYSU={snomed:'http://snomed.info/sct',loinc:'http://loinc.org'};
+/* P4d: a local code system is a code_systems row of kind local. Its codes show as local codes, never as SNOMED CT or LOINC. */
+const lsys=id=>Store.codeSystems().find(x=>x.id===id&&x.kind==='local');
+const sysUri=s=>SYSU[s]||(lsys(s)?lsys(s).uri:undefined);
+const sysLabel=c=>!c||!c.system?'':lsys(c.system)?lsys(c.system).name+' (local code)':c.system;
 const codes=()=>Store.codes();
 const ck=c=>c.system+'|'+c.code;
 function st(f){const c=f.coding;if(!c||!c.code)return'missing';const d=codes()[ck(c)];return d?'verified':'unverified'}
@@ -1242,20 +1249,69 @@ function allF(){return(CUR&&CUR.applied||[]).flatMap(a=>{const s=getSet(a.setId,
 function codesUI(){const L=allF();if(!L.length){$('sum').textContent='Add an element set in the Case tab first.';$('ctab').innerHTML='';return}
 const n={verified:0,unverified:0,missing:0};let rows='';
 L.forEach(({s,f,k})=>{const t=st(f);n[t]++;const bd=`<span class="bd" style="background:var(${COL[t]})">${t}</span>`,e=$('cb_'+k);if(e)e.innerHTML=bd;
-rows+=`<tr><td>${esc(f.label)} <span class="mu">(${esc(s.title||s.setId)})</span></td><td>${esc(f.coding&&f.coding.system||'')} ${esc(f.coding&&f.coding.code||'')}</td><td>${esc(f.coding&&f.coding.display||'')}</td><td>${bd}${codeNote(f)}${binds()[s.setId+'|'+f.id]?` <button class="b sm" onclick="unbind('${esc(s.setId+'|'+f.id)}')">Detach</button>`:''}</td></tr>`});
+rows+=`<tr><td>${esc(f.label)} <span class="mu">(${esc(s.title||s.setId)})</span></td><td>${esc(sysLabel(f.coding))} ${esc(f.coding&&f.coding.code||'')}</td><td>${esc(f.coding&&f.coding.display||'')}</td><td>${bd}${codeNote(f)}${binds()[s.setId+'|'+f.id]?` <button class="b sm" onclick="unbind('${esc(s.setId+'|'+f.id)}')">Detach</button>`:''}</td><td>${codingCell(s,f)}</td></tr>`});
 const fs=$('afld'),cv=fs.value;fs.innerHTML='<option value="">Field to attach to (optional)</option>'+L.map(({s,f})=>`<option value="${esc(s.setId+'|'+f.id)}">${esc(f.label)} (${esc(s.title||s.setId)})</option>`).join('');fs.value=cv;
+const as=$('asys'),av=as.value;as.innerHTML='<option>snomed</option><option>loinc</option>'+Store.codeSystems().filter(x=>x.kind==='local').map(x=>`<option value="${esc(x.id)}">${esc(x.name)} (local)</option>`).join('');as.value=av;if(as.value!==av)as.value='snomed';
 const tot=L.length;$('sum').innerHTML=`Ontology binding rate: <b>${Math.round(100*n.verified/tot)}%</b> verified (${n.verified}/${tot}) · ${n.unverified} unverified · ${n.missing} missing`;
-$('ctab').innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse"><tr><th>Field</th><th>Code</th><th>Display</th><th>Status</th></tr>${rows}</table>`}
+$('ctab').innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse"><tr><th>Field</th><th>Code</th><th>Display</th><th>Status</th><th>Coding choices</th></tr>${rows}</table><div class="mu" style="margin-top:6px">Codes are typed by a person and verified; the app never fills them in. No code is always allowed.</div>`}
 const binds=()=>Store.binds();
-function applyBinds(){const b=binds();registry().forEach(s=>flS(s).forEach(f=>{const x=b[s.setId+'|'+f.id];if(x&&x.code&&SYSU[x.system])f.coding={system:x.system,code:x.code,display:x.display}}))}
-function unbind(k){const b=binds();delete b[k];Store.saveBinds(b);const[sid,fid]=k.split('|'),s=getSet(sid),f=s&&flS(s).find(y=>y.id==fid);if(f)delete f.coding;codesUI()}
-function addCode(){const c={system:$('asys').value,code:$('acode').value.trim()},d=$('adisp').value.trim();if(!c.code||!d)return toast('Code and display needed');
+function applyBinds(){const b=binds();registry().forEach(s=>flS(s).forEach(f=>{const x=b[s.setId+'|'+f.id];if(x&&x.code&&(SYSU[x.system]||lsys(x.system)))f.coding=Object.assign({},f.coding&&f.coding.allow?{allow:f.coding.allow}:{},{system:x.system,code:x.code,display:x.display})}))}
+/* Local code systems (P4b). Server mode only. A code is typed in unverified; Verify puts it in the verified list. Nothing is pre-filled. */
+const LC={open:''};
+async function lcLoad(){const msg=$('lcmsg'),L=$('lcl'),mk=$('lcNew');if(!msg)return;
+if(!SRV()){msg.textContent='Local code systems need the server. Demo mode does not keep them.';L.innerHTML='';mk.hidden=true;return}
+mk.hidden=!Store.can('codesystem.write');msg.textContent='Loading…';
+let sys;try{sys=(await Store.api('GET','/code-systems')).filter(x=>x.kind==='local')}catch(e){msg.textContent='Could not load: '+e.message;return}
+msg.textContent=sys.length?'':'No local code system yet.';
+L.innerHTML=sys.map(x=>`<div class="cd"><b>${esc(x.name)}</b> <span class="mu">${esc(x.id)} · ${esc(x.uri)}</span> <button class="b sm" onclick="lcToggle('${esc(x.id)}')">${LC.open===x.id?'Hide codes':'Codes'}</button><div id="lcc_${esc(x.id)}"></div></div>`).join('');
+if(LC.open&&sys.some(x=>x.id===LC.open))lcCodes(LC.open)}
+function lcToggle(id){LC.open=LC.open===id?'':id;lcLoad()}
+async function lcCodes(id){const el=$('lcc_'+id);if(!el)return;let c;try{c=await Store.api('GET','/code-systems/'+encodeURIComponent(id)+'/codes')}catch(e){el.textContent='Could not load the codes: '+e.message;return}
+const mayAdd=Store.can('codesystem.write'),mayVer=Store.can('code.write'),dt=x=>x?String(x).slice(0,10):'';
+const st=x=>x.verified?`<span class="bd" style="background:var(--g)">verified</span> <span class="mu">${esc(dt(x.verifiedAt))}</span>`:`<span class="bd" style="background:var(--a)">typed, not verified</span>${mayVer?` <button class="b sm" onclick="lcVerify('${esc(id)}','${esc(x.code)}')">Verify</button>`:''}`;
+el.innerHTML=(c.length?`<table style="width:100%;font-size:12px;border-collapse:collapse"><tr><th>Code</th><th>Display</th><th>State</th></tr>${c.map(x=>`<tr><td>${esc(x.code)}</td><td>${esc(x.display)}</td><td>${st(x)}</td></tr>`).join('')}</table>`:'<div class="mu">No codes yet.</div>')
++(mayAdd?`<div style="margin-top:6px"><input id="lccode_${esc(id)}" placeholder="code" style="width:130px"> <input id="lcdisp_${esc(id)}" placeholder="display" style="width:240px"> <button class="b" onclick="lcAddCode('${esc(id)}')">Add code</button></div>`:'')}
+async function lcAddSystem(){const id=$('lcid').value.trim(),name=$('lcname').value.trim();if(!id||!name)return toast('An id and a name are needed.');
+try{await Store.api('POST','/code-systems',{id,name})}catch(e){return toast(e.status===409?'That id is already used.':e.status===400?'The id needs 2 to 40 lowercase letters, digits, - or _, starting with a letter, and cannot be local, none or any.':e.status===403?'Your role may not create local code systems.':'Could not create it: '+e.message)}
+$('lcid').value='';$('lcname').value='';toast('Local code system created.');try{await Store.refreshCodes()}catch(e){}lcLoad();codesUI()}
+async function lcAddCode(id){const code=$('lccode_'+id).value.trim(),display=$('lcdisp_'+id).value.trim();if(!code||!display)return toast('A code and its display are needed.');
+try{await Store.api('POST','/code-systems/'+encodeURIComponent(id)+'/codes',{code,display})}catch(e){return toast(e.status===409?'That code is already in this list.':e.status===400?'A code may use letters, digits and . _ : - only (up to 50 characters).':e.status===403?'Your role may not add local codes.':'Could not add it: '+e.message)}
+toast('Code added. It is not verified yet.');lcCodes(id)}
+async function lcVerify(id,code){if(!confirm('Verify code '+code+' in "'+id+'"? Confirm you have checked the code and its display against your own list.'))return;
+try{await Store.api('POST','/code-systems/'+encodeURIComponent(id)+'/codes/'+encodeURIComponent(code)+'/verify',{})}catch(e){return toast(e.status===403?'Your role may not verify codes.':e.status===409?'That code is already verified.':'Could not verify it: '+e.message)}
+toast('Code verified and added to the verified list.');try{await Store.refreshCodes()}catch(e){}lcCodes(id);codesUI()}
+/* Coding choices (P3d): field.coding = {allow:[system ids, 'local', 'none']}. Missing block = No code. Only user sets are editable; seed sets change by a new version in element-sets.js. */
+const CODING_NAMES=()=>{const m={local:'My own local codes',none:'No code'};Store.codeSystems().forEach(x=>{m[x.id]=x.name||x.id});return m};
+const codingAllowOf=f=>f&&f.coding&&Array.isArray(f.coding.allow)&&f.coding.allow.length?f.coding.allow:['none'];
+function codingCell(s,f){const al=codingAllowOf(f),nm=CODING_NAMES(),isSeed=SEEDS.some(x=>x.setId==s.setId),cur=registry().find(x=>x.setId==s.setId);
+if(isSeed||!cur||(+cur.version||1)!=(+s.version||1))return`${al.map(a=>esc(nm[a]||a)).join(', ')} <span class="mu" style="font-size:11px">(${isSeed?'seed set, read-only':'older version of the set, read-only'})</span>`;
+const ids=Store.codeSystems().filter(x=>x.kind!='local').map(x=>x.id).concat(['local','none']),sk=s.setId+'|'+f.id;
+return`<span data-cc="${esc(sk)}">${ids.map(a=>`<label style="margin-right:6px;white-space:nowrap"><input type="checkbox" value="${esc(a)}"${al.includes(a)?' checked':''} onchange="codingTick(this)"> ${esc(nm[a]||a)}</label>`).join('')}</span> <button class="b sm" onclick="codingSave('${esc(sk)}')">Save</button>`}
+function codingTick(el){if(!el.checked)return;el.closest('[data-cc]').querySelectorAll('input').forEach(i=>{if(i!==el&&(el.value=='none'||i.value=='none'))i.checked=false})}
+function codingSave(k){const[sid,fid]=k.split('|'),cur=registry().find(x=>x.setId==sid);
+if(!cur||SEEDS.some(x=>x.setId==sid))return toast('This set is read-only. Its coding choices change with a new version of the set.');
+const box=[...document.querySelectorAll('[data-cc]')].find(e=>e.dataset.cc==k);if(!box)return;
+let a=[...box.querySelectorAll('input:checked')].map(i=>i.value);if(!a.length)a=['none'];
+const b=binds()[k];if(b&&!(a.includes(b.system)||(lsys(b.system)&&a.includes('local'))))return toast('This field has a '+b.system+' code attached. Detach it first, or keep that system ticked.');
+const n=cur,f=flS(n).find(y=>y.id==fid);if(!f)return;
+if(f.coding&&f.coding.code)return toast('This field has a draft code. Verify and attach it in the form below, or detach it, before changing the choices.');
+if(a.length==1&&a[0]=='none')delete f.coding;else f.coding={allow:a};
+n.version=(+cur.version||1)+1;if(!Store.saveSet(n))return toast('Storage full/blocked');applyBinds();toast('Coding choices saved as version '+n.version+' of this set.');codesUI()}
+function unbind(k){const b=binds();delete b[k];Store.saveBinds(b);const[sid,fid]=k.split('|'),s=getSet(sid),f=s&&flS(s).find(y=>y.id==fid);if(f){const al=f.coding&&f.coding.allow;if(al)f.coding={allow:al};else delete f.coding}codesUI()}
+/* P4d: attach a verified local code to a field. Only a code already in the verified list can be attached, and its verified display is the one kept. Nothing typed here creates a code. */
+function attachLocal(sys,code){const k=$('afld').value;if(!k)return toast('Choose a field to attach to. A local code is attached to a field, it is not added to a list here.');
+if(!code)return toast('Type the code of a local code that is already verified.');
+const d=codes()[sys+'|'+code];if(d===undefined)return toast('That code is not verified in this system. Add and verify it under Local code systems first.');
+const[sid,fid]=k.split('|'),s=getSet(sid),f=s&&flS(s).find(y=>y.id==fid);
+if(f&&f.coding&&Array.isArray(f.coding.allow)){const al=codingAllowOf(f);if(!al.includes('local')&&!al.includes(sys))return toast('The coding choices of this field do not include this local system. Tick "My own local codes" under Coding choices first.')}
+const b=binds();b[k]={system:sys,code,display:d};Store.saveBinds(b);applyBinds();toast('Local code attached to the field.');$('acode').value='';$('adisp').value='';codesUI()}
+function addCode(){const c={system:$('asys').value,code:$('acode').value.trim()},d=$('adisp').value.trim();if(lsys(c.system))return attachLocal(c.system,c.code);if(!c.code||!d)return toast('Code and display needed');
 const CRE={snomed:/^[1-9]\d{5,17}$/,loinc:/^\d{1,7}-\d$/};if(!CRE[c.system]||!CRE[c.system].test(c.code))return toast(c.system==='snomed'?'That does not look like a SNOMED CT concept id (6 to 18 digits).':'That does not look like a LOINC code (for example 1234-5).');if(d.length>300)return toast('Display text is limited to 300 characters.');
 const t=codes();t[ck(c)]=d;Store.saveCodes(t);
 const k=$('afld').value;if(k){const b=binds();b[k]={system:c.system,code:c.code,display:d};Store.saveBinds(b);applyBinds();toast('Code saved and attached to the field.')}else toast('Code saved to your verified list. Choose a field above to attach it.');
 $('acode').value='';$('adisp').value='';codesUI()}
 async function liveCheck(){const L=allF();if(!L.length)return toast('Add an element set in the Case tab first');const t=codes();let ok=0,bad=0,net=0;const confirmed=[];
-const todo=L.filter(({f})=>f.coding&&f.coding.code&&!t[ck(f.coding)]);
+const todo=L.filter(({f})=>f.coding&&f.coding.code&&SYSU[f.coding.system]&&!t[ck(f.coding)]);
 if(!todo.length)return toast('Nothing to check: no field has an unverified code. Attach a code to a field first (form below the table). Codes you add yourself count as verified already.');
 for(const{f}of todo){const c=f.coding;
 try{const r=await fetch(`https://tx.fhir.org/r4/CodeSystem/$lookup?system=${encodeURIComponent(SYSU[c.system])}&code=${encodeURIComponent(c.code)}&_format=json`);
@@ -1293,7 +1349,7 @@ if(noteRecords.length){
 sets.forEach(s=>{if(s.kind!='disease'||!s.diagnosis)return;const dx=s.diagnosis,dc=dx.snomed&&dx.snomed.code&&codes()['snomed|'+dx.snomed.code]?{coding:[{system:SYSU.snomed,code:dx.snomed.code,display:dx.snomed.display}],text:dx.text}:{text:dx.text};
 add({resourceType:'Condition',subject:{reference:pid},code:dc,clinicalStatus:{coding:[{system:'http://terminology.hl7.org/CodeSystem/condition-clinical',code:'active'}]}},s.setId)});
 /* eff: undefined = scalar field, null = repeat row without a valid timestamp, string = row timestamp */
-const mk=(f,x,eff,note,row)=>{const code=st(f)=='verified'?{coding:[{system:SYSU[f.coding.system],code:f.coding.code,display:f.coding.display}],text:f.label}:{text:f.label};
+const mk=(f,x,eff,note,row)=>{const code=st(f)=='verified'?{coding:[{system:sysUri(f.coding.system),code:f.coding.code,display:f.coding.display}],text:f.label}:{text:f.label};
 const rt=f.fhir?.resource||'Observation',dt=f.type=='datetime'||f.type=='date',iso=dt?isoOf(f,x):null;let r;
 if(rt=='Procedure'){r={resourceType:'Procedure',status:'completed',code,subject:{reference:pid}};const pf=dt?iso:eff;if(pf)r.performedDateTime=pf}
 else if(rt=='MedicationAdministration'){const e=eff===undefined?new Date().toISOString():eff;if(!e)return null;
@@ -1751,6 +1807,10 @@ $('cp').addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.dataset.
 const r=o[fid]||{low:null,high:null};r[w]=t.value===''?null:fnum(t.value);o[fid]=r;if(fnum(r.low)==null&&fnum(r.high)==null)delete o[fid];if(Object.keys(o).length)CUR.values[k]=o;else delete CUR.values[k];persist();drawAll()});
 /* ---- Phase 3, chunk 23: pathways. A pathway is a kind:'pathway' set that only lists member sets. Additive: applying never deletes values; removing a pathway record never removes sets or values. No doses, bands or thresholds live here. ---- */
 const isPw=s=>!!s&&s.kind=='pathway';
+const isEmrView=s=>!!s&&Array.isArray(s.contexts)&&s.contexts.includes('emr');
+const EMR_ACTIVE_TEMP=['pathway.emr.ward_board','pathway.emr.handover']; /* V5b temporary rule; V7b replaces it with the active list */
+function emrSurfaces(type){return registry().filter(s=>isPw(s)&&isEmrView(s)&&EMR_ACTIVE_TEMP.includes(s.setId)&&s.surface&&s.surface.type===type)}
+function boardColumnIds(c){const sf=emrSurfaces('patients_columns')[0];if(!sf||sf.surface.columnsFrom==='pinned')return pinListFor(c);return pwMembers(sf).map(m=>m.setId)}
 const pwMembers=p=>(Array.isArray(p&&p.members)?p.members:[]).filter(m=>m&&typeof m.setId=='string'&&m.setId);
 function applyPathway(c,id){const p=getSet(id);if(!isPw(p))return null;const added=[],had=[],missing=[];
 pwMembers(p).forEach(m=>{const s=getSet(m.setId);if(!s||isPw(s)){missing.push(m.setId);return}
@@ -1877,22 +1937,35 @@ function rowVals(fs,tc,r){const uf=new Set(fs.map(f=>f.unitField).filter(Boolean
 function rowText(r,vals){const bp=vals.find(f=>f.id=='bp_sys'),bd=vals.find(f=>f.id=='bp_dia');return vals.filter(f=>!(bp&&bd&&f===bd)).map(f=>bp&&bd&&f===bp?'BP '+r.bp_sys+' / '+r.bp_dia+' mmHg':f.label+' '+r[f.id]+(f.unit?' '+f.unit:f.unitField&&r[f.unitField]?' '+r[f.unitField]:'')).join(', ')}
 function latestOf(c,s){let best=null;[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>{const fs=grp(s,g),tc=tcol(fs);if(!tc)return;rowsOf(c,s.setId,g).forEach(r=>{const t=rowT(r,tc);if(!Number.isFinite(t))return;const vals=rowVals(fs,tc,r);if(vals.length&&(!best||t>best.t))best={t,r,vals}})});return best}
 /* chunk 37c3: ward board row data (pure; no flags, no colours). Latest value is shown as recorded. */
+/* V5c: a cell follows set.view.board = {show:'latest'|'age', fields:[field ids]}; default is the latest value and its age, as recorded. */
+function boardCfg(s){const b=s&&s.view&&s.view.board;return{age:!!b&&b.show==='age',fields:b&&Array.isArray(b.fields)&&b.fields.length?b.fields:null}}
 function boardRow(c,ids){
-  const p=patientView(c),cells=(ids||pinListFor(c)).map(id=>getSet(id)).filter(s=>s&&s.direct).map(s=>{const best=latestOf(c,s);
-    return best?{setId:s.setId,setTitle:shortOf(s),latest:rowText(best.r,best.vals),ageText:ageTxt(best.t).trim()}:{setId:s.setId,setTitle:shortOf(s),latest:'',ageText:''}});
+  const p=patientView(c),cells=(ids||boardColumnIds(c)).map(id=>getSet(id)).filter(s=>s&&s.direct).map(s=>{const best=latestOf(c,s),cf=boardCfg(s);
+    return best?{setId:s.setId,setTitle:shortOf(s),latest:cf.age?'':rowText(best.r,cf.fields?best.vals.filter(f=>cf.fields.includes(f.id)):best.vals),ageText:ageTxt(best.t).trim()}:{setId:s.setId,setTitle:shortOf(s),latest:'',ageText:''}});
   return{name:(p.name||'').trim(),mrn:p.mrn||'',ward:p.ward||'',bed:p.bed||'',cells}
 }
 /* chunk 37d1: handover data (pure; no rendering, no judgement text). newRows = rows the server stamped as entered after sinceMs
    (rows with no entry time, such as Demo mode rows, are left out rather than guessed). */
+/* V6b1: handover sections as pure functions (case, spec, ctx). spec comes from the pathway's sections list; ctx = {now}. No rendering, no judgement text. */
+const SECTIONS={
+  narrative:c=>String((c&&c.narrative)||'').trim(),
+  latestValues:c=>{const out=[];((c&&c.applied)||[]).map(a=>getSet(a.setId,a)).filter(s=>s&&!isPw(s)).forEach(s=>{const b=latestOf(c,s);if(b)out.push({set:shortOf(s),value:rowText(b.r,b.vals),ageText:ageTxt(b.t).trim()})});return out},
+  newRows:(c,spec,ctx)=>{const since=spec&&spec.since==='lastHandover'&&ctx&&Number.isFinite(ctx.since)?ctx.since:-Infinity,out=[];
+    ((c&&c.applied)||[]).map(a=>getSet(a.setId,a)).filter(s=>s&&!isPw(s)).forEach(s=>{[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>{const fs=grp(s,g),tc=tcol(fs);if(!tc)return;
+      rowsOf(c,s.setId,g).forEach(r=>{const e=new Date(r.__at).getTime();if(!Number.isFinite(e)||e<=since)return;const vals=rowVals(fs,tc,r);if(vals.length)out.push({set:shortOf(s),enteredAt:r.__at,readingAt:r[tc.id]||'',value:rowText(r,vals)})})})});
+    return out.sort((x,y)=>new Date(x.enteredAt)-new Date(y.enteredAt))},
+  activePathways:c=>(Array.isArray(c&&c.pathways)?c.pathways:[]).filter(Boolean).map(x=>{const q=getSet(x.pathwayId,x);return{title:q&&isPw(q)?(q.title||x.pathwayId):String(x.pathwayId||''),startedAt:x.startedAt||''}}),
+  ackedAlerts:(c,spec,ctx)=>{const now=ctx&&Number.isFinite(ctx.now)?ctx.now:Date.now(),h=spec&&Number.isFinite(+spec.hours)&&+spec.hours>0?+spec.hours:24;
+    return(Array.isArray(c&&c.alertLog)?c.alertLog:[]).filter(l=>{const t=l&&new Date(l.ackedAt).getTime();return Number.isFinite(t)&&t>now-h*36e5&&t<=now}).map(l=>({ruleId:l.ruleId,setId:l.setId,ackedAt:l.ackedAt}))}
+};
+/* V6b2: sectionsData runs the listed sections in order and returns {sectionType: result}. Unknown section types are skipped (no renderer yet).
+   handoverData keeps the 37d1 shape for the Handover view; its sections come from the active case_tab view pathway. The fallback list is used only when that pathway is not in the registry (V7 removes it). */
+const HANDOVER_FALLBACK=[{type:'narrative'},{type:'activePathways'},{type:'latestValues',scope:'applied'},{type:'ackedAlerts',hours:24},{type:'newRows',since:'lastHandover'}];
+function sectionsData(c,sections,ctx){const out={};(Array.isArray(sections)?sections:[]).forEach(sec=>{const f=sec&&SECTIONS[sec.type];if(f)out[sec.type]=f(c||{},sec,ctx||{})});return out}
 function handoverData(c,sinceMs,nowMs){
-  c=c||{};const now=Number.isFinite(nowMs)?nowMs:Date.now(),since=Number.isFinite(sinceMs)?sinceMs:-Infinity,latest=[],newRows=[];
-  (c.applied||[]).map(a=>getSet(a.setId,a)).filter(s=>s&&!isPw(s)).forEach(s=>{const b=latestOf(c,s);if(b)latest.push({set:shortOf(s),value:rowText(b.r,b.vals),ageText:ageTxt(b.t).trim()});
-    [...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>{const fs=grp(s,g),tc=tcol(fs);if(!tc)return;
-      rowsOf(c,s.setId,g).forEach(r=>{const e=new Date(r.__at).getTime();if(!Number.isFinite(e)||e<=since)return;const vals=rowVals(fs,tc,r);if(vals.length)newRows.push({set:shortOf(s),enteredAt:r.__at,readingAt:r[tc.id]||'',value:rowText(r,vals)})})})});
-  newRows.sort((x,y)=>new Date(x.enteredAt)-new Date(y.enteredAt));
-  const pathways=(Array.isArray(c.pathways)?c.pathways:[]).filter(Boolean).map(x=>{const q=getSet(x.pathwayId,x);return{title:q&&isPw(q)?(q.title||x.pathwayId):String(x.pathwayId||''),startedAt:x.startedAt||''}});
-  const acks24h=(Array.isArray(c.alertLog)?c.alertLog:[]).filter(l=>{const t=l&&new Date(l.ackedAt).getTime();return Number.isFinite(t)&&t>now-864e5&&t<=now}).map(l=>({ruleId:l.ruleId,setId:l.setId,ackedAt:l.ackedAt}));
-  return{narrative:String(c.narrative||'').trim(),pathways,latest,acks24h,newRows}
+  const ps=emrSurfaces('case_tab')[0],secs=ps&&Array.isArray(ps.sections)?ps.sections:HANDOVER_FALLBACK,
+    d=sectionsData(c,secs,{now:Number.isFinite(nowMs)?nowMs:Date.now(),since:sinceMs});
+  return{narrative:d.narrative||'',pathways:d.activePathways||[],latest:d.latestValues||[],acks24h:d.ackedAlerts||[],newRows:d.newRows||[]}
 }
 /* chunk 37d2: Handover view. Display only: sections from handoverData, no colours, no flags, no judgement text. */
 const HOW={h:12};
@@ -1915,11 +1988,11 @@ $('ho').addEventListener('click',e=>{const b=e.target.closest('[data-how]');if(!
 function boardNoReading(alerts,setId){const a=(Array.isArray(alerts)?alerts:[]).find(x=>x&&x.op==='minutes_since_gt'&&x.setId===setId&&Number.isFinite(x.value));return a?Math.round(a.value):null}
 function renderPatientRow(m){
   const name=(m.p.name||'Unnamed patient').trim(),dx=m.diagnoses.map(s=>`<span class="patient-chip">${esc(s.title||s.setId)}</span>`).join('')||'<span class="mu">—</span>',pw=m.pathways.map(s=>`<span class="patient-chip">${esc(s.title||s.setId)}</span>`).join('')||'<span class="mu">—</span>';
-  const pinned=myPatientIds().includes(m.c.id);return `<tr class="patients-row" tabindex="0" role="button" aria-label="Open patient ${esc(name)}" data-patient-open="${esc(m.c.id)}"><td><button class="b sm" type="button" data-my-pin="${esc(m.c.id)}" aria-label="${pinned?'Remove from':'Add to'} My patients" title="${pinned?'Remove from':'Add to'} My patients">${pinned?'★':'☆'}</button></td><td><b>${esc(m.p.bed||'—')}</b><div class="patient-sub">${esc(m.ward||'Ward not set')}</div></td><td><div class="patient-name">${esc(name)}</div><div class="patient-sub">${esc([m.p.ageSex,m.p.mrn?'MRN '+m.p.mrn:''].filter(Boolean).join(' · ')||'Details not entered')}</div></td><td>${dx}</td><td>${pw}</td>${m.board?m.board.cells.map(x=>{const n=boardNoReading(m.mins,x.setId);return`<td>${x.latest?`<div>${esc(x.latest)}</div><div class="patient-sub">${esc(x.ageText)}</div>`:'<span class="mu">—</span>'}${n==null?'':`<div class="patient-sub">No reading for ${esc(n)} min</div>`}</td>`}).join(''):`<td>${m.reading||'<span class="mu">No pinned direct sets</span>'}</td>`}<td>${m.alerts.length?`<span class="patient-alert">${m.alerts.length} open</span>`:'0'}</td><td>${m.due.length?m.due.map(x=>`<span class="patient-chip">${esc(patientDueLabel(x))}</span>`).join(''):'—'}</td></tr>`;
+  const pinned=myPatientIds().includes(m.c.id);return `<tr class="patients-row" tabindex="0" role="button" aria-label="Open patient ${esc(name)}" data-patient-open="${esc(m.c.id)}"><td><button class="b sm" type="button" data-my-pin="${esc(m.c.id)}" aria-label="${pinned?'Remove from':'Add to'} My patients" title="${pinned?'Remove from':'Add to'} My patients">${pinned?'★':'☆'}</button></td><td><b>${esc(m.p.bed||'—')}</b><div class="patient-sub">${esc(m.ward||'Ward not set')}</div></td><td><div class="patient-name">${esc(name)}</div><div class="patient-sub">${esc([m.p.ageSex,m.p.mrn?'MRN '+m.p.mrn:''].filter(Boolean).join(' · ')||'Details not entered')}</div></td><td>${dx}</td><td>${pw}</td>${m.board?m.board.cells.map(x=>{const n=boardNoReading(m.mins,x.setId);return`<td>${x.latest||x.ageText?`${x.latest?`<div>${esc(x.latest)}</div>`:''}<div class="patient-sub">${esc(x.ageText)}</div>`:'<span class="mu">—</span>'}${n==null?'':`<div class="patient-sub">No reading for ${esc(n)} min</div>`}</td>`}).join(''):`<td>${m.reading||'<span class="mu">No pinned direct sets</span>'}</td>`}<td>${m.alerts.length?`<span class="patient-alert">${m.alerts.length} open</span>`:'0'}</td><td>${m.due.length?m.due.map(x=>`<span class="patient-chip">${esc(patientDueLabel(x))}</span>`).join(''):'—'}</td></tr>`;
 }
 function renderPatients(){
   const host=$('patientsRows');if(!host)return;const all=getC().filter(Boolean),mine=new Set(myPatientIds()),q=String($('patientsSearch')?.value||'').trim().toLowerCase(),ward=$('patientsWard')?.value||'',sort=$('patientsSort')?.value||'bed',onlyMine=!!$('myPatients')?.checked;
-  const models=all.map(patientRowModel),bs=SRV()?pinListFor().map(id=>getSet(id)).filter(x=>x&&x.direct):[];if(bs.length){const bids=bs.map(x=>x.setId);models.forEach(m=>{m.board=boardRow(m.c,bids)})}const wards=[...new Set(models.map(m=>m.ward).filter(Boolean))].sort((a,b)=>a.localeCompare(b));const w=$('patientsWard'),prev=ward;if(w){w.innerHTML='<option value="">All wards</option>'+wards.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');w.value=wards.includes(prev)?prev:''}
+  const models=all.map(patientRowModel),bs=SRV()?boardColumnIds().map(id=>getSet(id)).filter(x=>x&&x.direct):[];if(bs.length){const bids=bs.map(x=>x.setId);models.forEach(m=>{m.board=boardRow(m.c,bids)})}const wards=[...new Set(models.map(m=>m.ward).filter(Boolean))].sort((a,b)=>a.localeCompare(b));const w=$('patientsWard'),prev=ward;if(w){w.innerHTML='<option value="">All wards</option>'+wards.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');w.value=wards.includes(prev)?prev:''}
   let rows=models.filter(m=>(!q||[m.p.name,m.p.mrn].join(' ').toLowerCase().includes(q))&&(!ward||m.ward===ward)&&(!onlyMine||mine.has(m.c.id)));
   rows.sort(sort==='recent'?(a,b)=>b.activity-a.activity:(a,b)=>a.bed.localeCompare(b.bed,undefined,{numeric:true})||String(a.p.name||'').localeCompare(String(b.p.name||'')));
   $('patientsCount').textContent=`${rows.length} of ${models.length} patient${models.length===1?'':'s'}`;
