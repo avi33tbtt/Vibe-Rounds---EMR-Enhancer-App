@@ -2,10 +2,12 @@
 
 *20 Nov 2026. Repo: github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App. This one file replaces `emr-enhancer-build-plan.html`, `emr-enhancer-remaining-plan.md` and `emr-enhancer-micro-plan.md`. Do not paste it into a coding chat; paste only the Context block (section 5) and one task.*
 
-**Next up: V0a**
+**Next up: V0a** (Phase V as written; the new approach in section 1A will restructure the later phases)
 
 ## Contents
 1. Reason and idea
+1A. **The approach: patient journey and four composable domains**
+1B. **Role first: every element starts with its access**
 2. The design in short (vocabulary and engine rules)
 3. What is built so far
 4. What the repo check found
@@ -32,6 +34,125 @@
 4. Phase 7 is rewritten so orders, MAR, allergies, ADT and charge summary are seed sets and view pathways plus a few generic view types, not special screens.
 
 **Why this is better, not only tidier.** One mechanism to secure and test. Facilities can change a ward board or handover layout by editing data (a local draft pathway) with no new release. Marketplace packages can carry whole EMR layouts. A new ward screen costs one data file and, at most, one small generic renderer with a test.
+
+---
+
+## 1A. The approach: patient journey and four composable domains
+
+*This is the owner's model. It sets the direction for everything below. Sections 2 onward and the task lists are not yet rewritten to follow it (see "What changes in the plan" at the end of this section).*
+
+### 1A.1 The idea in one paragraph
+A patient moves through a journey: register, record, summarise, order, analyse. Registration is built into the software. The other four steps are **composable**: each is content that a user picks, mixes and installs, like the forms are today. The user **starts with Recording**, because the recorded data drives everything after it. Summary, Orders and Analytics are then offered, checked and shown against the chosen recording, and the user can also start from an order set or an analytic and work backwards.
+
+### 1A.2 The journey and what is fixed or composable
+
+| Step | Approach | Fixed (hard-coded) part | Composable part |
+|---|---|---|---|
+| 1. Registration | Built in, by default | MRN, duplicate check, merge, one open encounter per bed, national id handling | none |
+| 2. Recording | **Composable (anchor)** | version pinning, row rules, entered-in-error, audit | pathways, sets and templates, from the marketplace |
+| 3. Summary | **Composable** | alert evaluation and acknowledgement | summary layouts; a default summary is derived from the recording |
+| 4. Orders | **Composable, plus a small engine** | order status rules, roles, audit | order sets and catalogs |
+| 5. Analytics | **Composable** | running queries on the server, masking of small counts, audit | analytics definitions, from the marketplace |
+
+Always fixed, in every step: sign and amend notes, rule approval, alert acknowledgement, audit log, permissions, login, conflict handling, the "Not for clinical use" banner. These enforce safety. Composable content can change what is shown, never what is enforced.
+
+### 1A.3 Four composability domains
+1. **Recording.** Pathways, sets and templates that capture patient data. This is what exists today. It is the anchor.
+2. **Summary.** How the recorded data is brought together for a quick view. Default: each applied set gives its own card (latest value, age, count) from its own definition, so a new pathway needs no summary work. A summary layout only reorders or overrides.
+3. **Orders.** Two parts. (a) Order sets: a list of what can be ordered, entered freely like a recording, with free-text instructions and no dose logic. (b) An order **engine**: statuses, which changes are allowed, whether a reason is required, who may do it. The engine is declared as data but enforced by the server. Other records refer to an order by its id. No other system is connected (FHIR is export only).
+4. **Analytics.** Closed kinds of analysis (for example count, distribution, time series, sum by key, time to event, data completeness) declared as data and run on the server with small-count masking. A definition never contains a free expression, a threshold or a target.
+
+### 1A.4 One contract: provides and requires
+- A **recording** states what it **provides**: its fields, each with a structural role (time, number with unit, category, status, free text) and, later, a concept (for example body temperature).
+- A **summary, order set or analytic** states what it **requires**, as slots. It never names a set id.
+- The software compares them and produces a **coverage result** per slot: met, partly met or unmet. It also shows the other direction: recording fields that nothing uses.
+- Matching compares role, type and unit. It never converts units. A person can also bind a slot to a field by hand, and that choice is saved.
+- Every match shows its basis ("matched on: number, mL") so a person can judge it.
+
+### 1A.5 The cross-matching marketplace
+The marketplace for all four domains shares one index of what each item provides or requires. It works in both directions, with the recording as the main starting point.
+
+1. **Pick a recording.** The marketplace lists:
+   - every compatible **summary** layout,
+   - every compatible **order set** (free choice, like recordings),
+   - every compatible **analytic**,
+   and for each one shows what is **covered** and what is **not covered**.
+2. **Pick an analytic or an order set first.** It lists the recordings that can feed it, with the same covered and not-covered view.
+3. **Pick several items.** The result can be read two ways:
+   - **AND:** only items whose needs are all met by the selection.
+   - **OR:** items with at least one need met, with the unmet needs flagged.
+   The screen also shows **what remains**: slots still unmet and recording fields nothing uses.
+4. **Go back and forth.** The user can change any selection and the other lists update.
+
+"Covered" means the data is compatible. It never means the care was adequate. Wording on screen follows the same rule as the ward board: data as recorded, no judgement.
+
+### 1A.6 Two kinds of matching, built in this order
+1. **Structural** (first). Role, type and unit, such as "a number with a unit and a time". Safe and checkable. The view blocks in Phase V already declare this.
+2. **Concept** (later, optional). "A fever trend needs body temperature." This needs a shared, governed name for what a field measures, tied to verified codes. It is not built until the structural layer works.
+
+### 1A.7 Risks to design for
+- **Vocabulary drift.** The list of roles must stay short and closed. A new role needs an informatician's approval.
+- **False matches.** Same role, different meaning. Reduced by showing the match basis and allowing a manual binding.
+- **Coverage read as quality.** Prevented by wording and a test.
+- **Version drift.** Matches record the versions they were made against and are re-checked on update. A view that cannot match its set hides that part with a plain note and never shows a wrong number (fail visible, not silent).
+- **A changed field breaks its users.** A "who uses this field?" check on set save warns before a field is removed or retyped.
+- **Too many selections at once.** Start with one recording and one list per domain.
+- **Analytics privacy.** Masking lives in the engine, not in any package.
+- **Orders carry real risk.** The order engine is the first place where data needs enforcement. It stays small and goes behind a review gate.
+
+### 1A.8 What changes in the plan (not yet done)
+- **Phase V (current):** the view vocabulary, I/O slice first. Stays, and gains the hand-named spots found in the audit (HbA1c due badge, dailygrid targets, BP pairing, default pins, sliding-scale echo, inline seed copy).
+- **New Phase C: capability contract.** The role vocabulary, a pure `compatibility()` function with a coverage report, tests with made-up sets. No screen.
+- **New Phase M: matching marketplace.** Provides and requires in the registry index, so matching runs in the browser from the index. Then the picker and coverage screens.
+- **Domains, in order:** Summary (derived default plus layouts), then Orders (set plus engine), then Analytics (closed kinds, server-run, masked). This replaces the old Phase 7 and the analytics chunks (38).
+- **Review gates:** after the I/O slice (V4), after Phase C, and before Orders.
+- **Still to decide:** the first list of roles; whether Summary layouts are marketplace items or built in; who approves new roles; how a manual binding is stored and shared.
+
+---
+
+## 1B. Role first: every element starts with its access
+
+**Rule.** Before an implementer builds or installs any element (a recording form, a summary layout, an order set, an analytic, a view pathway), the first decision is **who may do what with it**. Nothing is built until its access is written down. The server enforces it; the screen only mirrors it.
+
+### 1B.1 Access actions (a short, closed list)
+
+| Action | Meaning |
+|---|---|
+| `view` | see its data or its output |
+| `enter` | add rows or values |
+| `amend` | correct a row (own or others', stated per element) |
+| `approve` | approve, verify, enable or sign what it contains |
+| `configure` | edit its definition, install it, switch it on or off |
+| `export` | take its data out of the system (CSV, FHIR, de-identified) |
+
+Roles are the existing five: viewer, nurse, doctor, informatician, admin. A new role is a decision, not a side effect.
+
+### 1B.2 What each domain must declare
+
+| Domain | Typical questions the implementer answers first |
+|---|---|
+| Recording | who enters, who amends, who sees; may a nurse enter before a doctor has applied it? |
+| Summary | who sees it; does it show anything beyond what the viewer may see in the recording? |
+| Orders | who places, who changes status, who discontinues, who administers |
+| Analytics | who sees aggregates, who sees patient lists (doctor and admin today), who exports, who configures |
+| View pathways | who may switch them on (decision 11) |
+
+### 1B.3 How it works
+- Each element carries an `access` block: for each action, the list of roles. Roles are taken only from the role table in `permissions.js`.
+- **Default deny.** A new element with no `access` block is refused by lint. Existing seed sets get a block that reproduces today's behaviour exactly, so nothing changes silently.
+- **Narrow, never widen.** An element can only restrict what a role already has in `permissions.js`. It cannot give a viewer the right to enter.
+- **Every route checks it** on the server, together with the normal version check and audit row. Hidden buttons are only a mirror.
+- **Matching respects access.** The marketplace only offers a viewer analytics and summaries that the viewer's role may see for the selected recording.
+- **Marketplace packages carry a suggested `access`.** At install the admin sees it, confirms or narrows it, and the install uses the narrowest result. A package role that does not exist locally is refused.
+- **Changing access is audited** (who, before, after) and, for reviewed content, creates a new version.
+- **Tested as a matrix:** every element, every action, every role, generated from the data, like the existing role-by-route test.
+
+### 1B.4 Open questions (see decisions 18 to 20)
+- Today roles are global. There is no restriction by ward or team. Is that enough?
+- Who may change an element's access: admin only, or also informatician?
+- Does analytics need its own role (for example analyst) that sees aggregates only and no patients?
+
+"Perfect" cannot be promised in advance. What the plan can promise is that access is explicit, default-deny, enforced on the server and covered by a generated test for every element.
 
 ---
 
@@ -93,6 +214,7 @@ Three layers. Only the third is new.
 - **E4.** View data holds ids, labels and display windows only. No doses, thresholds, bands or rules. Pathways stay `rules:[]` in seed.
 - **E5.** View pathways are ordinary content: versioned, tiered, forkable, read-only when from the marketplace.
 - **E6.** Viewing writes nothing. Writes use the existing row routes with the existing permissions, versions (409) and audit.
+- **E8.** Every element (set, view pathway, order set, analytic) starts with an `access` block (section 1B). No block, no seed, no install.
 - **E7.** The fixed frame stays fixed: patient banner, Summary, Flowsheets, Notes, Pathway, Alerts, Export, Settings and Tools. Safety-critical screens (alerts, notes signing, audit) are not data-driven.
 
 ---
@@ -130,15 +252,15 @@ Three layers. Only the third is new.
 
 ## 4. What the repo check found
 
-*Clone of the public repo (single commit `756c4dc`, "5th commit"). I read the code; I did not run `npm test` or open the app.*
+*Re-checked on 20 Nov 2026 against the public repo (commit `79bc8c8`, "5th commit"). I read the code; I did not run `npm test` or open the app.*
 
 1. **Hand-named code (the reason for Phase V).**
    - `enhancer.html` around lines 1507-1511: `sumByType` reads `r.io_time`, `r.io_volume`, `r.io_type`; `ioSum` returns nothing unless `s.setId=='care.intake_output'`.
    - Around line 1853: `boardRow`; line 1860: `handoverData` (fixed list of five sections); line 1893: `renderPatients` builds the board; line 187 and 459: the Handover button and pane are fixed HTML; line 981: the tab dispatcher calls `handoverRender()` by name.
    - Around lines 2418-2435: `ana()` reads `r.temp` directly (analytics, handled in 38 and decision 16).
-2. **Four test files are not in `npm test`:** `sum-by-type.test.js`, `board-no-reading.test.js`, `handover-data.test.js`, `handover-view.test.js`. They exist but the `test` script in `package.json` does not run them. Fixed in V0a.
-3. `env.example` is still in the repo next to `.env.example` (manual job).
-4. The three old plan files are committed in the repo root. After this file is in, delete them or move them out so only this plan remains.
+2. **Five test files are not in `npm test`:** `sum-by-type.test.js`, `board-no-reading.test.js`, `handover-data.test.js`, `handover-view.test.js`, `handover-print.test.js`. They exist but the `test` script in `package.json` does not run them. Fixed in V0a.
+3. `env.example` is already gone; only `.env.example` remains.
+4. This plan is in the repo root as `emr-enhancer-final-plan.md`. The three old plan files now sit in a `plan/` folder (optional: `git rm -r plan`). Nothing in code reads them. `plan/` is a folder in a repo whose rule is "no folders", so deleting it is tidier.
 5. Seed pathways are member lists only with `rules:[]`; seed sets have zero rules and thresholds. This is the pattern Phase V keeps.
 
 ---
@@ -157,6 +279,7 @@ Ask for **edits only**: "exact old text to find, new text". Never ask for a whol
 Project: EMR Enhancer. Node + Express + PostgreSQL 16, all files in repo root (no folders), single-file client enhancer.html, element-sets.js, cds-rules.js, store.js (window.Store, cache-first), api.js, permissions.js (can(user, action), ROUTE_ACTIONS), audit.js, numbered migrations, node:test + supertest. Demo mode (localStorage) must keep working.
 Safety: no pre-filled doses/thresholds/bands; doses are free text, never calculated or summed; AI drafts only; unapproved rules never fire; data shown as recorded, no judgement of care; every write carries the version last seen (409 on conflict) and writes one audit row in the same transaction; follow mergedInto for patients; keep the "Not for clinical use" banner; new routes need an action in permissions.js and an entry in the audit-coverage test.
 No hand-written clinical screens: code never names a clinical set id, field id or option text. Every EMR screen is a registered view/section/surface type plus data in a seed set or an EMR view pathway (contexts ['emr'], surface, sections). A new generic type needs a pure function, a test that uses a made-up set, a validator entry and a line in VIEWS.md. View data holds ids, labels and display windows only.
+Access first: every element declares an access block (view, enter, amend, approve, configure, export; roles from permissions.js; default deny; may narrow, never widen) before anything else; the server enforces it with canElement.
 Reply format: edits only (exact old text to find + new text), never whole files. Under ~90 new lines. If more is needed, stop and list what is left.
 ```
 
@@ -176,11 +299,14 @@ Answer before the task that needs it, or accept the default.
 | 9 | Reference-data conflicts offer only "Reload the app" | done |
 | 10 | Two reviewers for packages with rules | 44a2d |
 | **11** | **Who turns EMR view pathways on:** admin picks the facility's active view pathways in Settings (stored in `app_settings`, audited); everyone sees them. Not a per-case "apply", so the rule "a nurse cannot apply pathways" is not in the way. | V7 |
-| **12** | **Orders entry:** optional set-level `entryRoles` (data) enforced by the server; `care.orders` sets it to doctor and admin, `care.mar` leaves it open to nurses. | 48a0 |
+| **12** | **Orders entry:** set `access` (section 1B): `care.orders` enter by doctor and admin, `care.mar` enter open to nurses. | R3, R4 |
 | **13** | **Which version of a view block a case uses:** the version recorded on the case (same as fields). Only synthetic data exists today, so after a seed bump, re-apply the set on test cases. Revisit before real patients. | V4b |
 | **14** | **MAR link:** the MAR row stores a copy of the order text plus the order row id in a plain text field, no new field type. | 49b |
 | **15** | **ADT vs Encounter:** the server's encounter record owns ward and bed (one open encounter per bed). ADT rows are informational and never change it silently; a button "Apply to encounter" calls the existing encounter route. | 50a |
 | **16** | **Analytics cards:** stay as they are for now; their hand-named lines sit on the allow-list until 38a4. Make them data-declared later only if you want. | 38a4 |
+| **18** | **Scope:** roles stay global (no ward or team restriction) for now. Say if a nurse must see only her own ward. | R3 |
+| **19** | **Who changes an element's access:** admin only. | R7 |
+| **20** | **Analytics role:** no new role; aggregates are seen by roles listed in the analytic's `access.view`, patient lists stay doctor and admin. | 38a5, Phase 8 |
 | **17** | **Fixed frame:** Summary, Flowsheets, Notes, Pathway, Alerts, Export stay fixed (E7). Say if you want more of them made data-driven. | V7 |
 
 ---
@@ -190,8 +316,8 @@ Answer before the task that needs it, or accept the default.
 - [ ] Force a conflict on one row in two browsers; confirm the side-by-side screen.
 - [ ] Idle a session out with an unsent reading; sign in again; confirm it is sent.
 - [ ] As admin run Settings > Import from this browser; confirm a doctor does not see it.
-- [ ] `git rm env.example` (keep `.env.example`).
-- [ ] After V8c: remove the three old plan files from the repo root.
+- [x] `env.example` removed (only `.env.example` remains).
+- [ ] Optional: `git rm -r plan` (the three old plan files).
 
 ---
 
@@ -201,10 +327,10 @@ Goal: what 37c and 37d built by hand becomes seed data plus generic renderers, w
 
 ## V0. Housekeeping and inventory
 
-### [ ] V0a. Put the four orphan tests into `npm test`
+### [ ] V0a. Put the five orphan tests into `npm test`
 **File:** package.json | **Paste:** the `"test"` line only
 ```text
-Add sum-by-type.test.js, board-no-reading.test.js, handover-data.test.js and handover-view.test.js to the test script. Change nothing else. Tell me if any of them fail.
+Add sum-by-type.test.js, board-no-reading.test.js, handover-data.test.js, handover-view.test.js and handover-print.test.js to the test script. Change nothing else. Tell me if any of them fail (do not fix them in this task).
 ```
 **Done when:** `npm test` runs them; write the new total in section 3.
 
@@ -224,7 +350,7 @@ Do not change code. From this output list every place that names a clinical set,
 ### [ ] V1a. VIEWS.md (doc only)
 **File:** new `VIEWS.md` | **Paste:** section 2 of this plan
 ```text
-Write VIEWS.md in the repo root from this text: layers, view block keys, surface types, section types, the three JSON examples, engine rules E1-E7. Add one empty "How to add a new type" checklist (pure function, made-up-set test, validator entry, doc line). No code.
+Write VIEWS.md in the repo root from this text: layers, view block keys, surface types, section types, the three JSON examples, engine rules E1-E7. Add one "How to add a new type" checklist: step 0 access block (see R1), then pure function, made-up-set test, validator entry, doc line. No code.
 ```
 **Done when:** VIEWS.md exists and matches section 2.
 
@@ -250,10 +376,16 @@ Add validatePathwayViews(p) for pathways whose contexts include "emr": surface.t
 
 ## V3. Generic client engine (no change in behaviour)
 
-### [ ] V3a. View registry and one dispatcher
+### [ ] V3a. View registry and one dispatcher (part 1: registry only)
 **File:** enhancer.html | **Paste:** the view-type dispatcher (about line 1052: fever, dailygrid, flowsheet branches)
 ```text
-Add VIEWS={} and registerView(type, fn). Register the existing fever, dailygrid and flowsheet renderers unchanged. Replace the if-chain with one function renderSetView(set, group, rows) that looks up VIEWS[set.view.type] and falls back to the old "could not be drawn" text. Output must be byte-identical.
+Add VIEWS={} and registerView(type, fn). Register the existing fever, dailygrid and flowsheet renderers unchanged (wrap them, do not edit them). Do not touch the if-chain yet.
+```
+
+### [ ] V3a2. Switch the dispatcher to the registry
+**File:** enhancer.html | **Paste:** the if-chain (about line 1052) and the registry from V3a
+```text
+Replace the if-chain with one function renderSetView(set, group, rows) that looks up VIEWS[set.view.type] and falls back to the old "could not be drawn" text. Output must be byte-identical.
 ```
 **Done when:** `npm test` passes; open a fever chart, daily grid and flowsheet by hand and compare.
 
@@ -318,10 +450,16 @@ A cell shows what set.view.board says; default {show:'latest'} gives latest valu
 Add pathway.emr.handover as in section 2. Test: validates; rules []; seeds read-only.
 ```
 
-### [ ] V6b. Section registry (pure data functions)
+### [ ] V6b1. Section registry: narrative, activePathways, ackedAlerts
 **File:** enhancer.html | **Paste:** handoverData
 ```text
-Split handoverData into SECTIONS = {narrative, activePathways, latestValues, ackedAlerts, newRows}, each a pure function (case, spec, ctx) returning its data. Add sectionsData(c, sections, ctx). handoverData(c, sinceMs) becomes sectionsData with the seed pathway's sections and must return the same object. handover-data.test.js must pass unchanged.
+Add SECTIONS={} and move three parts of handoverData into pure functions (case, spec, ctx): narrative, activePathways, ackedAlerts (hours from spec). handoverData still works, calling them. handover-data.test.js passes unchanged.
+```
+
+### [ ] V6b2. Section registry: latestValues, newRows, sectionsData
+**File:** enhancer.html | **Paste:** handoverData (current), the SECTIONS block from V6b1
+```text
+Move latestValues and newRows into SECTIONS the same way. Add sectionsData(c, sections, ctx). handoverData(c, sinceMs) becomes sectionsData with the seed pathway's sections and returns the same object. handover-data.test.js passes unchanged.
 ```
 
 ### [ ] V6c. Render by section type
@@ -332,10 +470,16 @@ Render each section by type from a SECTION_HTML registry in the order the pathwa
 
 ## V7. Surfaces: tabs and columns come from active pathways
 
-### [ ] V7a. Active view pathways setting (server)
-**Files:** api.js, permissions.js, audit | **Paste:** the app_settings routes for the AI switch (36a)
+### [ ] V7a1. Active view pathways: read (server)
+**Files:** api.js | **Paste:** the app_settings read code for the AI switch (36a), the /me route
 ```text
-Add key emr_views (list of pathway ids, default ["pathway.emr.ward_board","pathway.emr.handover"]) to app_settings. GET returns it (all roles, also in /me); PUT is admin only, new action views.admin, checks each id is an existing pathway with contexts "emr", carries the version, writes one audit row. Tests: nurse refused, bad id refused, audit row exists, role matrix and audit-coverage entries added.
+Add key emr_views (list of pathway ids, default ["pathway.emr.ward_board","pathway.emr.handover"]) to app_settings reads. GET /emr-views (existing read action, all roles) and the same list in /me. Test: default list returned; /me carries it.
+```
+
+### [ ] V7a2. Active view pathways: write (server)
+**Files:** api.js, permissions.js | **Paste:** the AI switch PUT route (36a), the audit-coverage list
+```text
+PUT /emr-views: admin only, new action views.admin; checks each id is an existing pathway with contexts "emr"; carries the version (409); one audit row in the same transaction. Add the role-matrix and audit-coverage entries. Tests: nurse refused, bad id refused, audit row exists.
 ```
 
 ### [ ] V7b. Client reads the list
@@ -344,10 +488,16 @@ Add key emr_views (list of pathway ids, default ["pathway.emr.ward_board","pathw
 Store.emrViews() returns the active ids (server mode from /me; Demo mode uses the default list). emrSurfaces(type) uses it instead of the temporary rule from V5b.
 ```
 
-### [ ] V7c. Case tabs built from `case_tab` surfaces
-**File:** enhancer.html | **Paste:** the tab button row (line ~187), the Handover pane (line ~459), the dispatcher line (~981)
+### [ ] V7c1. Build extra tab buttons and panes from surfaces
+**File:** enhancer.html | **Paste:** the tab button row (line ~187), the shell tab switch code
 ```text
-Remove the fixed Handover button and pane. Build extra tab buttons and panes from emrSurfaces('case_tab') after the fixed tabs; the dispatcher calls the section renderer for that pathway. If the pathway is switched off the tab is absent. Keep keyboard shortcuts for the fixed tabs.
+After the fixed tabs, add buttons and empty panes from emrSurfaces('case_tab') (id, label from the data). Leave the old fixed Handover button and pane in place for now. Keep keyboard shortcuts for the fixed tabs.
+```
+
+### [ ] V7c2. Dispatch and remove the fixed Handover markup
+**File:** enhancer.html | **Paste:** the Handover pane (~459), the dispatcher line (~981), handoverRender
+```text
+The dispatcher draws a surface tab by calling the section renderer for its pathway. Delete the fixed Handover button, pane and the handoverRender() call by name. If the pathway is switched off the tab is absent.
 ```
 
 ### [ ] V7d. Settings: choose view pathways
@@ -377,6 +527,63 @@ Add tests: every seed view block passes validateView; no view block or surface h
 Update API.md with the emr_views routes and VIEWS.md with the final key and section lists. Replace the Context block in the repo README with the one in this plan (section 5).
 ```
 **Release gate for Phase V:** I/O sum, ward board and handover look the same as before; no clinical set or field name remains in code except on the V8a allow-list; switching the Handover pathway off removes its tab.
+
+---
+
+# PHASE R: role-based access for every element
+
+*Rule 1B. Do R1 right after V1a, then continue Phase V. R2 to R7 follow V8. This phase replaces the `entryRoles` idea in 48a0.*
+
+### [ ] R1. Access vocabulary and the "step 0" checklist (doc only)
+**File:** VIEWS.md | **Paste:** section 1B of this plan
+```text
+Add to VIEWS.md: the access block {view, enter, amend, approve, configure, export}, each a list of roles from permissions.js; default deny; narrow-never-widen; and a "Step 0" line at the top of "How to add a new type": write the access block first. No code.
+```
+
+### [ ] R2. `validateAccess(element)` (pure)
+**File:** views.js | **Paste:** VIEWS.md access section, the role list from permissions.js
+```text
+Add validateAccess(el, roles) returning {errors}: block present; only the six action names; each value a non-empty list of known roles; no duplicates. Tests with a made-up set: one failing case per error and one passing.
+```
+
+### [ ] R3. `canElement(user, el, action)` on the server
+**File:** permissions.js | **Paste:** can(), the role table
+```text
+Add canElement(user, el, action): true only if the element's access lists the user's role for that action AND the matching base action in the role table is allowed (narrow, never widen). Missing block means deny. Tests: viewer cannot gain enter; nurse listed for enter and allowed by the base table can; unlisted role cannot.
+```
+
+### [ ] R4. Enforce on row and value routes
+**File:** api.js | **Paste:** the rows append and patch routes, the values route
+```text
+Call canElement on the set for enter and amend in these routes (403 with a plain sentence and the action name). Rows are still versioned and audited as before. Tests: nurse refused where the set does not list nurse; doctor allowed; audit row unchanged.
+```
+
+### [ ] R5. Seed access blocks that reproduce today
+**Files:** element-sets.js, seed.js | **Paste:** the role rules for care sets and disease sets from permissions.js
+```text
+Add an access block to every seed set and EMR view pathway so behaviour equals today's rules. seed.js fails if a seed has none. Test: for every seed set and role, canElement equals the old can() result for enter and amend.
+```
+
+### [ ] R6. Generated access matrix test
+**File:** new `access-matrix.test.js` | **Paste:** how permissions.test.js builds the role-by-route matrix
+```text
+Generate cases from the data: for every seed element, every action, every role, assert the result of canElement and that the matching route answers 403 or not 403 to match. Print the number of cases.
+```
+
+### [ ] R7. Access changes: route and audit
+**Files:** api.js, permissions.js, audit | **Paste:** the set update route
+```text
+Changing an element's access block uses its own action access.configure (admin; add informatician only if decision 19 says so), carries the version, writes one audit row with before and after, and on a reviewed set creates a new version. Tests: nurse refused, audit row present, version conflict gives 409.
+```
+
+### [ ] R8. Show access in the UI (mirror only)
+**File:** enhancer.html | **Paste:** the set card renderer, Store.can
+```text
+Show each element's access as a small plain-language line ("Entered by: doctor, nurse. Seen by: everyone") and hide controls the role cannot use. The server stays the control.
+```
+
+### [ ] R9. Package lint and install confirmation (Phase 6 hook)
+*Add to 42a3: a package with no access block is an error; roles must exist locally. Add to 46a2b: install shows the suggested access to the admin, who confirms or narrows it; the narrowest result is stored.*
 
 ---
 
@@ -799,7 +1006,10 @@ Prerequisite: Phase V finished (V8 gate).
 
 ## 48. Orders
 
-### [ ] 48a0. Optional `entryRoles` on a set (server)
+### [ ] 48a0. SUPERSEDED by R3 and R4 (the `access` block replaces `entryRoles`). Skip this task.
+*(old text kept for reference)*
+
+#### 48a0 (old). Optional `entryRoles` on a set (server)
 **Files:** api.js, permissions.js | **Paste:** the rows append and patch routes, how the care-set rule for nurses is checked
 ```text
 Add optional set field entryRoles (array of roles). When present, the rows append and patch routes also require the user's role to be in it (403 with a plain sentence); when absent, today's rules apply unchanged. validateView-style check on save: roles must be known. Tests: set without it behaves as before; set with ["doctor","admin"] refuses a nurse; audit unchanged.
@@ -808,7 +1018,7 @@ Add optional set field entryRoles (array of roles). When present, the rows appen
 ### [ ] 48a1. `care.orders` seed (data only)
 **File:** element-sets.js | **Paste:** one care set from element-sets.js, the orders group from the list below
 ```text
-Add care.orders (kind care, direct true, quick order 6 short 'Orders', entryRoles ["doctor","admin"]). Repeat group "orders": ord_time datetime, ord_category select (Medication, Lab, Imaging, Nursing, Consult, Diet), ord_item text, ord_instructions text (free text), ord_priority select (Routine, Urgent, STAT), ord_status select (Draft, Active, Completed, Discontinued), ord_reason text, ord_by session user. View block: {"type":"flowsheet","timeField":"ord_time","statusboard":{"statusField":"ord_status","groups":[{"label":"Active","values":["Draft","Active"]},{"label":"Closed","values":["Completed","Discontinued"]}]},"actions":[{"label":"Complete","field":"ord_status","to":"Completed"},{"label":"Discontinue","field":"ord_status","to":"Discontinued","reasonField":"ord_reason","reasonRequired":true}]}. No doses or rules.
+Add care.orders (kind care, direct true, quick order 6 short 'Orders', access: enter and approve [doctor, admin], view all roles). Repeat group "orders": ord_time datetime, ord_category select (Medication, Lab, Imaging, Nursing, Consult, Diet), ord_item text, ord_instructions text (free text), ord_priority select (Routine, Urgent, STAT), ord_status select (Draft, Active, Completed, Discontinued), ord_reason text, ord_by session user. View block: {"type":"flowsheet","timeField":"ord_time","statusboard":{"statusField":"ord_status","groups":[{"label":"Active","values":["Draft","Active"]},{"label":"Closed","values":["Completed","Discontinued"]}]},"actions":[{"label":"Complete","field":"ord_status","to":"Completed"},{"label":"Discontinue","field":"ord_status","to":"Discontinued","reasonField":"ord_reason","reasonRequired":true}]}. No doses or rules.
 ```
 
 ### [ ] 48a2. Generic `statusboard` view (read only)
@@ -817,10 +1027,16 @@ Add care.orders (kind care, direct true, quick order 6 short 'Orders', entryRole
 Register a statusboard renderer: rows grouped by the status field into the groups from the data, newest first, each row as its typed values. Add statusboard to validateView (statusField must be a select; group values must exist among its options). Test with a made-up set, not care.orders.
 ```
 
-### [ ] 48b1. Generic row `actions`
-**Files:** enhancer.html (+ api.js only if a check is missing) | **Paste:** the row patch code in Store, the statusboard renderer
+### [ ] 48b1a. Generic row `actions`: buttons and patch
+**File:** enhancer.html | **Paste:** the row patch code in Store, the statusboard renderer
 ```text
-Render each action as a button on a row. Click patches only the named field through the existing row patch route (version sent, audit by the existing route). If reasonRequired, ask for a reason and send it in reasonField; no reason, no change. Never delete. Test with a made-up set: reason required, row kept, status changed, version conflict shows the usual conflict path.
+Render each action as a button on a row. Click patches only the named field through the existing row patch route (version sent). Never delete. Test with a made-up set: status changed, row kept.
+```
+
+### [ ] 48b1b. Reason required
+**File:** enhancer.html | **Paste:** the 48b1a click handler
+```text
+If an action has reasonRequired, ask for a reason and send it in reasonField; no reason, no change, plain message. Test: no reason means no patch; a version conflict shows the usual conflict path.
 ```
 
 ### [ ] 48b2. FHIR mapping from the set's data
@@ -849,10 +1065,16 @@ After validating the banner key, the banner shows one chip per active row's chip
 Add care.mar, group "admin": mar_time datetime, mar_item text, mar_order_id text, mar_result select (Given, Held, Refused), mar_reason text, dose_given text (free text), mar_by session user, mar_note text. View block: {"type":"flowsheet","timeField":"mar_time","crosscheck":{"against":{"setId":"care.allergies","field":"substance"},"textField":"mar_item","message":"Review allergy list before administering"}}. No dose values, no rules.
 ```
 
-### [ ] 49b2. Generic `linkedgrid` section: pick from another set's active rows
-**Files:** views.js, enhancer.html | **Paste:** the statusboard renderer, rows append in Store
+### [ ] 49b2a. `linkedgrid`: validator and list of source rows (pure)
+**File:** views.js | **Paste:** the section list in VIEWS.md
 ```text
-Section {"type":"linkedgrid","source":{"setId","field":"ord_item","filterField":"ord_category","filterValue":"Medication","statusField":"ord_status","statusValues":["Active"]},"into":{"setId","itemField","idField"}} lists active source rows and lets the user add a row in the target set with the item text copied and the source row id in the id field (decision 14). Doses are never calculated, converted, summed or auto-filled. Test with two made-up sets.
+Add the section {"type":"linkedgrid","source":{"setId","field","filterField","filterValue","statusField","statusValues"},"into":{"setId","itemField","idField"}} to validatePathwayViews, and a pure function linkedRows(caseRows, source) returning active source rows (skip entered_in_error). Tests with two made-up sets.
+```
+
+### [ ] 49b2b. `linkedgrid`: render and add row
+**File:** enhancer.html | **Paste:** linkedRows, rows append in Store, the section renderer registry
+```text
+Render the source rows with an "Add entry" button that opens a new row in the target set with the item text copied and the source row id in the id field (decision 14). Doses are never calculated, converted, summed or auto-filled. Test with two made-up sets.
 ```
 
 ### [ ] 49b3. Generic `crosscheck` (non-blocking note)
