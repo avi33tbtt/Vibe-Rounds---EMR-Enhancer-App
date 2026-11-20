@@ -1,0 +1,1744 @@
+{
+ "schemaVersion": 1,
+ "anchor": "2026-11-01T08:00:00Z",
+ "seed": 20261101,
+ "actors": {
+  "nurse": "demo-nurse",
+  "doctor": "demo-doctor",
+  "admin": "demo-admin"
+ },
+ "personas": [
+  {
+   "id": "D-01",
+   "title": "Ward patient, I/O and vitals",
+   "patient": {
+    "key": "p1",
+    "name": "Demo Patient 01",
+    "sex": "female",
+    "ageYears": 54,
+    "syntheticKey": "demo-01"
+   },
+   "encounters": [
+    {
+     "key": "e1",
+     "patient": "p1",
+     "type": "admission",
+     "start": "-72h",
+     "ward": "Ward A",
+     "bed": "A1"
+    }
+   ],
+   "cases": [
+    {
+     "key": "c1",
+     "patient": "p1",
+     "encounter": "e1",
+     "applied": [
+      "care.vitals",
+      "care.intake_output"
+     ],
+     "pathways": [],
+     "narrative": "Synthetic ward patient. Intake and output and vitals charted over three days."
+    }
+   ],
+   "series": [
+    {
+     "case": "c1",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-72h",
+      "every": "6h",
+      "count": 12,
+      "jitter": "10m"
+     },
+     "fields": {
+      "temp": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.2,
+        38.8
+       ]
+      },
+      "hr": {
+       "gen": "int",
+       "plausible": [
+        62,
+        104
+       ]
+      },
+      "rr": {
+       "gen": "int",
+       "plausible": [
+        14,
+        22
+       ]
+      },
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        104,
+        138
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        62,
+        88
+       ]
+      },
+      "spo2": {
+       "gen": "int",
+       "plausible": [
+        94,
+        99
+       ]
+      }
+     }
+    },
+    {
+     "case": "c1",
+     "setId": "care.intake_output",
+     "groupId": "io",
+     "timeField": "io_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-70h",
+      "every": "4h",
+      "count": 17,
+      "jitter": "10m"
+     },
+     "fields": {
+      "io_type": {
+       "gen": "cycle",
+       "options": [
+        "Intake oral",
+        "Urine",
+        "Intake IV",
+        "Urine"
+       ]
+      },
+      "io_volume": {
+       "gen": "int",
+       "plausible": [
+        50,
+        400
+       ]
+      }
+     }
+    }
+   ],
+   "values": [],
+   "notes": [],
+   "merge": null
+  },
+  {
+   "id": "D-02",
+   "title": "Diabetic emergency pathway",
+   "patient": {
+    "key": "p1",
+    "name": "Demo Patient 02",
+    "sex": "male",
+    "ageYears": 47,
+    "syntheticKey": "demo-02"
+   },
+   "encounters": [
+    {
+     "key": "e1",
+     "patient": "p1",
+     "type": "admission",
+     "start": "-120h",
+     "end": "-4h",
+     "ward": "Ward C",
+     "bed": "C3"
+    }
+   ],
+   "cases": [
+    {
+     "key": "c1",
+     "patient": "p1",
+     "encounter": "e1",
+     "applied": [
+      "care.vitals",
+      "care.hba1c_monitoring",
+      "care.sliding_scale_insulin",
+      "care.daily_insulin_monitoring",
+      "template.basic_emr"
+     ],
+     "pathways": [
+      "pathway.dka"
+     ],
+     "narrative": "Synthetic diabetic emergency pathway, five-day stay. No rule is attached to any field."
+    }
+   ],
+   "series": [
+    {
+     "case": "c1",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-118h",
+      "every": "6h",
+      "count": 19,
+      "jitter": "10m"
+     },
+     "fields": {
+      "temp": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.2,
+        38.8
+       ]
+      },
+      "hr": {
+       "gen": "int",
+       "plausible": [
+        62,
+        104
+       ]
+      },
+      "rr": {
+       "gen": "int",
+       "plausible": [
+        14,
+        22
+       ]
+      },
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        104,
+        138
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        62,
+        88
+       ]
+      },
+      "spo2": {
+       "gen": "int",
+       "plausible": [
+        94,
+        99
+       ]
+      }
+     }
+    },
+    {
+     "case": "c1",
+     "setId": "care.sliding_scale_insulin",
+     "groupId": "ssi_log",
+     "timeField": "ssi_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-112h",
+      "every": "6h",
+      "count": 16,
+      "jitter": "10m"
+     },
+     "fields": {
+      "ssi_glucose": {
+       "gen": "int",
+       "plausible": [
+        110,
+        320
+       ]
+      },
+      "ssi_dose": {
+       "gen": "text",
+       "options": [
+        "Given as per order sheet",
+        "Given as per order sheet, site rotated",
+        "Held, see note"
+       ]
+      },
+      "ssi_by": {
+       "gen": "text",
+       "options": [
+        "Demo nurse"
+       ]
+      }
+     }
+    },
+    {
+     "case": "c1",
+     "setId": "care.daily_insulin_monitoring",
+     "groupId": "dim",
+     "timeField": "ins_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-118h",
+      "every": "6h",
+      "count": 20,
+      "jitter": "10m"
+     },
+     "fields": {
+      "slot": {
+       "gen": "cycle",
+       "options": [
+        "Pre-breakfast",
+        "Pre-lunch",
+        "Pre-dinner",
+        "Bedtime"
+       ]
+      },
+      "ins_glucose": {
+       "gen": "int",
+       "plausible": [
+        100,
+        300
+       ]
+      },
+      "ins_dose": {
+       "gen": "text",
+       "options": [
+        "Given as per order sheet",
+        "Held, see note"
+       ]
+      },
+      "ins_by": {
+       "gen": "text",
+       "options": [
+        "Demo nurse"
+       ]
+      }
+     }
+    },
+    {
+     "case": "c1",
+     "setId": "care.hba1c_monitoring",
+     "groupId": "hba1c",
+     "timeField": "a1c_date",
+     "timeAs": "date",
+     "by": "nurse",
+     "schedule": {
+      "start": "-118h",
+      "every": "1d",
+      "count": 1
+     },
+     "fields": {
+      "a1c": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        6.5,
+        11.5
+       ]
+      }
+     }
+    }
+   ],
+   "values": [
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "cc",
+     "at": "-118h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "hx",
+     "at": "-118h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "assess",
+     "at": "-118h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "plan",
+     "at": "-118h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    }
+   ],
+   "notes": [
+    {
+     "case": "c1",
+     "at": "-96h",
+     "by": "doctor",
+     "text": "Synthetic progress note, no clinical meaning.",
+     "sign": true
+    }
+   ],
+   "merge": null
+  },
+  {
+   "id": "D-03",
+   "title": "Snake envenomation pathway",
+   "patient": {
+    "key": "p1",
+    "name": "Demo Patient 03",
+    "sex": "male",
+    "ageYears": 35,
+    "syntheticKey": "demo-03"
+   },
+   "encounters": [
+    {
+     "key": "e1",
+     "patient": "p1",
+     "type": "admission",
+     "start": "-48h",
+     "end": "-2h",
+     "ward": "Ward B",
+     "bed": "B1"
+    }
+   ],
+   "cases": [
+    {
+     "key": "c1",
+     "patient": "p1",
+     "encounter": "e1",
+     "applied": [
+      "care.vitals",
+      "template.basic_emr",
+      "disease.snake_envenomation"
+     ],
+     "pathways": [
+      "pathway.snakebite"
+     ],
+     "narrative": "Synthetic snake envenomation pathway, two-day stay."
+    }
+   ],
+   "series": [
+    {
+     "case": "c1",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-46h",
+      "every": "4h",
+      "count": 12,
+      "jitter": "10m"
+     },
+     "fields": {
+      "temp": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.2,
+        38.8
+       ]
+      },
+      "hr": {
+       "gen": "int",
+       "plausible": [
+        62,
+        104
+       ]
+      },
+      "rr": {
+       "gen": "int",
+       "plausible": [
+        14,
+        22
+       ]
+      },
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        104,
+        138
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        62,
+        88
+       ]
+      },
+      "spo2": {
+       "gen": "int",
+       "plausible": [
+        94,
+        99
+       ]
+      }
+     }
+    }
+   ],
+   "values": [
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "cc",
+     "at": "-48h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "hx",
+     "at": "-48h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "assess",
+     "at": "-48h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "plan",
+     "at": "-48h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "disease.snake_envenomation",
+     "fieldId": "bite",
+     "at": "-48h",
+     "gen": "datetime",
+     "offset": "-3h"
+    },
+    {
+     "case": "c1",
+     "setId": "disease.snake_envenomation",
+     "fieldId": "arr",
+     "at": "-48h",
+     "gen": "datetime",
+     "offset": "+0h"
+    },
+    {
+     "case": "c1",
+     "setId": "disease.snake_envenomation",
+     "fieldId": "asv",
+     "at": "-48h",
+     "gen": "datetime",
+     "offset": "+2h"
+    },
+    {
+     "case": "c1",
+     "setId": "disease.snake_envenomation",
+     "fieldId": "wbct",
+     "at": "-48h",
+     "gen": "pick",
+     "options": [
+      "Unclotted"
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "disease.snake_envenomation",
+     "fieldId": "swell",
+     "at": "-24h",
+     "gen": "pick",
+     "options": [
+      "2"
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "disease.snake_envenomation",
+     "fieldId": "out",
+     "at": "-4h",
+     "gen": "pick",
+     "options": [
+      "Recovered"
+     ]
+    }
+   ],
+   "notes": [
+    {
+     "case": "c1",
+     "at": "-30h",
+     "by": "doctor",
+     "text": "Synthetic progress note, no clinical meaning.",
+     "sign": true,
+     "amend": {
+      "by": "doctor",
+      "reason": "clarified wording",
+      "text": "Synthetic progress note, wording clarified, no clinical meaning."
+     }
+    }
+   ],
+   "merge": null
+  },
+  {
+   "id": "D-04",
+   "title": "Fever monitoring",
+   "patient": {
+    "key": "p1",
+    "name": "Demo Patient 04",
+    "sex": "female",
+    "ageYears": 29,
+    "syntheticKey": "demo-04"
+   },
+   "encounters": [
+    {
+     "key": "e1",
+     "patient": "p1",
+     "type": "admission",
+     "start": "-96h",
+     "ward": "Ward B",
+     "bed": "B2"
+    }
+   ],
+   "cases": [
+    {
+     "key": "c1",
+     "patient": "p1",
+     "encounter": "e1",
+     "applied": [
+      "care.vitals",
+      "care.fever_chart",
+      "template.basic_emr"
+     ],
+     "pathways": [
+      "pathway.fever_monitoring"
+     ],
+     "narrative": "Synthetic fever monitoring, four days on the ward."
+    }
+   ],
+   "series": [
+    {
+     "case": "c1",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-96h",
+      "every": "6h",
+      "count": 16,
+      "jitter": "10m"
+     },
+     "fields": {
+      "temp": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.2,
+        38.8
+       ]
+      },
+      "hr": {
+       "gen": "int",
+       "plausible": [
+        62,
+        104
+       ]
+      },
+      "rr": {
+       "gen": "int",
+       "plausible": [
+        14,
+        22
+       ]
+      },
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        104,
+        138
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        62,
+        88
+       ]
+      },
+      "spo2": {
+       "gen": "int",
+       "plausible": [
+        94,
+        99
+       ]
+      }
+     }
+    },
+    {
+     "case": "c1",
+     "setId": "care.fever_chart",
+     "groupId": "fever",
+     "timeField": "ft_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-96h",
+      "every": "4h",
+      "count": 24,
+      "jitter": "10m"
+     },
+     "fields": {
+      "temp": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.4,
+        39.2
+       ]
+      },
+      "temp_unit": {
+       "gen": "cycle",
+       "options": [
+        "°C"
+       ]
+      },
+      "route": {
+       "gen": "cycle",
+       "options": [
+        "Oral",
+        "Axillary"
+       ]
+      },
+      "pulse": {
+       "gen": "int",
+       "plausible": [
+        64,
+        108
+       ]
+      },
+      "antipyretic": {
+       "gen": "text",
+       "options": [
+        "None given",
+        "Given as per order sheet"
+       ]
+      }
+     }
+    }
+   ],
+   "values": [
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "cc",
+     "at": "-96h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "hx",
+     "at": "-96h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "assess",
+     "at": "-96h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "plan",
+     "at": "-96h",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    }
+   ],
+   "notes": [],
+   "merge": null
+  },
+  {
+   "id": "D-05",
+   "title": "Chronic diabetes follow-up",
+   "patient": {
+    "key": "p1",
+    "name": "Demo Patient 05",
+    "sex": "female",
+    "ageYears": 58,
+    "syntheticKey": "demo-05"
+   },
+   "encounters": [],
+   "cases": [
+    {
+     "key": "c1",
+     "patient": "p1",
+     "encounter": null,
+     "applied": [
+      "care.hba1c_monitoring",
+      "care.vitals",
+      "template.basic_emr"
+     ],
+     "pathways": [],
+     "narrative": "Synthetic chronic diabetes follow-up over about eighteen months, six visits."
+    }
+   ],
+   "series": [
+    {
+     "case": "c1",
+     "setId": "care.hba1c_monitoring",
+     "groupId": "hba1c",
+     "timeField": "a1c_date",
+     "timeAs": "date",
+     "by": "doctor",
+     "schedule": {
+      "start": "-550d",
+      "every": "109d",
+      "count": 6,
+      "jitter": "3d"
+     },
+     "fields": {
+      "a1c": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        6.8,
+        9.8
+       ]
+      }
+     }
+    },
+    {
+     "case": "c1",
+     "setId": "care.hba1c_monitoring",
+     "groupId": "cbg",
+     "timeField": "cbg_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-550d",
+      "every": "50d",
+      "count": 11,
+      "jitter": "2d"
+     },
+     "fields": {
+      "cbg": {
+       "gen": "int",
+       "plausible": [
+        100,
+        240
+       ]
+      }
+     }
+    },
+    {
+     "case": "c1",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-550d",
+      "every": "109d",
+      "count": 6,
+      "jitter": "3d"
+     },
+     "fields": {
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        110,
+        146
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        66,
+        90
+       ]
+      },
+      "weight": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        66,
+        80
+       ]
+      }
+     }
+    }
+   ],
+   "values": [
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "cc",
+     "at": "-550d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "hx",
+     "at": "-550d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "assess",
+     "at": "-550d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "plan",
+     "at": "-550d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    }
+   ],
+   "notes": [],
+   "merge": null
+  },
+  {
+   "id": "D-06",
+   "title": "Chronic blood-pressure follow-up",
+   "patient": {
+    "key": "p1",
+    "name": "Demo Patient 06",
+    "sex": "male",
+    "ageYears": 66,
+    "syntheticKey": "demo-06"
+   },
+   "encounters": [],
+   "cases": [
+    {
+     "key": "c1",
+     "patient": "p1",
+     "encounter": null,
+     "applied": [
+      "care.vitals",
+      "template.basic_emr"
+     ],
+     "pathways": [],
+     "narrative": "Synthetic blood-pressure follow-up over about twenty-four months, nine planned visits, two missed."
+    }
+   ],
+   "series": [
+    {
+     "case": "c1",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-730d",
+      "every": "91d",
+      "count": 9,
+      "jitter": "3d"
+     },
+     "fields": {
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        118,
+        156
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        70,
+        96
+       ]
+      },
+      "hr": {
+       "gen": "int",
+       "plausible": [
+        60,
+        92
+       ]
+      },
+      "weight": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        78,
+        92
+       ]
+      }
+     },
+     "skip": [
+      3,
+      6
+     ]
+    }
+   ],
+   "values": [
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "cc",
+     "at": "-730d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "hx",
+     "at": "-730d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "assess",
+     "at": "-730d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "plan",
+     "at": "-730d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    }
+   ],
+   "notes": [],
+   "merge": null
+  },
+  {
+   "id": "D-07",
+   "title": "Readmission",
+   "patient": {
+    "key": "p1",
+    "name": "Demo Patient 07",
+    "sex": "female",
+    "ageYears": 72,
+    "syntheticKey": "demo-07"
+   },
+   "encounters": [
+    {
+     "key": "e1",
+     "patient": "p1",
+     "type": "admission",
+     "start": "-45d",
+     "end": "-38d",
+     "ward": "Ward D",
+     "bed": "D1"
+    },
+    {
+     "key": "e2",
+     "patient": "p1",
+     "type": "admission",
+     "start": "-17d",
+     "end": "-10d",
+     "ward": "Ward D",
+     "bed": "D1"
+    }
+   ],
+   "cases": [
+    {
+     "key": "c1",
+     "patient": "p1",
+     "encounter": "e1",
+     "applied": [
+      "care.vitals",
+      "care.intake_output"
+     ],
+     "pathways": [],
+     "narrative": "Synthetic first stay."
+    },
+    {
+     "key": "c2",
+     "patient": "p1",
+     "encounter": "e2",
+     "applied": [
+      "care.vitals",
+      "template.basic_emr"
+     ],
+     "pathways": [],
+     "narrative": "Synthetic second stay, about three weeks after the first ended."
+    }
+   ],
+   "series": [
+    {
+     "case": "c1",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-45d",
+      "every": "8h",
+      "count": 18,
+      "jitter": "10m"
+     },
+     "fields": {
+      "temp": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.2,
+        38.8
+       ]
+      },
+      "hr": {
+       "gen": "int",
+       "plausible": [
+        62,
+        104
+       ]
+      },
+      "rr": {
+       "gen": "int",
+       "plausible": [
+        14,
+        22
+       ]
+      },
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        104,
+        138
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        62,
+        88
+       ]
+      },
+      "spo2": {
+       "gen": "int",
+       "plausible": [
+        94,
+        99
+       ]
+      }
+     }
+    },
+    {
+     "case": "c2",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-17d",
+      "every": "8h",
+      "count": 18,
+      "jitter": "10m"
+     },
+     "fields": {
+      "temp": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.2,
+        38.8
+       ]
+      },
+      "hr": {
+       "gen": "int",
+       "plausible": [
+        62,
+        104
+       ]
+      },
+      "rr": {
+       "gen": "int",
+       "plausible": [
+        14,
+        22
+       ]
+      },
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        104,
+        138
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        62,
+        88
+       ]
+      },
+      "spo2": {
+       "gen": "int",
+       "plausible": [
+        94,
+        99
+       ]
+      }
+     }
+    },
+    {
+     "case": "c1",
+     "setId": "care.intake_output",
+     "groupId": "io",
+     "timeField": "io_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-45d",
+      "every": "6h",
+      "count": 20,
+      "jitter": "10m"
+     },
+     "fields": {
+      "io_type": {
+       "gen": "cycle",
+       "options": [
+        "Intake oral",
+        "Urine",
+        "Intake IV",
+        "Urine"
+       ]
+      },
+      "io_volume": {
+       "gen": "int",
+       "plausible": [
+        50,
+        400
+       ]
+      }
+     }
+    }
+   ],
+   "values": [
+    {
+     "case": "c2",
+     "setId": "template.basic_emr",
+     "fieldId": "cc",
+     "at": "-17d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c2",
+     "setId": "template.basic_emr",
+     "fieldId": "hx",
+     "at": "-17d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c2",
+     "setId": "template.basic_emr",
+     "fieldId": "assess",
+     "at": "-17d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c2",
+     "setId": "template.basic_emr",
+     "fieldId": "plan",
+     "at": "-17d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    }
+   ],
+   "notes": [],
+   "merge": null
+  },
+  {
+   "id": "D-08",
+   "title": "Duplicate registration, merged",
+   "patient": {
+    "key": "p1",
+    "name": "Demo Patient 08",
+    "sex": "male",
+    "ageYears": 41,
+    "syntheticKey": "demo-08"
+   },
+   "encounters": [
+    {
+     "key": "e1",
+     "patient": "p1",
+     "type": "admission",
+     "start": "-20d",
+     "end": "-15d",
+     "ward": "Ward E",
+     "bed": "E1"
+    },
+    {
+     "key": "e2",
+     "patient": "p2",
+     "type": "admission",
+     "start": "-50d",
+     "end": "-45d",
+     "ward": "Ward E",
+     "bed": "E2"
+    }
+   ],
+   "cases": [
+    {
+     "key": "c1",
+     "patient": "p1",
+     "encounter": "e1",
+     "applied": [
+      "care.vitals"
+     ],
+     "pathways": [],
+     "narrative": "Synthetic stay on the kept record."
+    },
+    {
+     "key": "c2",
+     "patient": "p2",
+     "encounter": "e2",
+     "applied": [
+      "care.vitals"
+     ],
+     "pathways": [],
+     "narrative": "Synthetic stay on the duplicate record, merged into the kept one."
+    }
+   ],
+   "series": [
+    {
+     "case": "c1",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-20d",
+      "every": "12h",
+      "count": 8,
+      "jitter": "10m"
+     },
+     "fields": {
+      "temp": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.2,
+        38.8
+       ]
+      },
+      "hr": {
+       "gen": "int",
+       "plausible": [
+        62,
+        104
+       ]
+      },
+      "rr": {
+       "gen": "int",
+       "plausible": [
+        14,
+        22
+       ]
+      },
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        104,
+        138
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        62,
+        88
+       ]
+      },
+      "spo2": {
+       "gen": "int",
+       "plausible": [
+        94,
+        99
+       ]
+      }
+     }
+    },
+    {
+     "case": "c2",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-50d",
+      "every": "12h",
+      "count": 8,
+      "jitter": "10m"
+     },
+     "fields": {
+      "temp": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.2,
+        38.8
+       ]
+      },
+      "hr": {
+       "gen": "int",
+       "plausible": [
+        62,
+        104
+       ]
+      },
+      "rr": {
+       "gen": "int",
+       "plausible": [
+        14,
+        22
+       ]
+      },
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        104,
+        138
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        62,
+        88
+       ]
+      },
+      "spo2": {
+       "gen": "int",
+       "plausible": [
+        94,
+        99
+       ]
+      }
+     }
+    }
+   ],
+   "values": [],
+   "notes": [],
+   "merge": {
+    "from": "p2",
+    "into": "p1",
+    "by": "admin",
+    "reason": "duplicate registration"
+   },
+   "extraPatients": [
+    {
+     "key": "p2",
+     "name": "Demo Patient 08",
+     "sex": "male",
+     "ageYears": 41,
+     "syntheticKey": "demo-08b"
+    }
+   ]
+  },
+  {
+   "id": "D-09",
+   "title": "Data-quality case",
+   "patient": {
+    "key": "p1",
+    "name": "Demo Patient 09",
+    "sex": "female",
+    "ageYears": 63,
+    "syntheticKey": "demo-09"
+   },
+   "encounters": [
+    {
+     "key": "e1",
+     "patient": "p1",
+     "type": "admission",
+     "start": "-42d",
+     "end": "-1d",
+     "ward": "Ward F",
+     "bed": "F1"
+    }
+   ],
+   "cases": [
+    {
+     "key": "c1",
+     "patient": "p1",
+     "encounter": "e1",
+     "applied": [
+      "care.vitals",
+      "care.intake_output",
+      "template.basic_emr"
+     ],
+     "pathways": [],
+     "narrative": "Synthetic six-week stay built to show missing times, entered-in-error rows, amended rows and text-only entries."
+    }
+   ],
+   "series": [
+    {
+     "case": "c1",
+     "setId": "care.vitals",
+     "groupId": "vitals",
+     "timeField": "vit_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-41d",
+      "every": "12h",
+      "count": 80,
+      "jitter": "10m"
+     },
+     "fields": {
+      "temp": {
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.2,
+        38.8
+       ]
+      },
+      "hr": {
+       "gen": "int",
+       "plausible": [
+        62,
+        104
+       ]
+      },
+      "bp_sys": {
+       "gen": "int",
+       "plausible": [
+        104,
+        138
+       ]
+      },
+      "bp_dia": {
+       "gen": "int",
+       "plausible": [
+        62,
+        88
+       ]
+      }
+     },
+     "noTime": [
+      10,
+      11,
+      40
+     ],
+     "badTime": [
+      20,
+      55
+     ],
+     "skip": [
+      70
+     ],
+     "inError": [
+      {
+       "index": 5,
+       "by": "doctor",
+       "reason": "recorded on the wrong patient"
+      },
+      {
+       "index": 30,
+       "by": "doctor",
+       "reason": "duplicate entry"
+      },
+      {
+       "index": 61,
+       "by": "doctor",
+       "reason": "wrong value entered"
+      }
+     ],
+     "amend": [
+      {
+       "index": 15,
+       "by": "doctor",
+       "field": "temp",
+       "gen": "decimal",
+       "places": 1,
+       "plausible": [
+        36.2,
+        38.8
+       ],
+       "reason": "transcription error"
+      },
+      {
+       "index": 45,
+       "by": "doctor",
+       "field": "hr",
+       "gen": "int",
+       "plausible": [
+        62,
+        104
+       ],
+       "reason": "transcription error"
+      }
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "care.intake_output",
+     "groupId": "io",
+     "timeField": "io_time",
+     "by": "nurse",
+     "schedule": {
+      "start": "-41d",
+      "every": "1d",
+      "count": 30,
+      "jitter": "30m"
+     },
+     "fields": {
+      "io_type": {
+       "gen": "cycle",
+       "options": [
+        "Intake oral",
+        "Urine"
+       ]
+      },
+      "io_volume": {
+       "gen": "int",
+       "plausible": [
+        100,
+        500
+       ]
+      },
+      "io_note": {
+       "gen": "text",
+       "options": [
+        "Synthetic free-text note, no code.",
+        "Synthetic free-text note, second wording."
+       ]
+      }
+     },
+     "noTime": [
+      3
+     ],
+     "inError": [
+      {
+       "index": 8,
+       "by": "doctor",
+       "reason": "entered in the wrong set"
+      }
+     ]
+    }
+   ],
+   "values": [
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "cc",
+     "at": "-41d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "hx",
+     "at": "-41d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "assess",
+     "at": "-41d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    },
+    {
+     "case": "c1",
+     "setId": "template.basic_emr",
+     "fieldId": "plan",
+     "at": "-41d",
+     "gen": "text",
+     "options": [
+      "Synthetic demo entry, no clinical meaning."
+     ]
+    }
+   ],
+   "notes": [
+    {
+     "case": "c1",
+     "at": "-20d",
+     "by": "doctor",
+     "text": "Synthetic progress note, no clinical meaning.",
+     "sign": true,
+     "amend": {
+      "by": "doctor",
+      "reason": "clarified wording",
+      "text": "Synthetic progress note, wording clarified, no clinical meaning."
+     }
+    }
+   ],
+   "merge": null
+  }
+ ]
+}

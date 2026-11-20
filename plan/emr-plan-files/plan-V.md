@@ -252,52 +252,66 @@ Update API.md with the emr_views routes and VIEWS.md with the final key and sect
 
 Each task: move the named behaviour into data (a view key, a field flag or a seed pathway) with a generic renderer, a validator entry, a test with a made-up set and a line in VIEWS.md; then delete its ALLOW entries and lower `ALLOW_MAX` in `no-handcode.test.js`. Output must look identical. Paste: `grep -n` for the ALLOW text, then the function.
 
-#### [ ] V8d1. Starter and quick-add set lists from data
+#### [x] V8d1. Starter and quick-add set lists from data
 **File:** enhancer.html (+ element-sets.js) | **Paste:** the `DEF`, `quickIds` and `template.basic_emr` lines (910 to 971 area, ~1733, ~2332)
 ```text
 The Demo-mode default set list, the quick-add list and the starter template come from a flag on seed sets or a seed pathway, not from ids in code. Same lists, same order.
 ```
+*V8d1 result (20 Nov 2026): the Demo suggestion list, the Summary quick-add buttons and the starter note template now come from set flags: `quick.suggest` (position), `quick.summary` (button) and `starter:true`. `enhancer.html` has `sugList()`; `quickIds` and the template lookup read the flags. Seed flags are in `element-sets.js`; set versions not bumped (no field changed). Same lists, same order. A user-made set carrying `quick.summary` or `quick.suggest` would now appear in them. Not run by me: run `npm test`.*
 
-#### [ ] V8d2. Demo sample cases from data
+#### [x] V8d2. Demo sample cases from data
 **File:** enhancer.html | **Paste:** the `DEMO`/`DEMO2` line (~910) and where they are used
 ```text
 The two sample cases pick their sets from data (or move to Phase D personas). No set id in code.
 ```
+*V8d2 result (20 Nov 2026): `DEMO` is the seed set flagged `demoCases:true`; `DEMO2` was unused and is deleted. `synth()` still names the snake-bite field ids; those hits go with V8d8 (or Phase D personas). Not run by me: run `npm test`.*
 
-#### [ ] V8d3. FHIR export: pairing and method text from data
+#### [x] V8d3. FHIR export: pairing and method text from data
 **File:** enhancer.html | **Paste:** the export lines with `bp2`, `bpOk` and `f.id=='route'` (~1389 to 1400)
 ```text
 A field flag or view key says which two fields are one paired reading and which field becomes the Observation method text. Export output unchanged.
 ```
+*V8d3 result (20 Nov 2026): field flag `pair:{with,code,short}` and fever view key `methodField`. `pairOf(groupFields)` in `enhancer.html` finds the pair; the FHIR export joins it into one component Observation (text = `code`) and puts the method field on the temperature Observation's `method.text`. `views.js`: `methodField` is a view key; `validateView` checks `pair` (known keys, `with` is another field in the same group, `code` and `short` text) even when the set has no view. Seed: `bp_sys` has the pair, the fever view has `methodField:"route"`. Export unchanged. Not run by me: run `npm test`.*
 
-#### [ ] V8d4. Paired reading in text lines from data
+#### [x] V8d4. Paired reading in text lines from data
 **File:** enhancer.html | **Paste:** the lines with `bp_sys` near 1604 and `rowText` near 1957
 ```text
 Use the same data from V8d3 to join the paired reading in text lines. No field id in code.
 ```
+*V8d4 result (20 Nov 2026): the flowsheet row label (`code` + unit), flowsheet cells and `rowText` (`short` + two values + unit) use `pairOf`. No `bp_sys` or `bp_dia` remains in `enhancer.html` code. Not run by me: run `npm test`.*
 
-#### [ ] V8d5. Typed target echo and scale echo from data
+#### [x] V8d5. Typed target echo and scale echo from data
 **File:** enhancer.html | **Paste:** the lines with `tgt_low` (~1132) and `ssi` (~1135)
 ```text
 The typed target fields and the typed-band echo are named in the set's view block. Still shown as typed, never judged.
 ```
+*V8d5 result (20 Nov 2026): dailygrid view keys `targetLowField`, `targetHighField` and `echo:{setId,label}`. The typed band is read from those fields (drawn only when both are typed) and the sliding-scale note comes from `echo`; text unchanged. `validateView` accepts the keys, checks the `*Field` ids and the shape of `echo`. Seed insulin chart carries the three keys. Not run by me: run `npm test`.*
 
-#### [ ] V8d6. Fever chart extra field from data
+#### [x] V8d6. Fever chart extra field from data
 **File:** enhancer.html | **Paste:** the line with `includes('pulse')` (~1142)
 ```text
 View `extra` already lists field ids. Draw the overlay for the first listed extra field, with no id in code.
 ```
+*V8d6 result (20 Nov 2026): the fever chart draws the first field listed in `view.extra` as the second series; no field id in code. Seed unchanged (`extra:["pulse"]`). Not run by me: run `npm test`.*
 
-#### [ ] V8d7. HbA1c trend and due label from data
+#### [x] V8d7. HbA1c trend and due label from data
 **File:** enhancer.html | **Paste:** the lines with `care.hba1c_monitoring` (~1475, 1476, 1614, 1944)
 ```text
 The set, series field and due field come from a view or field flag. Same trend chart, same due badge and label.
 ```
 
-#### [ ] V8d8. Snake-bite gap from data
+*V8d7 result (20 Nov 2026): one field flag, `followUp:{label, history?:{group, valueField, dateField}}`, on the date field of a set (seed: `a1c_due`; set version not bumped, no field changed). `followUpOf(s)` in `enhancer.html` reads it. The due badge, the patient due label (`fu` on each due item, text `<label> overdue N d`, `due today`, `due in N d`) and the Care pathway "Days since last <label>" list (one list per label, all flagged sets) all use it; text and layout are unchanged for the seed. `views.js`: `validateFollowUps` (one per set, date field, not repeat, `history` keys and fields in the same group, a number and a date). New `views-followup.test.js` (3 tests, made-up set, runs the real `followUpOf` from `enhancer.html`); **add it to the `npm test` script.** `no-handcode.test.js`: the 4 V8d7 ALLOW entries removed, `ALLOW_MAX` is 1. VIEWS.md has the flag in "Field and set flags". `element-sets.js` still needs the same seed edit as the inlined copy. Checked here on the seed block inlined in `enhancer.html`: all seed sets validate and the scripts parse. Not run by me: `npm test`.*
+
+#### [x] V8d8. Snake-bite gap from data
 **File:** enhancer.html | **Paste:** `gapOf` (~1436) and its callers
 ```text
 The three fields used by gapOf come from the set's view block. Same result.
 ```
+
+*V8d8 result (20 Nov 2026): no new flag was needed. `gapOf` in `enhancer.html` now finds the field of the demo set (`SNK`, the `demoCases` set) that already has `derived:{from:[a,b], op:'minutes_between'}`, uses its typed value, and otherwise computes the minutes between the two `from` fields; same result, `null` when the set has no such field. `no-handcode.test.js`: the last ALLOW entry is removed and `ALLOW_MAX` is 0. New `gapof.test.js` (3 tests, made-up set, runs the real `gapOf`). Left as is: the 60 and 240 minute delay bands in the snake-bite cards and the outcome field `out` (3 characters, below the scan's floor); they are for the gate review.*
+
+*V8d status (20 Nov 2026): V8d1 to V8d8 all done; `ALLOW_MAX` is 0. Still to add by you: a screen-level made-up-set test for each of V8d1 to V8d6 (vm or jsdom load of `enhancer.html`); V8d7 and V8d8 have theirs. Phase V gate: `npm test` first showed 18 stale or broken tests (20 Nov 2026), listed under the gate below.*
+
+**Phase V gate test fixes (20 Nov 2026).** Done: `api.js` verify route no longer uses `FOR UPDATE` on append-only `local_codes` (fixes the `audit.test.js` 500); `api.test.js` fixture set has an `access` block (R5), `/api/me` keys include `emrViews`, the seed-safety test skips `emr` view pathways; `io-set.test.js` expects `care.intake_output` version 3. `handover-data.test.js` and `handover-view.test.js` now extract `SECTIONS`, `HANDOVER_FALLBACK`, `handoverSections`, `sectionsData`, `pairOf` and `SECTION_HTML` from `enhancer.html` (12 of 12 pass here) and the shell test checks the pathway-built tab and the seed surface instead of a static button. `versions.test.js:238` searched the nurse's history for the text '300', which any id or time can contain (about 1 run in 25); it now looks for the reading by field and value. The history route hides entered-in-error rows and their versions from nurse, viewer and informatician (read in `api.js`), so a failure of the new check on a second run would be a real leak: stop and look at `GET /cases/:id/history`. Add `no-handcode.test.js`, `views-followup.test.js` and `gapof.test.js` to the `npm test` script.
 
 **Release gate for Phase V:** I/O sum, ward board and handover look the same as before; no clinical set or field name remains in code (the V8a ALLOW list is empty); switching the Handover pathway off removes its tab.

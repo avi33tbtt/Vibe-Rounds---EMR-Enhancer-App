@@ -166,3 +166,42 @@ test('sumBy: no rows, no spec, or non-list rows give {}',()=>{
   assert.deepStrictEqual(sumBy(null,SP,...W),{});
   assert.deepStrictEqual(sumBy([{t_amt:1}],null,...W),{});
 });
+
+/* ---- V8d: pair, echo, methodField, targetLowField / targetHighField (made-up set) ---- */
+const pairSet=(pair,extra)=>{const s=madeUp(undefined);s.sections[0].fields[3].pair=pair;if(extra)s.sections[0].fields.push(extra);return s;};
+test('pair: a good pair, in the same group, passes (also with no view block)',()=>{
+  assert.deepStrictEqual(validateView(pairSet({with:'t_count',code:'Two numbers',short:'AB'})).errors,[]);
+  assert.deepStrictEqual(validateView(pairSet({with:'t_count'})).errors,[]);
+});
+test('pair: must be an object with known keys',()=>{
+  hasErr(pairSet('t_count'),/pair must be an object/);
+  hasErr(pairSet({with:'t_count',colour:'x'}),/unknown key "colour"/);
+});
+test('pair: with is required, not itself, in the set, in the same group',()=>{
+  hasErr(pairSet({}),/\.with is required/);
+  hasErr(pairSet({with:'t_amt'}),/cannot name the field itself/);
+  hasErr(pairSet({with:'nope'}),/"nope".*not in the set/);
+  hasErr(pairSet({with:'t_other'},{id:'t_other',label:'O',type:'number',repeat:true,group:'h'}),/not in the same group/);
+});
+test('pair: code and short must be text',()=>{
+  hasErr(pairSet({with:'t_count',code:5}),/code must be text/);
+  hasErr(pairSet({with:'t_count',short:''}),/short must be text/);
+});
+test('methodField, targetLowField, targetHighField must be fields of the set',()=>{
+  assert.deepStrictEqual(validateView(madeUp({type:'fever',timeField:'t_when',methodField:'t_label'})).errors,[]);
+  hasErr(madeUp({type:'fever',timeField:'t_when',methodField:'nope'}),/"nope".*not in the set/);
+  assert.deepStrictEqual(validateView(madeUp({type:'dailygrid',timeField:'t_when',targetLowField:'t_amt',targetHighField:'t_count'})).errors,[]);
+  hasErr(madeUp({type:'dailygrid',timeField:'t_when',targetLowField:'nope'}),/"nope".*not in the set/);
+});
+test('echo: {setId,label} passes; wrong shape, unknown key or missing text is refused',()=>{
+  const e=(x)=>madeUp({type:'dailygrid',timeField:'t_when',echo:x});
+  assert.deepStrictEqual(validateView(e({setId:'test.other',label:'Other'})).errors,[]);
+  hasErr(e('x'),/echo must be an object/);
+  hasErr(e({setId:'test.other',label:'O',colour:'x'}),/unknown key "colour"/);
+  hasErr(e({setId:'test.other'}),/echo\.label is required/);
+  hasErr(e({label:'O'}),/echo\.setId is required/);
+});
+test('extra: names fields of the set',()=>{
+  assert.deepStrictEqual(validateView(madeUp({type:'fever',timeField:'t_when',extra:['t_amt']})).errors,[]);
+  hasErr(madeUp({type:'fever',timeField:'t_when',extra:['nope']}),/"nope".*not in the set/);
+});

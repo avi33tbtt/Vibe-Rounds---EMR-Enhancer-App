@@ -59,6 +59,9 @@ const ACTIONS = {
   'user.manage': ['admin'],                          // admin users routes (chunk 32e1)
   'password.change': ALL,                            // your own password only (chunk 32e1); the first-login change uses this too
   'content.review': ['admin', 'informatician'], 'package.install': ['admin', 'informatician'],
+  'handover.mark': ['admin', 'doctor', 'nurse'],     // 37d4: POST /cases/:id/handover, "my last handover on this case is now" (the server's clock). Reading it (GET) is case.read.
+  'access.configure': ['admin'],                     // R7: change the access block of an existing element (decision 19 default: admin only). Checked inside POST /element-sets; it has no route of its own.
+  'analytics.export': ['admin', 'informatician'],    // R3: de-identified bundle export (Phase F); no route yet. An element's export list can only narrow this.
 };
 // PATCH /cases/:id changes several things; the route needs any of them, and api.js then checks each field the body touches.
 const CASE_FIELD_ACTION = { patient: 'case.patient', narrative: 'case.narrative', applied: 'case.apply', pathways: 'case.apply', pinned: 'case.pin' };
@@ -72,7 +75,7 @@ const ACTION_LABELS = {
   'note.write': 'write notes', 'note.sign': 'sign notes', 'set.write': 'edit element sets and pathways', 'code.write': 'edit verified codes', 'codesystem.write': 'create local code systems or add local codes', 'binding.write': 'edit code bindings',
   'rule.write': 'edit alert rules', 'rule.approve': 'approve alert rules', 'protocol.write': 'edit protocols', 'protocol.approve': 'verify protocols',
   'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'migrate.run': 'migrate demo patients', 'audit.read': 'read the audit log', 'rules.inforce': 'see the rules in force', 'ai.admin': 'change the AI setting', 'views.admin': 'choose which view pathways are on', 'ai.schema': 'draft an element set with AI', 'ai.suggest': 'get AI suggestions', 'ai.rule_draft': 'draft a rule with AI', 'user.manage': 'manage users', 'password.change': 'change this password',
-  'content.review': 'review content', 'package.install': 'install packages',
+  'content.review': 'review content', 'package.install': 'install packages', 'analytics.export': 'export de-identified data', 'access.configure': 'change who may use an element', 'handover.mark': 'mark a handover done',
   'patient.read': 'see patient records', 'patient.write': 'register or correct patients', 'patient.merge': 'merge patients', 'encounter.write': 'change encounters', 'case.link': 'link a case to a patient', 'case.export': 'export a patient record',
 };
 /** The actions a user may take, in the order of ACTIONS. Sent with GET /me so the screen can hide controls; the server stays the control. */
@@ -107,6 +110,7 @@ const ROUTE_ACTIONS = {
   'GET /patients': 'patient.read', 'GET /patients/:id': 'patient.read', 'GET /patients/:id/encounters': 'patient.read',
   'POST /patients': 'patient.write', 'PATCH /patients/:id': 'patient.write', 'POST /patients/:id/merge': 'patient.merge', 'POST /patients/:id/unmerge': 'patient.merge',
   'POST /patients/:id/encounters': 'encounter.write', 'PATCH /encounters/:id': 'encounter.write', 'POST /encounters/:id/close': 'encounter.write', 'POST /encounters/:id/cancel': 'encounter.write',
+  'GET /cases/:id/handover': 'case.read', 'POST /cases/:id/handover': 'handover.mark',
   'POST /cases/:id/link': 'case.link', 'GET /cases/:id/alert-acks': 'case.read', 'POST /cases/:id/alert-acks': 'alert.ack', 'GET /cases/:id/export': 'case.export',
   'POST /admin/migrate-demo-patients': 'migrate.run',
   'GET /admin/ai': 'ai.admin', 'PUT /admin/ai': 'ai.admin', 'POST /llm/schema': 'ai.schema', 'POST /llm/suggest': 'ai.suggest', 'POST /llm/rule-draft': 'ai.rule_draft',
@@ -115,6 +119,18 @@ const ROUTE_ACTIONS = {
 function can(user, action) {
   if (!Object.prototype.hasOwnProperty.call(ACTIONS, action)) throw new Error('Unknown permission action: ' + action);   // a typo must fail loudly, never silently allow or deny
   return !!user && ACTIONS[action].includes(user.role);
+}
+/** R3: element access (VIEWS.md "Access block"). The six element actions each map to ONE base action in the table above.
+ *  An element can only narrow: true only if the element lists the user's role for the action AND the base action allows that role.
+ *  No access block, a missing action, or no user means deny. An unknown element action throws, like can(). */
+const ELEMENT_BASE_ACTION = { view: 'case.read', enter: 'row.add', amend: 'row.amend_own', approve: 'rule.approve', configure: 'set.write', export: 'analytics.export' };
+function canElement(user, el, action) {
+  if (!Object.prototype.hasOwnProperty.call(ELEMENT_BASE_ACTION, action)) throw new Error('Unknown element action: ' + action);
+  const a = el && el.access;
+  if (!user || !a || typeof a !== 'object' || Array.isArray(a)) return false;
+  const roles = a[action];
+  if (!Array.isArray(roles) || !roles.includes(user.role)) return false;
+  return can(user, ELEMENT_BASE_ACTION[action]);
 }
 const denied = (res, user, what, action) => res.status(403).json({ error: Object.assign({ code: 'forbidden', message: `Your role (${user && user.role}) may not ${what}.` }, action ? { action } : {}) });
 
@@ -153,4 +169,4 @@ function canAmendRow(user, row, setKind) {
   return can(user, 'row.amend_own') && row.entered_by === user.id && (!CARE_ONLY_ROLES.includes(user.role) || setKind === 'care');
 }
 
-module.exports = { ROLES, ACTIONS, ACTION_LABELS, allowedActions, ROUTE_ACTIONS, CASE_FIELD_ACTION, can, requireAction, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied };
+module.exports = { ROLES, ACTIONS, ACTION_LABELS, allowedActions, ROUTE_ACTIONS, CASE_FIELD_ACTION, can, canElement, ELEMENT_BASE_ACTION, requireAction, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied };

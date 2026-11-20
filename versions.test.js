@@ -240,7 +240,10 @@ test('33c1: rows entered in error, their versions and their reasons are for doct
   for (const role of ['nurse', 'viewer', 'informatician']) {
     const g = await as(role).get(`/api/cases/${c.id}/history`); assert.equal(g.status, 200, role);
     assert.deepEqual(g.body.rows.map((r) => r.rowId), [r1.id], role);
-    const txt = JSON.stringify(g.body); assert.ok(!txt.includes(r2.id) && !txt.includes('wrong patient 33c1') && !txt.includes('300'), role + ': nothing of the hidden row');
+    const txt = JSON.stringify(g.body);
+    // '300' was a plain text search: any id or time that happens to contain those digits (about 1 run in 25) failed it. The reading itself is now looked for by its field and value.
+    const hasHr300 = (n) => Array.isArray(n) ? n.some(hasHr300) : n && typeof n === 'object' ? Object.entries(n).some(([k, v]) => (k === 'hr' && String(v) === '300') || hasHr300(v)) : false;
+    assert.ok(!txt.includes(r2.id) && !txt.includes('wrong patient 33c1') && !hasHr300(g.body), role + ': nothing of the hidden row');
     assert.equal(g.body.values.length, 1, role);
   }
 });

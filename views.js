@@ -3,12 +3,13 @@
 (function(root){
 var VIEW_TYPES=['flowsheet','fever','dailygrid'];
 var VIEW_KEYS=['type','timeField','tempField','unitField','thresholdField','thresholdUnitField','extra',
-  'slotField','glucoseField','doseField','byField','slots',
+  'methodField','targetLowField','targetHighField','echo','slotField','glucoseField','doseField','byField','slots',
   'summary','board','banner','statusboard','actions','crosscheck','drives'];
 var SUMMARY_TYPES=['sumBy'];
 var SUMMARY_KEYS=['type','timeField','keyField','valueField','windowsHours','label'];
 var BOARD_SHOW=['latest','age'];
 var BOARD_KEYS=['show','fields'];
+var ECHO_KEYS=['setId','label'];
 var BANNED=['eval','function','threshold','band','dose','limit','target','default'];
 
 function collectFields(set){
@@ -79,8 +80,58 @@ function validateBoard(b,fields,errors){
   }
 }
 
+/* V8d3: field.pair = {with, code, short}: this field and the field it names are one paired reading (for example two numbers shown as "a / b").
+   Both fields must be in the same group of the set. code and short are text. Display and export only. */
+var PAIR_KEYS=['with','code','short'];
+function validatePairs(set,errors){
+  var fs=[];
+  ((set&&set.sections)||[]).forEach(function(s){ ((s&&s.fields)||[]).forEach(function(f){ if(f&&f.id) fs.push(f); }); });
+  fs.forEach(function(f){
+    if(f.pair===undefined) return;
+    var p='field "'+f.id+'" pair', q=f.pair;
+    if(!q||typeof q!=='object'||Array.isArray(q)){ errors.push(p+' must be an object'); return; }
+    Object.keys(q).forEach(function(k){ if(PAIR_KEYS.indexOf(k)<0) errors.push(p+' has unknown key "'+k+'"'); });
+    ['code','short'].forEach(function(k){ if(q[k]!==undefined&&(typeof q[k]!=='string'||!q[k])) errors.push(p+'.'+k+' must be text'); });
+    var o=fs.filter(function(x){ return x.id===q.with; })[0];
+    if(typeof q.with!=='string'||!q.with) errors.push(p+'.with is required');
+    else if(q.with===f.id) errors.push(p+'.with cannot name the field itself');
+    else if(!o) errors.push(p+'.with refers to field "'+q.with+'" which is not in the set');
+    else if((o.group||o.id)!==(f.group||f.id)) errors.push(p+'.with field "'+q.with+'" is not in the same group');
+  });
+}
+
+/* V8d7: field.followUp = {label, history?:{group,valueField,dateField}}: this date field is the "next due" date of a follow-up, and label is its short name
+   in the due badge and due list. history names the repeat group (its date field and its number field) used for "days since last reading". Display only. */
+var FOLLOWUP_KEYS=['label','history'];
+var HISTORY_KEYS=['group','valueField','dateField'];
+function validateFollowUps(set,errors){
+  var fs=[];
+  ((set&&set.sections)||[]).forEach(function(s){ ((s&&s.fields)||[]).forEach(function(f){ if(f&&f.id) fs.push(f); }); });
+  var flagged=fs.filter(function(f){ return f.followUp!==undefined; });
+  if(flagged.length>1) errors.push('only one field of a set may carry followUp');
+  flagged.forEach(function(f){
+    var p='field "'+f.id+'" followUp', q=f.followUp;
+    if(!q||typeof q!=='object'||Array.isArray(q)){ errors.push(p+' must be an object'); return; }
+    Object.keys(q).forEach(function(k){ if(FOLLOWUP_KEYS.indexOf(k)<0) errors.push(p+' has unknown key "'+k+'"'); });
+    if(f.type!=='date') errors.push(p+' must be on a date field');
+    if(f.repeat) errors.push(p+' cannot be on a repeat field');
+    if(q.label!==undefined&&(typeof q.label!=='string'||!q.label)) errors.push(p+'.label must be text');
+    var h=q.history; if(h===undefined) return;
+    if(!h||typeof h!=='object'||Array.isArray(h)){ errors.push(p+'.history must be an object'); return; }
+    Object.keys(h).forEach(function(k){ if(HISTORY_KEYS.indexOf(k)<0) errors.push(p+'.history has unknown key "'+k+'"'); });
+    HISTORY_KEYS.forEach(function(k){ if(typeof h[k]!=='string'||!h[k]) errors.push(p+'.history.'+k+' is required text'); });
+    if(typeof h.group!=='string'||!h.group) return;
+    var inG=function(id){ return fs.filter(function(x){ return x.id===id&&(x.group||x.id)===h.group; })[0]; };
+    var vf=inG(h.valueField), df=inG(h.dateField);
+    if(typeof h.valueField==='string'&&h.valueField){ if(!vf) errors.push(p+'.history.valueField "'+h.valueField+'" is not in group "'+h.group+'"'); else if(['number','integer'].indexOf(vf.type)<0) errors.push(p+'.history.valueField must be a number or integer field'); }
+    if(typeof h.dateField==='string'&&h.dateField){ if(!df) errors.push(p+'.history.dateField "'+h.dateField+'" is not in group "'+h.group+'"'); else if(['date','datetime'].indexOf(df.type)<0) errors.push(p+'.history.dateField must be a date or datetime field'); }
+  });
+}
+
 function validateView(set){
   var errors=[],warnings=[];
+  validatePairs(set,errors);
+  validateFollowUps(set,errors);
   var v=set&&set.view;
   if(v===undefined||v===null) return {errors:errors,warnings:warnings};
   if(typeof v!=='object'||Array.isArray(v)){ errors.push('view must be an object'); return {errors:errors,warnings:warnings}; }
@@ -95,6 +146,15 @@ function validateView(set){
     else v.summary.forEach(function(e,i){ validateSummary(e,i,fields,errors,warnings); });
   }
   if(v.board!==undefined) validateBoard(v.board,fields,errors);
+  /* V8d5: view.echo = {setId, label}: a note that points to the card of another set. Text only. */
+  if(v.echo!==undefined){
+    var e=v.echo;
+    if(!e||typeof e!=='object'||Array.isArray(e)) errors.push('view.echo must be an object');
+    else {
+      Object.keys(e).forEach(function(k){ if(ECHO_KEYS.indexOf(k)<0) errors.push('view.echo has unknown key "'+k+'"'); });
+      ECHO_KEYS.forEach(function(k){ if(typeof e[k]!=='string'||!e[k]) errors.push('view.echo.'+k+' is required text'); });
+    }
+  }
   return {errors:errors,warnings:warnings};
 }
 
@@ -217,7 +277,59 @@ function validateSetCoding(set,knownSystems){
   return {errors:errors};
 }
 
-var api={validateView:validateView,validatePathwayViews:validatePathwayViews,rowsInWindow:rowsInWindow,fieldsById:fieldsById,sumBy:sumBy,validateCoding:validateCoding,validateSetCoding:validateSetCoding,codingAllow:codingAllow};
+/* R2: access block check (see VIEWS.md "Access block"). el.access = {view, enter, amend, approve, configure, export}, each a non-empty list of role names.
+   roles = the role list from permissions.js (passed in, so this file names no role). A missing action is allowed: it means no role has it (default deny).
+   Returns {errors}. It does not compare against permissions.js rights: that is canElement (R3). */
+var ACCESS_ACTIONS=['view','enter','amend','approve','configure','export'];
+function validateAccess(el,roles){
+  var errors=[];
+  var who='element "'+((el&&(el.setId||el.id))||'?')+'" ';
+  var a=el&&el.access;
+  if(a===undefined||a===null){ errors.push(who+'has no access block'); return {errors:errors}; }
+  if(typeof a!=='object'||Array.isArray(a)){ errors.push(who+'access must be an object'); return {errors:errors}; }
+  var known={};
+  (Array.isArray(roles)?roles:[]).forEach(function(r){ known[r]=true; });
+  Object.keys(a).forEach(function(k){
+    if(ACCESS_ACTIONS.indexOf(k)<0){ errors.push(who+'access has unknown action "'+k+'"'); return; }
+    var list=a[k];
+    if(!Array.isArray(list)||!list.length){ errors.push(who+'access.'+k+' must be a non-empty list of roles (leave the action out to give it to no one)'); return; }
+    var seen={};
+    list.forEach(function(r){
+      if(typeof r!=='string'||!r) errors.push(who+'access.'+k+' has an entry that is not text');
+      else if(!known[r]) errors.push(who+'access.'+k+' names unknown role "'+r+'"');
+      else if(seen[r]) errors.push(who+'access.'+k+' lists role "'+r+'" more than once');
+      seen[r]=true;
+    });
+  });
+  return {errors:errors};
+}
+
+/* R8a: plain words for an access block, and the screen-side mirror of canElement. The server stays the control (permissions.js canElement); this only decides what to show or hide.
+   describeAccess(access, roles, actions?) -> "Seen by: everyone. Entered by: doctor, nurse. ..." ; roles = the role list, so a block naming all of them reads "everyone".
+   accessAllows(el, role, action, canFn) -> false when the element's list leaves the role out, or canFn(base action) says no (canFn is Store.can). An element with no block returns true:
+   today's role rules apply and the caller's own Store.can check decides. ACCESS_BASE_ACTION must equal ELEMENT_BASE_ACTION in permissions.js (a test checks it). */
+var ACCESS_WORDS={view:'Seen by',enter:'Entered by',amend:'Corrected by',approve:'Approved by',configure:'Changed by',export:'Exported by'};
+var ACCESS_BASE_ACTION={view:'case.read',enter:'row.add',amend:'row.amend_own',approve:'rule.approve',configure:'set.write',export:'analytics.export'};
+function describeAccess(access,roles,actions){
+  if(!access||typeof access!=='object'||Array.isArray(access)) return 'Access: not set (the role rules apply).';
+  var all=Array.isArray(roles)?roles:[];
+  var wanted=Array.isArray(actions)&&actions.length?actions:ACCESS_ACTIONS;
+  return wanted.filter(function(a){ return ACCESS_ACTIONS.indexOf(a)>=0; }).map(function(a){
+    var l=Array.isArray(access[a])?access[a]:[];
+    var everyone=all.length>0&&all.every(function(r){ return l.indexOf(r)>=0; });
+    return ACCESS_WORDS[a]+': '+(!l.length?'no one':everyone?'everyone':l.join(', '))+'.';
+  }).join(' ');
+}
+function accessAllows(el,role,action,canFn){
+  if(ACCESS_ACTIONS.indexOf(action)<0) return false;
+  var a=el&&el.access;
+  if(!a||typeof a!=='object'||Array.isArray(a)) return true;
+  var l=a[action];
+  if(!Array.isArray(l)||l.indexOf(role)<0) return false;
+  return typeof canFn==='function'?!!canFn(ACCESS_BASE_ACTION[action]):true;
+}
+
+var api={validateView:validateView,validatePathwayViews:validatePathwayViews,rowsInWindow:rowsInWindow,fieldsById:fieldsById,sumBy:sumBy,validateCoding:validateCoding,validateSetCoding:validateSetCoding,codingAllow:codingAllow,validateAccess:validateAccess,ACCESS_ACTIONS:ACCESS_ACTIONS,describeAccess:describeAccess,accessAllows:accessAllows,ACCESS_BASE_ACTION:ACCESS_BASE_ACTION};
 root.Views=api;
 if(typeof module!=='undefined') module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

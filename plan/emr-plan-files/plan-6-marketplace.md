@@ -17,7 +17,7 @@ Create package-lint.js with canonicalJson(obj) and async sha256Hex(text) (crypto
 ```text
 Add lintPackage(pkg) returning {errors, warnings} with errors: bad manifest, bad semver, bad id pattern. One failing test per error plus one passing package.
 ```
-#### [ ] 42a3. Errors: unknown field type, content over 1 MB, key named eval or function, any view block or EMR surface that fails `validateView` / `validatePathwayViews` (from V2)
+#### [ ] 42a3. Errors: unknown field type, content over 1 MB, key named eval or function, any view block or EMR surface that fails `validateView` / `validatePathwayViews` (from V2); **(R9) an element with no `access` block, or whose block fails `validateAccess` (views.js) against the role list the app has locally, so an unknown role is an error**
 #### [ ] 42a3b. (v3.1) Every package declares `targetApp` ("emr" or "analytics") and its kind must match it. `analytic` packages are linted with `validateAnalytic` (copy of AA1, CI-checked); summary layouts and order sets with the view validators; a definition with a clinical list, threshold or free expression is an error; `provides` and `requires` must be derivable (M1)
 #### [ ] 42a4. Errors: rule op not whitelisted, threshold not a finite number
 **Paste:** whitelisted operators from cds-rules.js
@@ -100,7 +100,7 @@ New setId local.<slug>, version 1, tier local-draft, forkedFrom {setId, version,
 #### [ ] 46a1b. Verify signature with the pinned public key; refuse if invalid
 #### [ ] 46a1c. ETag cache; tests: wrong signature, unlisted host, tampered index refused
 #### [ ] 46a2a. POST /api/market/install: fetch package, recompute hash vs signed index, run lintPackage, check requires/minAppVersion, **refuse any package whose targetApp is not "emr"** (analytic packages are installed only by the Analytics app, AA4)
-#### [ ] 46a2b. Store in element_sets (source marketplace, read_only, tier marketplace-verified) plus installed_packages in one transaction with audit; rules and bands arrive enabled:false
+#### [ ] 46a2b. Store in element_sets (source marketplace, read_only, tier marketplace-verified) plus installed_packages in one transaction with audit; rules and bands arrive enabled:false. **(R9) The package's `access` is only a suggestion: install shows it to the admin, who confirms or narrows it, and the narrowest result is stored (for each action, a role stays only if the package and the admin both list it, and `canElement` still narrows it by the role table). The install request carries the admin's choice; the audit row holds the suggested and the stored block.**
 #### [ ] 46a2c. Tests: tampered package, hash mismatch, failed lint all store nothing; read-only rows refuse PATCH/DELETE
 #### [ ] 46b1. Marketplace screen: list, search, filter by kind
 #### [ ] 46b2. Preview panel (members, fields, rule count, reviewers, license, short hash, versions, withdrawn flag)

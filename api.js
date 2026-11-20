@@ -10,12 +10,12 @@
 const express = require('express');
 const { z } = require('zod');
 const crypto = require('node:crypto');
-const { can, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied, allowedActions, ACTION_LABELS } = require('./permissions.js');
+const { ROLES, can, canElement, guardRouter, caseFieldActions, canAddRow, canAmendRow, denied, allowedActions, ACTION_LABELS } = require('./permissions.js');
 const { hashPassword, verifyPassword, passwordProblem } = require('./auth.js');   // chunk 32e1: admin users routes and own-password change
 const { audit, auditOnce, auditContext, auditPage, auditOut, csvLine, csvCell, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
 const { mountLlm, createProvider } = require('./llm.js');                  // chunk 36a: AI proxy routes and admin switch
 const { mountPatients } = require('./patients.js');                        // chunk 34a: patients, encounters, link a case to them
-const { validateView, validatePathwayViews, validateSetCoding, codingAllow } = require('./views.js');                          // V2b: view blocks are checked on save
+const { validateView, validatePathwayViews, validateSetCoding, codingAllow, validateAccess } = require('./views.js');                          // V2b: view blocks are checked on save
 
 class ApiError extends Error {
   constructor(status, code, message, extra) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -441,6 +441,13 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   });
   r.use(auditContext);                                // who/role/ip for audit(); every write below runs inside it
   const setKindOf = async (setId) => ((await db.query('SELECT kind FROM element_sets_latest WHERE set_id=$1', [setId])).rows[0] || {}).kind || null;
+  // R4: element access (VIEWS.md "Access block"). It narrows the role rules and never widens them.
+  // TRANSITIONAL: a stored set with no access block keeps today's rules. R5 gives every seed set a block and then a missing block must be refused here (default deny).
+  const assertElement = async (req, setId, action, what) => {
+    const row = (await db.query('SELECT body FROM element_sets_latest WHERE set_id=$1', [setId])).rows[0];
+    if (!row || !row.body || !row.body.access) return;
+    if (!canElement(req.actor, { setId, access: row.body.access }, action)) throw new ApiError(403, 'forbidden', `Your role (${req.actor.role}) may not ${what} in this set (element action: ${action}).`, { action });
+  };
 
   // ================= V7a1: which EMR view pathways are switched on (stored in app_settings key 'emr_views' as {ids:[...]}; V7a2 writes it) =================
   const EMR_VIEWS_DEFAULT = ['pathway.emr.ward_board', 'pathway.emr.handover'];
@@ -631,6 +638,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   r.post('/cases/:id/rows', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.rowCreate, req.body);
     if (!canAddRow(req.actor, await setKindOf(b.setId))) throw new ApiError(403, 'forbidden', 'Your role may add readings to care flowsheets only');
+    await assertElement(req, b.setId, 'enter', 'add readings');
     const out = await db.withTx(async (c) => {
       if (!(await c.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
       if (b.id) {                                    // chunk 37a: the browser makes the row id, so a re-sent request (lost reply) finds the stored row instead of adding a second one
@@ -652,8 +660,9 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     res.status(out.replay ? 200 : 201).json(rowOut(out));
   }));
   async function assertRowAmend(req, id, rid) {           // doctors and admins amend any row; a nurse only her own readings in care sets
-    if (can(req.actor, 'row.amend_any')) return;
     const row = (await db.query('SELECT set_id,entered_by FROM case_rows WHERE id=$1 AND case_id=$2', [rid, id])).rows[0];
+    if (row) await assertElement(req, row.set_id, 'amend', 'amend readings');   // R4: the set's own list applies to doctors and admins too
+    if (can(req.actor, 'row.amend_any')) return;
     if (row && !canAmendRow(req.actor, row, await setKindOf(row.set_id))) throw new ApiError(403, 'forbidden', 'Your role may amend only readings you entered yourself, in care flowsheets');
   }
   r.patch('/cases/:id/rows/:rowId', wrap(async (req, res) => {
@@ -704,6 +713,7 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   // ================= values =================
   r.put('/cases/:id/values', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.valuePut, req.body);
+    await assertElement(req, b.key.split('/')[0], b.expectedVersion === 0 ? 'enter' : 'amend', 'save values');   // R4: a value key starts with its set id; a key that is not a set is left to the role rule
     if (/\/__protocol$/.test(b.key) && isObj(b.value)) b.value = { ...b.value, verifiedBy: '', ...('verifiedAt' in b.value ? { verifiedAt: '' } : {}) };   // a typed verifier is never stored in a case value: verification is stamped by POST /protocols/:setId/approve (35a)
     if (!(await db.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
     const out = await db.withTx(async (c) => {
@@ -810,17 +820,26 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     if (vv.errors.length || pv.errors.length) throw new ApiError(422, 'bad_view', 'The view block of this set is not valid', { errors: [...vv.errors, ...pv.errors], warnings: [...vv.warnings, ...pv.warnings] });
     const cs = validateSetCoding(b.body, (await db.query('SELECT id FROM code_systems')).rows.map((x) => x.id));   // P3b: coding choices name known code systems only
     if (cs.errors.length) throw new ApiError(422, 'bad_coding', 'The coding choices of this set are not valid', { errors: cs.errors });
+    if (b.body.access !== undefined) {                                  // R7: a block, when present, must name only known roles and the six actions
+      const av = validateAccess({ setId: b.setId, access: b.body.access }, ROLES);
+      if (av.errors.length) throw new ApiError(422, 'bad_access', 'The access block of this set is not valid', { errors: av.errors });
+    }
     const out = await db.withTx(async (c) => {
       await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['set|' + b.setId]);
       const cur = (await c.query('SELECT * FROM element_sets WHERE set_id=$1 ORDER BY version DESC LIMIT 1', [b.setId])).rows[0];
       if (cur && (cur.read_only || cur.source !== 'user')) throw new ApiError(403, 'read_only', 'This set is read-only; fork it under a new id instead');
       if (cur && b.expectedVersion !== cur.version) throw new ApiError(409, 'conflict', 'This set has a newer version', { current: setOut(cur) });
       if (!cur && b.expectedVersion) throw new ApiError(409, 'conflict', 'This set does not exist yet');
+      // R7: changing or dropping the access block of an EXISTING set is its own action (access.configure, admin). A new set may start with a block: an author can only narrow the role table.
+      const accBefore = cur && cur.body ? cur.body.access : undefined, accAfter = b.body.access;
+      const accChanged = !!cur && hashOf({ access: accBefore === undefined ? null : accBefore }) !== hashOf({ access: accAfter === undefined ? null : accAfter });
+      if (accChanged && !can(req.actor, 'access.configure')) throw new ApiError(403, 'forbidden', `Your role (${req.actor.role}) may not ${ACTION_LABELS['access.configure']} (action: access.configure).`, { action: 'access.configure' });
       const v = cur ? cur.version + 1 : 1;
       const body = { ...b.body, setId: b.setId, kind: b.kind, version: v };
       const saved = (await c.query(`INSERT INTO element_sets (set_id,version,kind,body,source,read_only,tier,content_hash,created_by) VALUES ($1,$2,$3,$4,'user',false,'local-draft',$5,$6) RETURNING *`,
         [b.setId, v, b.kind, JSON.stringify(body), hashOf(body), req.actor.id])).rows[0];
-      await audit(c, { action: 'set.save', entity: 'element_set', entity_id: b.setId, before: cur ? { version: cur.version, contentHash: cur.content_hash } : null, after: { version: v, kind: b.kind, contentHash: saved.content_hash } });
+      await audit(c, { action: 'set.save', entity: 'element_set', entity_id: b.setId, before: cur ? { version: cur.version, contentHash: cur.content_hash, ...(accChanged ? { access: accBefore === undefined ? null : accBefore } : {}) } : null,
+        after: { version: v, kind: b.kind, contentHash: saved.content_hash, ...(accChanged ? { access: accAfter === undefined ? null : accAfter } : {}) } });
       return saved;
     });
     res.status(201).json(setOut(out));
@@ -937,10 +956,11 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     res.status(201).json(localOut(row));
   }));
   // Verification: a person confirms the code and its display against the facility's own list. The row then joins verified_codes. Not undone here; a second verify is a 409.
+  // No FOR UPDATE on local_codes: that table is append-only for the app role (no UPDATE right, and FOR UPDATE needs one). A double verify is still caught by ON CONFLICT on verified_codes below.
   r.post('/code-systems/:id/codes/:code/verify', wrap(async (req, res) => {
     const id = localId(req.params.id), code = localCodeParam(req.params.code);
     const out = await db.withTx(async (c) => {
-      const l = (await c.query('SELECT code,display,created_by,created_at FROM local_codes WHERE system_id=$1 AND code=$2 FOR UPDATE', [id, code])).rows[0];
+      const l = (await c.query('SELECT code,display,created_by,created_at FROM local_codes WHERE system_id=$1 AND code=$2', [id, code])).rows[0];
       if (!l) throw new ApiError(404, 'not_found', 'This code is not in the local list');
       const u = await c.query('INSERT INTO verified_codes (system,code,display,added_by) VALUES ($1,$2,$3,$4) ON CONFLICT (system,code) DO NOTHING RETURNING added_by,added_at', [id, code, l.display, req.actor.id]);
       if (!u.rows.length) throw new ApiError(409, 'conflict', 'This code is already verified');
@@ -1147,12 +1167,34 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   r.get('/prefs', wrap(async (req, res) => { const o = {}; for (const x of (await db.query('SELECT key,value FROM user_prefs WHERE user_id=$1', [req.actor.id])).rows) o[x.key] = x.value; res.json(o); }));
   r.put('/prefs/:key', wrap(async (req, res) => {
     const k = identParam(req.params.key), b = parse(S.prefPut, req.body);
+    if (k.startsWith('handover.')) throw new ApiError(400, 'validation', 'The handover time is set by POST /api/cases/:id/handover, with the server clock');   // 37d4
     await db.withTx(async (c) => {
       const old = (await c.query('SELECT value FROM user_prefs WHERE user_id=$1 AND key=$2 FOR UPDATE', [req.actor.id, k])).rows[0];
       await c.query('INSERT INTO user_prefs (user_id,key,value) VALUES ($1,$2,$3) ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value', [req.actor.id, k, JSON.stringify(b.value)]);
       await audit(c, { action: 'pref.set', entity: 'user_pref', entity_id: k, before: old ? { value: old.value } : null, after: { value: b.value } });
     });
     res.json({ key: k, value: b.value });
+  }));
+
+  // ================= last handover time (37d4): per user and case, kept in user_prefs under 'handover.<caseId>'. The time is the server's, never the browser's. =================
+  const handoverKey = (id) => 'handover.' + id;
+  r.get('/cases/:id/handover', wrap(async (req, res) => {
+    const id = idParam(req.params.id);
+    if (!(await db.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
+    const row = (await db.query('SELECT value FROM user_prefs WHERE user_id=$1 AND key=$2', [req.actor.id, handoverKey(id)])).rows[0];
+    res.json({ caseId: id, lastHandoverAt: (row && row.value && row.value.at) || null });
+  }));
+  r.post('/cases/:id/handover', wrap(async (req, res) => {
+    const id = idParam(req.params.id);
+    const at = await db.withTx(async (c) => {
+      if (!(await c.query('SELECT 1 FROM cases WHERE id=$1', [id])).rows.length) throw new ApiError(404, 'not_found', 'Case not found');
+      const old = (await c.query('SELECT value FROM user_prefs WHERE user_id=$1 AND key=$2 FOR UPDATE', [req.actor.id, handoverKey(id)])).rows[0];
+      const now = iso((await c.query('SELECT now() AS t')).rows[0].t);
+      await c.query('INSERT INTO user_prefs (user_id,key,value) VALUES ($1,$2,$3) ON CONFLICT (user_id,key) DO UPDATE SET value=EXCLUDED.value', [req.actor.id, handoverKey(id), JSON.stringify({ at: now })]);
+      await audit(c, { action: 'handover.mark', entity: 'case', entity_id: id, case_id: id, before: old && old.value && old.value.at ? { at: old.value.at } : null, after: { at: now } });
+      return now;
+    });
+    res.json({ caseId: id, lastHandoverAt: at });
   }));
 
   // ================= import of browser data (chunk 31a) =================

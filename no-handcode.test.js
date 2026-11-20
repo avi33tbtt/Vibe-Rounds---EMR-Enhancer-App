@@ -17,35 +17,8 @@ const MIN_ID = 4;                 // generic ids shorter than this are skipped
 // (V8d1 to V8d8 in plan-V.md). When a task lands, delete its entries and lower ALLOW_MAX. The Phase V gate needs ALLOW empty
 // (or analytics lines only, which the EMR does not have). Do not add a new entry for new code: fix the code.
 const ALLOW = [
-  // V8d1: default and quick-add set lists (Demo mode starter sets)
-  "enhancer.html:const DEF=['care.vitals','template.basic_emr'",
-  "enhancer.html:const quickIds=['care.vitals'",
-  "enhancer.html:const set=registry().find(x=>x.setId==='template.basic_emr')",
-  // V8d2: demo sample cases
-  "enhancer.html:const DEMO=SEEDS.find(s=>s.setId=='disease.snake_envenomation')",
-  // V8d3: FHIR export pairing and method text
-  "enhancer.html:bp2=gf.some(q=>q.id=='bp_sys')",
-  "enhancer.html:if(fv&&f.id=='route')return;",
-  "enhancer.html:const bpOk=bp2&&(f.id=='bp_sys'",
-  "enhancer.html:if(bpOk){if(f.id=='bp_dia')return;",
-  "enhancer.html:if(fv&&f.id==V.tempField&&row.route)",
-  // V8d4: blood pressure pair in text lines
-  "enhancer.html:bp=gf.find(f=>f.id=='bp_sys'),bd=gf.find(f=>f.id=='bp_dia'),lines=[];",
-  "enhancer.html:function rowText(r,vals){const bp=vals.find(f=>f.id=='bp_sys')",
-  // V8d5: typed target echo and insulin scale echo
-  "enhancer.html:const lo=fnum(CUR.values[vk(sid,'tgt_low')])",
-  "enhancer.html:const ssi=CUR.applied.some(a=>a.setId=='care.sliding_scale_insulin')",
-  // V8d6: pulse on the fever chart
-  "enhancer.html:pf=(v.extra||[]).includes('pulse')",
-  // V8d7: HbA1c trend and due label
-  "enhancer.html:if(!(c.applied||[]).some(a=>a.setId=='care.hba1c_monitoring'))return;",
-  "enhancer.html:const ts=rowsOf(c,'care.hba1c_monitoring','hba1c')",
-  "enhancer.html:function dueBadge(){",
-  "enhancer.html:function patientDueLabel(x){if(x.set==='care.hba1c_monitoring'",
-  // V8d8: snake-bite gap
-  "enhancer.html:function gapOf(c){let g=parseFloat(val(c,'gap',SNK))",
 ];
-const ALLOW_MAX = 19;             // = ALLOW.length today; lower it when entries are removed, never raise it
+const ALLOW_MAX = 0;              // = ALLOW.length today; lower it when entries are removed, never raise it
 // Not clinical: ids of EMR view pathways (contexts include 'emr') are configuration names, so code may name them
 // (store.js and api.js hold the default list). Field ids that are also plain words in generic code are skipped:
 // 'plan' is the FHIR CarePlan intent word, not a field reference.

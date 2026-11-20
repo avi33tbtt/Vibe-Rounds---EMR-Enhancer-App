@@ -5,7 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { hashOf } = require('./api.js');
-const { validateView, validatePathwayViews, validateSetCoding } = require('./views.js');
+const { validateView, validatePathwayViews, validateSetCoding, validateAccess } = require('./views.js');
+const { ROLES } = require('./permissions.js');
 
 function readSeedSets(file = path.join(__dirname, 'element-sets.js')) {
   const sandbox = { window: {} };
@@ -24,6 +25,8 @@ async function seedSets(db, sets) {
       if (!s || !/^[A-Za-z0-9_.-]{1,100}$/.test(s.setId || '') || !['care', 'template', 'disease', 'custom', 'pathway'].includes(s.kind)) throw new Error('Bad seed set: ' + (s && s.setId));
       const vv = validateView(s);
       if (vv.errors.length) throw new Error(`Seed set ${s.setId} has a bad view: ${vv.errors.join('; ')}`);
+      const av = validateAccess(s, ROLES);                                  // R5: no access block, no seed (default deny)
+      if (av.errors.length) throw new Error(`Seed set ${s.setId} has a bad access block: ${av.errors.join('; ')}`);
       const cv = validateSetCoding(s, systems);
       if (cv.errors.length) throw new Error(`Seed set ${s.setId} has bad coding choices: ${cv.errors.join('; ')}`);
       const pv = validatePathwayViews(s, knownIds);

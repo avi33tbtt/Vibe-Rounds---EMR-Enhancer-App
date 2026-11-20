@@ -490,6 +490,7 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 window.SEED_SETS=[
 {
  "setId":"disease.snake_envenomation",
+ "demoCases":true,
  "kind":"disease",
  "version":1,
  "title":"Snake envenomation (hemotoxic)",
@@ -541,7 +542,7 @@ window.SEED_SETS=[
 {
  "setId":"care.vitals",
  "direct":true,
- "quick":{"order":1,"short":"Vitals"},
+ "quick":{"order":1,"short":"Vitals","summary":true,"suggest":1},
  "view":{"type":"flowsheet","timeField":"vit_time"},
  "kind":"care",
  "version":1,
@@ -556,13 +557,15 @@ window.SEED_SETS=[
    {"id":"temp","label":"Temperature","type":"number","unit":"°C","rationale":"","repeat":true,"fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"vitals"},
    {"id":"hr","label":"Heart rate","type":"number","unit":"bpm","rationale":"","repeat":true,"fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"vitals"},
    {"id":"rr","label":"Respiratory rate","type":"number","unit":"/min","rationale":"","repeat":true,"fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"vitals"},
-   {"id":"bp_sys","label":"Systolic BP","type":"number","unit":"mmHg","rationale":"","repeat":true,"fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"vitals"},
+   {"id":"bp_sys","label":"Systolic BP","type":"number","unit":"mmHg","pair":{"with":"bp_dia","code":"Blood pressure","short":"BP"},"rationale":"","repeat":true,"fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"vitals"},
    {"id":"bp_dia","label":"Diastolic BP","type":"number","unit":"mmHg","rationale":"","repeat":true,"fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"vitals"},
    {"id":"spo2","label":"SpO2","type":"number","unit":"%","rationale":"","repeat":true,"fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"vitals"},
    {"id":"weight","label":"Weight","type":"number","unit":"kg","rationale":"","repeat":true,"fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"vitals"}]}]},
 {
  "setId":"template.basic_emr",
  "kind":"template",
+ "starter":true,
+ "quick":{"suggest":2},
  "version":1,
  "title":"Basic EMR note",
  "description":"Presenting complaint, history, examination, assessment, plan.",
@@ -579,7 +582,7 @@ window.SEED_SETS=[
 {
  "setId":"care.hba1c_monitoring",
  "direct":true,
- "quick":{"order":4,"short":"HbA1c"},
+ "quick":{"order":4,"short":"HbA1c","summary":true,"suggest":3},
  "kind":"care",
  "version":1,
  "title":"HbA1c monitoring",
@@ -592,14 +595,14 @@ window.SEED_SETS=[
    {"id":"a1c_date","label":"HbA1c date","type":"date","repeat":true,"group":"hba1c","rationale":"Date of this reading."},
    {"id":"a1c","label":"HbA1c","type":"number","unit":"%","rationale":"Longitudinal glycaemic control.","repeat":true,"target":"a1c_target","fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"hba1c"},
    {"id":"a1c_target","label":"HbA1c target (entered by clinician)","type":"number","unit":"%","rationale":"Individualised target; no default is supplied.","fhir":{"resource":"Observation","valueType":"valueQuantity"}},
-   {"id":"a1c_due","label":"Next HbA1c due","type":"date","rationale":"Follow-up scheduling."}]},
+   {"id":"a1c_due","label":"Next HbA1c due","type":"date","rationale":"Follow-up scheduling.","followUp":{"label":"HbA1c","history":{"group":"hba1c","valueField":"a1c","dateField":"a1c_date"}}}]},
   {"title":"Capillary glucose","fields":[
    {"id":"cbg_time","label":"Time","type":"datetime","repeat":true,"group":"cbg"},
    {"id":"cbg","label":"Capillary glucose","type":"number","unit":"mg/dL","rationale":"","repeat":true,"fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"cbg"}]}]},
 {
  "setId":"care.sliding_scale_insulin",
  "direct":true,
- "quick":{"order":5,"short":"Sliding scale"},
+ "quick":{"order":5,"short":"Sliding scale","suggest":4},
  "kind":"care",
  "version":1,
  "title":"Sliding-scale insulin",
@@ -617,7 +620,7 @@ window.SEED_SETS=[
 {
  "setId":"care.fever_chart",
  "direct":true,
- "quick":{"order":2,"short":"Fever chart"},
+ "quick":{"order":2,"short":"Fever chart","summary":true},
  "kind":"care",
  "version":1,
  "title":"Fever chart",
@@ -625,7 +628,7 @@ window.SEED_SETS=[
  "contexts":["care"],
  "requires":[],
  "suggests":["care.vitals"],
- "view":{"type":"fever","timeField":"ft_time","tempField":"temp","unitField":"temp_unit","thresholdField":"fever_thr","thresholdUnitField":"fever_thr_unit","extra":["pulse"]},
+ "view":{"type":"fever","timeField":"ft_time","tempField":"temp","methodField":"route","unitField":"temp_unit","thresholdField":"fever_thr","thresholdUnitField":"fever_thr_unit","extra":["pulse"]},
  "sections":[
   {"title":"Temperature readings","fields":[
    {"id":"ft_time","label":"Time recorded","type":"datetime","repeat":true,"group":"fever","rationale":"Timestamp for this reading."},
@@ -640,7 +643,7 @@ window.SEED_SETS=[
 {
  "setId":"care.daily_insulin_monitoring",
  "direct":true,
- "quick":{"order":3,"short":"Insulin chart"},
+ "quick":{"order":3,"short":"Insulin chart","summary":true},
  "kind":"care",
  "version":1,
  "title":"Daily insulin monitoring",
@@ -648,7 +651,7 @@ window.SEED_SETS=[
  "contexts":["care"],
  "requires":[],
  "suggests":["care.sliding_scale_insulin","care.hba1c_monitoring"],
- "view":{"type":"dailygrid","timeField":"ins_time","slotField":"slot","glucoseField":"ins_glucose","doseField":"ins_dose","byField":"ins_by","slots":["Pre-breakfast","Pre-lunch","Pre-dinner","Bedtime","Night"]},
+ "view":{"type":"dailygrid","timeField":"ins_time","slotField":"slot","glucoseField":"ins_glucose","doseField":"ins_dose","byField":"ins_by","targetLowField":"tgt_low","targetHighField":"tgt_high","echo":{"setId":"care.sliding_scale_insulin","label":"Sliding-scale"},"slots":["Pre-breakfast","Pre-lunch","Pre-dinner","Bedtime","Night"]},
  "sections":[
   {"title":"Daily readings","fields":[
    {"id":"ins_time","label":"Time","type":"datetime","repeat":true,"group":"dim","rationale":"Timestamp for this reading."},
@@ -907,7 +910,7 @@ document.querySelectorAll('[data-cdraft]').forEach(b=>{b.disabled=!on('ruleDraft
 const n=$('aiNote');if(n)n.textContent=!SRV()?'AI needs the server. Demo mode has no AI.':on()?'AI is on. Text is de-identified on the server before it is sent.':'AI is off.'}
 
 const SEEDS=window.SEED_SETS||[];let SEQ=0;
-const DEMO=SEEDS.find(s=>s.setId=='disease.snake_envenomation')||{},DEMO2=SEEDS.find(s=>s.setId=='disease.dka')||{};
+const DEMO=SEEDS.find(s=>s.demoCases)||{};
 /* Registry: seed sets (element-sets.js) + user sets (localStorage 'sets') */
 const userSets=()=>Store.userSets();
 const registry=()=>SEEDS.concat(userSets().filter(u=>u&&u.setId&&!SEEDS.some(x=>x.setId==u.setId)));
@@ -968,11 +971,11 @@ const inCtx=s=>CTX=='all'||(Array.isArray(s.contexts)&&s.contexts.length?s.conte
 /* Diagnosis keys of a case: SNOMED code when the disease set has one, else 'dx:' + lower-cased diagnosis text */
 const dxKeys=c=>{const k=[];(c.applied||[]).forEach(a=>{const s=getSet(a.setId,a);if(!s||s.kind!='disease'||!s.diagnosis)return;const code=String(s.diagnosis.snomed&&s.diagnosis.snomed.code||'').trim(),t=String(s.diagnosis.text||'').trim().toLowerCase();if(code)k.push(code);else if(t)k.push('dx:'+t)});return[...new Set(k)]};
 function bumpUsage(id,c){Store.bumpUsage(id,dxKeys(c||CUR))}
-const DEF=['care.vitals','template.basic_emr','care.hba1c_monitoring','care.sliding_scale_insulin'];
+const sugList=()=>registry().filter(x=>x.quick&&x.quick.suggest>0).sort((a,b)=>a.quick.suggest-b.quick.suggest).map(x=>x.setId);
 function suggested(){const u=usage(),dk=dxKeys(CUR),done=new Set(CUR.applied.map(a=>a.setId)),r=registry().filter(s=>!done.has(s.setId)&&s.kind!='pathway'&&inCtx(s));
 const sc=s=>{const x=u[s.setId]||{};return(x.count||0)+dk.reduce((n,k)=>n+(x.withDx&&x.withDx[k]||0),0)},lu=s=>String((u[s.setId]||{}).lastUsed||'');
 const used=r.filter(s=>sc(s)>0).sort((a,b)=>sc(b)-sc(a)||lu(b).localeCompare(lu(a)));
-const pb=pwBoost(r),def=DEF.map(id=>r.find(s=>s.setId==id)).filter(s=>s&&!used.includes(s)&&!pb.includes(s));return pb.concat(used.filter(s=>!pb.includes(s)),def).slice(0,6)}
+const pb=pwBoost(r),def=sugList().map(id=>r.find(s=>s.setId==id)).filter(s=>s&&!used.includes(s)&&!pb.includes(s));return pb.concat(used.filter(s=>!pb.includes(s)),def).slice(0,6)}
 async function suggestSets(){if(aiBlocked('suggest'))return;if(!CUR)return;toast('');const nar=(CUR.narrative||'').trim();
 if(!nar)return toast('Write a case narrative first.');if(nar.length>8000)return toast('The narrative is longer than 8000 characters. Shorten it before asking the AI.');
 const done=new Set(CUR.applied.map(a=>a.setId)),onPw=new Set((CUR.pathways||[]).map(x=>x.pathwayId)),avail=registry().filter(x=>!done.has(x.setId)&&!isPw(x)),availP=registry().filter(x=>isPw(x)&&!isEmrView(x)&&!onPw.has(x.setId));
@@ -1084,8 +1087,8 @@ const t=f.type=='datetime'?'datetime-local':f.type=='date'?'date':f.type=='text'
 return`<input ${at} type="${t}" ${t=='number'?'step="any"':''} value="${esc(v==null?'':v)}">`}
 function grpInner(s,g){const fs=grp(s,g),sid=esc(s.setId),eg=esc(g),rows=rowsOf(CUR,s.setId,g);
 const head=fs.map(f=>`<th>${esc(f.label)}${f.unit?' ('+esc(f.unit)+')':''}<span id="cb_${esc(vk(s.setId,f.id))}"></span></th>`).join('');
-const body=rows.map((r,i)=>'<tr>'+fs.map(f=>`<td>${cell(f,r[f.id],`data-rs="${sid}" data-rg="${eg}" data-ri="${i}" data-rf="${esc(f.id)}"`)}</td>`).join('')+`<td><button class="b sm" data-rdel="${sid}" data-rg="${eg}" data-ri="${i}">×</button></td></tr>`).join('');
-return`<table class="pt"><tr>${head}<th></th></tr>${body||`<tr><td colspan="${fs.length+1}" class="mu">No readings yet.</td></tr>`}</table><button class="b sm" data-radd="${sid}" data-rg="${eg}">+ Add reading</button><div id="rc_${sid}@${eg}"></div>`}
+const body=rows.map((r,i)=>'<tr>'+fs.map(f=>`<td>${cell(f,r[f.id],`data-rs="${sid}" data-rg="${eg}" data-ri="${i}" data-rf="${esc(f.id)}"`)}</td>`).join('')+`<td>${accOk(s,'amend')?`<button class="b sm" data-rdel="${sid}" data-rg="${eg}" data-ri="${i}">×</button>`:''}</td></tr>`).join('');
+return`<table class="pt"><tr>${head}<th></th></tr>${body||`<tr><td colspan="${fs.length+1}" class="mu">No readings yet.</td></tr>`}</table>${accOk(s,'enter')?`<button class="b sm" data-radd="${sid}" data-rg="${eg}">+ Add reading</button>`:''}<div id="rc_${sid}@${eg}"></div>`}
 function refreshGroup(sid,g){const s=getSet(sid),el=$('rg_'+sid+'@'+g);if(!s||!el)return;el.innerHTML=grpInner(s,g);drawCharts(s,g);codesUI()}
 function drawAll(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId,a);if(!s)return;[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>drawCharts(s,g))})}
 let OVM=false;
@@ -1129,17 +1132,17 @@ const cell=c=>(c||[]).sort((a,b)=>a.t-b.t).map(x=>[x.g!=null?esc(x.g):'',x.d?esc
 const used=slots.filter(sl=>sl!='Other'||keys.some(k=>days[k].cells.Other));
 const grid=`<div style="overflow-x:auto"><table class="pt"><tr><th>Date</th>${used.map(x=>`<th>${esc(x)}</th>`).join('')}</tr>${keys.map(k=>`<tr><td>${esc(k)}</td>${used.map(sl=>`<td>${cell(days[k].cells[sl])}</td>`).join('')}</tr>`).join('')}</table></div><div class="mu">Cell = glucose · dose as given · (given by)</div>`;
 const sum=`<div style="overflow-x:auto"><table class="pt"><tr><th>Date</th><th>Glucose readings</th><th>Min</th><th>Max</th><th>Mean</th></tr>${keys.map(k=>{const g=days[k].g;return`<tr><td>${esc(k)}</td><td>${g.length}</td>${g.length?`<td>${r1(Math.min(...g))}</td><td>${r1(Math.max(...g))}</td><td>${r1(g.reduce((a,b)=>a+b,0)/g.length)}</td>`:'<td>–</td><td>–</td><td>–</td>'}</tr>`}).join('')}</table></div>`;
-const lo=fnum(CUR.values[vk(sid,'tgt_low')]),hi=fnum(CUR.values[vk(sid,'tgt_high')]);
+const lo=v.targetLowField?fnum(CUR.values[vk(sid,v.targetLowField)]):null,hi=v.targetHighField?fnum(CUR.values[vk(sid,v.targetHighField)]):null;
 const pts=[];keys.forEach(k=>Object.values(days[k].cells).forEach(a=>a.forEach(x=>{if(x.g!=null)pts.push({t:x.t,y:x.g})})));pts.sort((a,b)=>a.t-b.t);
 const ff=Object.assign({},gf,{ref:{low:lo,high:hi},band:lo!=null&&hi!=null}),chart=pts.length?trajectory(s,ff,pts,tf):'';
-const ssi=CUR.applied.some(a=>a.setId=='care.sliding_scale_insulin')?'<div class="mu">The typed-band echo for the latest glucose is shown in the Sliding-scale card.</div>':'';
+const ssi=v.echo&&CUR.applied.some(a=>a.setId===v.echo.setId)?'<div class="mu">The typed-band echo for the latest glucose is shown in the '+esc(v.echo.label)+' card.</div>':'';
 const notes=[lo==null&&hi==null?'No target range entered':lo==null||hi==null?'Only one target limit entered, so no band is drawn':'',skipped?skipped+' row(s) without a valid time were left out':''].filter(Boolean);
 return head+grid+'<div class="kh">Daily glucose summary</div>'+sum+chart+ssi+(notes.length?`<div class="mu">${esc(notes.join(' · '))}</div>`:'')+'</div>'}
 /* Fever chart (chunk 18). Display only: stored values and units are never changed; the C/F toggle converts for drawing. */
 const FU={},toC=(v,u)=>u=='°F'?(v-32)*5/9:v,fromC=(c,u)=>u=='°F'?c*9/5+32:c,r1=x=>+x.toFixed(1);
 const dayKey=t=>{const d=new Date(t);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 function feverChart(s,rows){const v=s.view||{},fs=flS(s),tf=fs.find(f=>f.id==v.timeField),yf=fs.find(f=>f.id==v.tempField);if(!tf||!yf)return'';
-const sid=s.setId,du=FU[sid]||'°C',pf=(v.extra||[]).includes('pulse')?fs.find(f=>f.id=='pulse'):null;let skipped=0,assumed=0;const pts=[],pp=[];
+const sid=s.setId,du=FU[sid]||'°C',pf=(v.extra||[]).length?fs.find(f=>f.id==v.extra[0]):null;let skipped=0,assumed=0;const pts=[],pp=[];
 (rows||[]).forEach(r=>{const t=new Date(r[tf.id]).getTime(),x=fnum(r[yf.id]),p=pf?fnum(r[pf.id]):null;if(x==null&&p==null)return;if(isNaN(t)){skipped++;return}
 if(x!=null){const ru=r[v.unitField];if(ru!='°C'&&ru!='°F')assumed++;const c=toC(x,ru=='°F'?'°F':'°C');pts.push({t,c,y:fromC(c,du),raw:x,ru:ru||'°C'})}if(p!=null)pp.push({t,y:p})});
 pts.sort((a,b)=>a.t-b.t);pp.sort((a,b)=>a.t-b.t);
@@ -1175,6 +1178,10 @@ h+=`<label>${esc(f.label)}${f.required?' *':''}${f.unit?' ('+esc(f.unit)+')':''}
 /* Protocol sets (e.g. sliding scale): bands are typed by the clinician; the tool only echoes the matching typed band */
 /* Chunk 32d2 helpers (top level so the rules, protocol and notes code all see them). */
 function SRV(){return Store.mode==='server'&&!!Store.me}
+/* R8b: mirror of the server's element access (Views.accessAllows in views.js). It only hides controls; the server answers 403 anyway. ROLE_LIST must equal ROLES in permissions.js. */
+const ROLE_LIST=['admin','doctor','nurse','informatician','viewer'];
+function accOk(s,a){return !SRV()||(Store.can(Views.ACCESS_BASE_ACTION[a])&&Views.accessAllows(s,Store.me.role,a,Store.can))}
+function accLine(s){return s&&s.access?Views.describeAccess(s.access,ROLE_LIST,['view','enter','amend']):''}
 function mayDo(a){return Store.can(a)}
 function me(){return Store.who()||''}
 function protoOf(sid){const p=CUR.values[vk(sid,'__protocol')],b=p&&Array.isArray(p.bands)?p:{verifiedBy:'',bands:[]};if(!SRV())return b;const sp=Store.protocol(sid);return Object.assign({},b,{verifiedBy:sp&&sp.verifiedBy?sp.verifiedBy:''})}   // 35a: in server mode the verifier shown is the server-stamped one, never a copy typed into the case
@@ -1201,7 +1208,7 @@ if(!CUR.applied.length)h+='<div class="cd mu">No element sets yet. Add one from 
 CUR.applied.forEach(a=>{const s=getSet(a.setId,a);
 if(s&&(s.kind==='disease'||s.kind==='template'))return;
 if(!s){h+=`<div class="cd"><span class="mu">Set not found in registry: ${esc(a.setId)}</span> <button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div>`;return}
-h+=`<div class="cd" id="cd_${esc(a.setId)}"><div class="sh"><b>${esc(s.title||s.setId)}</b><span class="mu">${esc(s.kind||'')} · v${esc(s.version||1)}</span><span style="flex:1"></span><button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div><details open><summary class="mu">Fields</summary>${setForm(s)}</details></div>`});
+h+=`<div class="cd" id="cd_${esc(a.setId)}"><div class="sh"><b>${esc(s.title||s.setId)}</b><span class="mu">${esc(s.kind||'')} · v${esc(s.version||1)}</span><span style="flex:1"></span><button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div>${accLine(s)?`<div class="mu" style="margin:2px 0 4px">${esc(accLine(s))}</div>`:''}<details open><summary class="mu">Fields</summary>${setForm(s)}</details></div>`});
 $('cbody').innerHTML=h;
 Object.keys(CUR.values).forEach(k=>{const e=$('f_'+k),v=CUR.values[k];if(e&&!Array.isArray(v))e.value=v});
 drawAll();calc();codesUI();sidebar();picker();qbar();cdsRender();pathwayWorkspace()}
@@ -1386,18 +1393,18 @@ if(!f.repeat){const x=v[vk(s.setId,f.id)];if(x===undefined||x===''||Array.isArra
 const g=f.group||f.id,gf=grp(s,g),tc=tcol(gf),hasMed=gf.some(isMed);
 if(f===tc)return;/* timestamp column = the row's effective time, not a resource */
 if(hasMed&&f.type=='text'&&!isMed(f))return;/* folded into the administration note */
-const V=s.view||{},fv=V.type=='fever',dg=V.type=='dailygrid',bp2=gf.some(q=>q.id=='bp_sys')&&gf.some(q=>q.id=='bp_dia');
-if(fv&&f.id=='route')return;/* route goes onto the temperature Observation as method text */
+const V=s.view||{},fv=V.type=='fever',dg=V.type=='dailygrid',pr2=pairOf(gf);
+if(fv&&V.methodField&&f.id==V.methodField)return;/* the method field goes onto the temperature Observation as method text */
 if(dg&&f.id==V.slotField)return;/* slot goes into notes as text */
 rowsOf(CUR,s.setId,g).forEach(row=>{const x=row[f.id];if(x===undefined||x==='')return;if(NUM.includes(f.type)&&fnum(x)==null)return;
 const eff=tc&&row[tc.id]?isoOf(tc,row[tc.id]):null;
-const bpOk=bp2&&(f.id=='bp_sys'||f.id=='bp_dia')&&fnum(row.bp_sys)!=null&&fnum(row.bp_dia)!=null;
-if(bpOk){if(f.id=='bp_dia')return;const cq=ff=>({code:{text:ff.label},valueQuantity:{value:fnum(row[ff.id]),unit:ff.unit||''}}),pr={resourceType:'Observation',status:'final',code:{text:'Blood pressure'},subject:{reference:pid},component:[cq(f),cq(gf.find(q=>q.id=='bp_dia'))]};if(eff)pr.effectiveDateTime=eff;else nots++;add(pr,s.setId);sk++;return}
+const bpOk=pr2&&(f===pr2.a||f===pr2.b)&&fnum(row[pr2.a.id])!=null&&fnum(row[pr2.b.id])!=null;
+if(bpOk){if(f===pr2.b)return;const cq=ff=>({code:{text:ff.label},valueQuantity:{value:fnum(row[ff.id]),unit:ff.unit||''}}),pr={resourceType:'Observation',status:'final',code:{text:pr2.code},subject:{reference:pid},component:[cq(f),cq(pr2.b)]};if(eff)pr.effectiveDateTime=eff;else nots++;add(pr,s.setId);sk++;return}
 const note=isMed(f)?gf.filter(q=>q.type=='text'&&!isMed(q)&&row[q.id]).map(q=>q.label+': '+row[q.id]).concat(dg&&row[V.slotField]?['Slot: '+row[V.slotField]]:[]):[];
 const r=mk(f,x,eff,note,row);if(!r){skipped++;return}
 if(dg&&isMed(f)&&row[V.byField])r.performer=[{actor:{display:String(row[V.byField])}}];
 if(dg&&r.resourceType=='Observation'&&row[V.slotField])r.note=[{text:'Slot: '+row[V.slotField]}];
-if(fv&&f.id==V.tempField&&row.route)r.method={text:String(row.route)};
+if(fv&&f.id==V.tempField&&V.methodField&&row[V.methodField])r.method={text:String(row[V.methodField])};
 if(tc&&!eff&&r.resourceType!='MedicationAdministration')nots++;
 add(r,s.setId);if(st(f)!='verified')sk++})}));
 /* Pathway -> CarePlan. A pathway is a bundle of sets, so the plan lists set titles only: no doses, bands, thresholds or rules.
@@ -1433,7 +1440,7 @@ const fl=c=>(c.applied||[]).flatMap(a=>flS(getSet(a.setId)).map(f=>Object.assign
 const filled=(c,x)=>x.repeat?rowsOf(c,x._s,x.group||x.id).some(r=>r[x.id]!==undefined&&r[x.id]!==''):has(c,x._k);
 const med=a=>{if(!a.length)return null;a=[...a].sort((p,q)=>p-q);const m=a.length>>1;return a.length%2?a[m]:(a[m-1]+a[m])/2};
 const qt=(a,q)=>{a=[...a].sort((p,r)=>p-r);return a[Math.min(a.length-1,Math.floor(q*a.length))]};
-function gapOf(c){let g=parseFloat(val(c,'gap',SNK));if(isNaN(g)&&val(c,'bite',SNK)&&val(c,'asv',SNK))g=Math.round((new Date(val(c,'asv',SNK))-new Date(val(c,'bite',SNK)))/6e4);return isNaN(g)?null:g}
+function gapOf(c){const s=getSet(SNK),f=s&&flS(s).find(x=>x.derived&&x.derived.op==='minutes_between'&&Array.isArray(x.derived.from)&&x.derived.from.length===2);if(!f)return null;const[a,b]=f.derived.from;let g=parseFloat(val(c,f.id,SNK));if(isNaN(g)&&val(c,a,SNK)&&val(c,b,SNK))g=Math.round((new Date(val(c,b,SNK))-new Date(val(c,a,SNK)))/6e4);return isNaN(g)?null:g}
 let ANS=null,ANU=false;
 function anScopes(A){const o={d:{},c:{},p:{}};A.forEach(c=>{(c.applied||[]).forEach(a=>{const s=getSet(a.setId);if(!s||isPw(s))return;const k=s.kind=='disease'?'d':s.direct?'c':null;if(k)o[k][a.setId]=(o[k][a.setId]||0)+1});(c.pathways||[]).forEach(x=>{if(x&&x.pathwayId)o.p[x.pathwayId]=(o.p[x.pathwayId]||0)+1})});return o}
 const inScope=(c,sc)=>sc=='all'||(sc.startsWith('pw:')?(c.pathways||[]).some(x=>x.pathwayId==sc.slice(3)):(c.applied||[]).some(a=>a.setId==sc.slice(4)));
@@ -1472,15 +1479,15 @@ const top=Object.entries(use).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([id,k])=>{c
 const rf={};C.forEach(c=>(c.applied||[]).forEach(a=>{const s=getSet(a.setId);if(!s)return;flS(s).filter(f=>f.repeat).forEach(f=>{const g=f.group||f.id;if(f===tcol(grp(s,g)))return;
 const k=a.setId+'|'+f.id,n=rowsOf(c,a.setId,g).filter(r=>r[f.id]!==undefined&&r[f.id]!=='').length,o=rf[k]=rf[k]||{s,f,tot:0,cs:0};o.tot+=n;if(n)o.cs++})}));
 const rr=Object.values(rf).map(o=>`<tr><td>${esc(o.s.title||o.s.setId)} · ${esc(o.f.label)}</td><td>${o.tot}</td><td>${o.cs}</td></tr>`).join('');
-const hb=[];C.forEach((c,i)=>{if(!(c.applied||[]).some(a=>a.setId=='care.hba1c_monitoring'))return;
-const ts=rowsOf(c,'care.hba1c_monitoring','hba1c').filter(r=>fnum(r.a1c)!=null&&r.a1c_date).map(r=>new Date(r.a1c_date).getTime()).filter(t=>!isNaN(t));
+const hb={};C.forEach((c,i)=>(c.applied||[]).forEach(a=>{const u=followUpOf(getSet(a.setId));if(!u||!u.h)return;const H=u.h;
+const ts=rowsOf(c,a.setId,H.group).filter(r=>fnum(r[H.valueField])!=null&&r[H.dateField]).map(r=>new Date(r[H.dateField]).getTime()).filter(t=>!isNaN(t));
 const d=ts.length?Math.round((new Date(nowStr('date')).getTime()-Math.max(...ts))/864e5):null;
-hb.push(`<li>Case ${i+1}${c.syn?' [syn]':''}: ${d==null?'no HbA1c reading yet':d<0?'last date is in the future':d+' days'}</li>`)});
+(hb[u.label]=hb[u.label]||[]).push(`<li>Case ${i+1}${c.syn?' [syn]':''}: ${d==null?'no '+esc(u.label)+' reading yet':d<0?'last date is in the future':d+' days'}</li>`)}));
 return`<div class="cd"><b>Care pathway</b> <span class="mu">(descriptive counts only)</span>
 <div class="kh">Element sets per case</div><table class="pt">${dr}</table>
 <div class="kh">Most used sets</div><ul>${top||'<li class="mu">none</li>'}</ul>
 <div class="kh">Readings per repeat field</div>${rr?`<table class="pt"><tr><th>Field</th><th>Readings</th><th>Cases with data</th></tr>${rr}</table>`:'<div class="mu">No repeat-field sets applied yet.</div>'}
-${hb.length?'<div class="kh">Days since last HbA1c</div><ul>'+hb.join('')+'</ul>':''}</div>`}
+${Object.keys(hb).map(l=>'<div class="kh">Days since last '+esc(l)+'</div><ul>'+hb[l].join('')+'</ul>').join('')}</div>`}
 /* Pathway analytics: descriptive counts only. "Has data" means a value was entered (hasData); it never judges whether care was adequate.
    Members are read from the CURRENT registry version. Time to first value uses repeat-row timestamps only; sets with no timestamped rows are reported as such. */
 function pathwayCards(C){const P={};
@@ -1601,8 +1608,8 @@ const head='<div class="tj"><b>Flowsheet</b> <span class="mu">parameters down, t
 if(!cols.length)return head+`<div class="mu">No readings with a valid time yet.${skipped?' '+skipped+' row(s) without a valid time were left out.':''}</div></div>`;
 const oor=(f,x)=>{const r=refOf(s,f),lo=fnum(r.low),hi=fnum(r.high);return x!=null&&((lo!=null&&x<lo)||(hi!=null&&x>hi))},
 sp=(f,x)=>x===undefined||x===''?'–':oor(f,fnum(x))?`<span style="color:var(--r);font-weight:600">${esc(x)}</span>`:esc(x),
-bp=gf.find(f=>f.id=='bp_sys'),bd=gf.find(f=>f.id=='bp_dia'),lines=[];
-gf.forEach(f=>{if(bp&&bd&&f===bd)return;if(bp&&bd&&f===bp)lines.push({bp:1,label:'Blood pressure (mmHg)'});else lines.push({f,label:f.label+(f.unit?' ('+f.unit+')':'')})});
+pp=pairOf(gf),bp=pp&&pp.a,bd=pp&&pp.b,lines=[];
+gf.forEach(f=>{if(bp&&bd&&f===bd)return;if(bp&&bd&&f===bp)lines.push({bp:1,label:pp.code+(bp.unit?' ('+bp.unit+')':'')});else lines.push({f,label:f.label+(f.unit?' ('+f.unit+')':'')})});
 const tl=t=>new Date(t).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
 const body=lines.map(l=>`<tr><th style="text-align:left;white-space:nowrap;position:sticky;left:0;background:var(--cd)">${esc(l.label)}</th>${cols.map(c=>`<td style="white-space:nowrap">${l.bp?sp(bp,c.r[bp.id])+' / '+sp(bd,c.r[bd.id]):sp(l.f,c.r[l.f.id])}</td>`).join('')}</tr>`).join('');
 const anyRef=gf.some(f=>{const r=refOf(s,f);return fnum(r.low)!=null||fnum(r.high)!=null});
@@ -1611,7 +1618,8 @@ return head+`<div style="overflow-x:auto;max-width:100%"><table class="pt"><tr><
 const SUMW={};
 function renderSummaries(s,rows){const S=s&&s.view&&s.view.summary;if(!Array.isArray(S)||OVM)return'';return S.map((sp,i)=>{if(!sp||sp.type!='sumBy'||!Array.isArray(sp.windowsHours)||!sp.windowsHours.length)return'';const hs=sp.windowsHours,key=s.setId+'|'+i,h=hs.includes(SUMW[key])?SUMW[key]:hs[0],now=Date.now(),o=Views.sumBy(rows,sp,now-h*36e5,now),ks=Object.keys(o).sort(),u=(flS(s).find(f=>f.id==sp.valueField)||{}).unit||'',lb=String(sp.label||''),cap=lb.charAt(0).toUpperCase()+lb.slice(1);
 return'<div class="tj"><b>'+esc(cap)+'</b> '+hs.map(n=>`<button class="b sm" type="button" data-sumw="${n}" data-sumk="${esc(key)}" style="${h==n?'border:1px solid var(--ac)':'opacity:.6'}">Last ${n} h</button>`).join(' ')+(ks.length?ks.map(k=>`<div>${esc(k)}: <b>${esc(String(Math.round(o[k]*100)/100))}</b> ${esc(u)}</div>`).join(''):'<div class="mu">No entered rows in this window.</div>')+'<div class="mu">'+esc(lb)+' only; no target, limit or comparison.</div></div>'}).join('')}
-function dueBadge(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId,a);if(!s||a.setId!='care.hba1c_monitoring')return;const k=vk(a.setId,'a1c_due'),g=$('bg_'+k);if(!g)return;
+function followUpOf(s){const f=s&&flS(s).find(x=>x.followUp&&x.type==='date');return f?{id:f.id,label:String(f.followUp.label||f.label||f.id),h:f.followUp.history||null}:null}
+function dueBadge(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId,a),u=s&&followUpOf(s);if(!u)return;const k=vk(a.setId,u.id),g=$('bg_'+k);if(!g)return;
 const d=CUR.values[k];if(!d||isNaN(new Date(d))){g.innerHTML='';return}const n=Math.round((new Date(d)-new Date(nowStr('date')))/864e5);
 g.innerHTML=n<0?`<span class="bd" style="background:var(--r)">overdue by ${-n} day${n==-1?'':'s'}</span>`:n==0?'<span class="bd" style="background:var(--a)">due today</span>':`<span class="bd" style="background:var(--ac)">due in ${n} day${n==1?'':'s'}</span>`})}
 /* ---------------- Phase 4B / chunk 25C: dedicated Flowsheets ---------------- */
@@ -1658,8 +1666,8 @@ function flowsheetTable(s,g){
   });
   const input=(f,v,attrs)=>cell(f,v,attrs);
   const newRow=FLW.newOpen?`<tr class="flw-new"><td class="flw-time">${tc?input(tc,nowStr(tc.type),`data-flw-new="${esc(tc.id)}"`):'<span class="mu">New row</span>'}</td>${other.map(f=>`<td>${input(f,dflt(f),`data-flw-new="${esc(f.id)}"`)}</td>`).join('')}<td class="flw-reserved">${enteredByCell({})}</td><td>—</td></tr>`:'';
-  const rows=indexed.map(({r,i,t})=>`<tr><td class="flw-time">${tc?input(tc,r[tc.id],`data-rs="${esc(s.setId)}" data-rg="${esc(g)}" data-ri="${i}" data-rf="${esc(tc.id)}"`):'—'}</td>${other.map(f=>`<td>${input(f,r[f.id],`data-rs="${esc(s.setId)}" data-rg="${esc(g)}" data-ri="${i}" data-rf="${esc(f.id)}"`)}</td>`).join('')}<td class="flw-reserved">${enteredByCell(r)}</td><td><button class="b sm" type="button" data-flw-delete="${esc(s.setId)}" data-flw-group="${esc(g)}" data-flw-index="${i}" aria-label="Delete reading">×</button></td></tr>`).join('');
-  return `<div class="flw-toolbar"><button class="b sm" type="button" data-flw-add="1" ${FLW.newOpen?'disabled':''}>+ New row</button>${FLW.newOpen?'<button class="b sm" type="button" data-flw-cancel="1">Cancel</button><button class="b sm" type="button" data-flw-save="1">Save row</button>':''}<span class="mu">Newest first · Enter saves a new row · Tab moves between fields</span></div><div class="flw-table-wrap"><table class="flw-table"><thead><tr><th class="flw-time">${tc?esc(tc.label):'Time'}</th>${other.map(f=>`<th>${esc(f.label)}${f.unit?' ('+esc(f.unit)+')':''}</th>`).join('')}<th>Entered by</th><th>Actions</th></tr></thead><tbody>${newRow}${rows.length?rows:`<tr><td colspan="${fields.length+2}" class="flw-empty">No readings yet.</td></tr>`}</tbody></table></div><div class="mu" style="margin-top:6px">Entered by shows the initials of the signed-in staff member who entered the row (hover for the name; Demo mode shows a dash). Rows with invalid or missing timestamps are retained and shown after valid-time rows.</div>`;
+  const rows=indexed.map(({r,i,t})=>`<tr><td class="flw-time">${tc?input(tc,r[tc.id],`data-rs="${esc(s.setId)}" data-rg="${esc(g)}" data-ri="${i}" data-rf="${esc(tc.id)}"`):'—'}</td>${other.map(f=>`<td>${input(f,r[f.id],`data-rs="${esc(s.setId)}" data-rg="${esc(g)}" data-ri="${i}" data-rf="${esc(f.id)}"`)}</td>`).join('')}<td class="flw-reserved">${enteredByCell(r)}</td><td>${accOk(s,'amend')?`<button class="b sm" type="button" data-flw-delete="${esc(s.setId)}" data-flw-group="${esc(g)}" data-flw-index="${i}" aria-label="Delete reading">×</button>`:''}</td></tr>`).join('');
+  return `<div class="flw-toolbar">${accOk(s,'enter')?`<button class="b sm" type="button" data-flw-add="1" ${FLW.newOpen?'disabled':''}>+ New row</button>`:''}${FLW.newOpen?'<button class="b sm" type="button" data-flw-cancel="1">Cancel</button><button class="b sm" type="button" data-flw-save="1">Save row</button>':''}<span class="mu">Newest first · Enter saves a new row · Tab moves between fields</span></div><div class="flw-table-wrap"><table class="flw-table"><thead><tr><th class="flw-time">${tc?esc(tc.label):'Time'}</th>${other.map(f=>`<th>${esc(f.label)}${f.unit?' ('+esc(f.unit)+')':''}</th>`).join('')}<th>Entered by</th><th>Actions</th></tr></thead><tbody>${newRow}${rows.length?rows:`<tr><td colspan="${fields.length+2}" class="flw-empty">No readings yet.</td></tr>`}</tbody></table></div><div class="mu" style="margin-top:6px">Entered by shows the initials of the signed-in staff member who entered the row (hover for the name; Demo mode shows a dash). Rows with invalid or missing timestamps are retained and shown after valid-time rows.</div>`;
 }
 function flowsheetTrend(s,g){
   try{OVM=true;const out=chartHtml(s,g);return out||'<div class="flw-empty">No trend renderer is available for this reading group.</div>'}
@@ -1730,7 +1738,7 @@ function summaryWorkspace(){
     ['Element sets',applied.length],['Timed reading groups',groups],['Recorded rows',rowCount],['Active alerts',alerts.length]
   ].map(([l,v])=>`<div class="summary-stat"><strong>${esc(v)}</strong><span>${esc(l)}</span></div>`).join('');
 
-  const quickIds=['care.vitals','care.fever_chart','care.daily_insulin_monitoring','care.hba1c_monitoring'];
+  const quickIds=registry().filter(x=>x.quick&&x.quick.summary).sort((a,b)=>(a.quick.order||99)-(b.quick.order||99)).map(x=>x.setId);
   $('summaryActions').innerHTML=quickIds.map(id=>{
     const s=getSet(id);if(!s)return'';
     const active=(CUR.applied||[]).some(a=>a.setId===id);
@@ -1940,8 +1948,8 @@ function patientLatestTime(c,s){
   return best;
 }
 function patientAgeLabel(t){if(t==null)return'';const m=Math.max(0,Math.round((Date.now()-t)/60000));return m<90?m+' min':Math.round(m/60)+' h'}
-function patientDueItems(c){const out=[];(c.applied||[]).forEach(a=>{const s=getSet(a.setId);if(!s)return;flS(s).filter(f=>f.type==='date'&&/due|follow.?up|next/i.test((f.label||'')+' '+f.id)).forEach(f=>{const v=(c.values||{})[vk(s.setId,f.id)];if(v&&!isNaN(new Date(v)))out.push({set:s.setId,field:f.label||f.id,value:v,time:new Date(v).getTime()})})});out.sort((a,b)=>a.time-b.time);return out}
-function patientDueLabel(x){if(x.set==='care.hba1c_monitoring'&&x.field.toLowerCase().includes('hba1c')){const n=Math.round((new Date(x.value).getTime()-new Date().setHours(0,0,0,0))/864e5);return n<0?'HbA1c overdue '+(-n)+' d':n===0?'HbA1c due today':'HbA1c due in '+n+' d'}return x.field+': '+x.value}
+function patientDueItems(c){const out=[];(c.applied||[]).forEach(a=>{const s=getSet(a.setId);if(!s)return;flS(s).filter(f=>f.type==='date'&&/due|follow.?up|next/i.test((f.label||'')+' '+f.id)).forEach(f=>{const v=(c.values||{})[vk(s.setId,f.id)];if(v&&!isNaN(new Date(v)))out.push({set:s.setId,field:f.label||f.id,value:v,time:new Date(v).getTime(),fu:f.followUp?String(f.followUp.label||f.label||f.id):''})})});out.sort((a,b)=>a.time-b.time);return out}
+function patientDueLabel(x){if(x.fu){const n=Math.round((new Date(x.value).getTime()-new Date().setHours(0,0,0,0))/864e5);return n<0?x.fu+' overdue '+(-n)+' d':n===0?x.fu+' due today':x.fu+' due in '+n+' d'}return x.field+': '+x.value}
 function pinListFor(c){let p=c&&Array.isArray(c.pinned)?c.pinned:null;if(!p){const l=Store.pref('pinned',null);if(Array.isArray(l))p=l}if(!p)p=registry().filter(x=>x.direct).sort((a,b)=>((a.quick||{}).order||99)-((b.quick||{}).order||99)).map(x=>x.setId);return p.filter(id=>getSet(id))}
 function patientRowModel(c){
   const p=patientView(c),ap=new Set((c.applied||[]).map(a=>a.setId)),diagnoses=(c.applied||[]).map(a=>getSet(a.setId)).filter(s=>s&&s.kind==='disease'),pathways=(c.pathways||[]).map(x=>getSet(x.pathwayId)).filter(Boolean);
@@ -1954,7 +1962,9 @@ function patientRowModel(c){
 /* chunk 37c3: ward board row data (pure; no flags, no colours). Latest value is shown as recorded. */
 /* shared by the ward board and the handover view: newest timed row of a set, and its values as recorded */
 function rowVals(fs,tc,r){const uf=new Set(fs.map(f=>f.unitField).filter(Boolean));return fs.filter(f=>f!==tc&&!f.meta&&!uf.has(f.id)&&!/note/i.test(f.id)&&r[f.id]!==undefined&&String(r[f.id]).trim()!=='')}
-function rowText(r,vals){const bp=vals.find(f=>f.id=='bp_sys'),bd=vals.find(f=>f.id=='bp_dia');return vals.filter(f=>!(bp&&bd&&f===bd)).map(f=>bp&&bd&&f===bp?'BP '+r.bp_sys+' / '+r.bp_dia+' mmHg':f.label+' '+r[f.id]+(f.unit?' '+f.unit:f.unitField&&r[f.unitField]?' '+r[f.unitField]:'')).join(', ')}
+/* Paired reading (V8d3): a field with pair:{with,code,short} joins the field it names into one reading. Returns {a,b,code,short} or null. */
+function pairOf(gf){for(const a of gf){const p=a.pair;if(!p||!p.with)continue;const b=gf.find(q=>q.id===p.with);if(b)return{a,b,code:String(p.code||a.label),short:String(p.short||a.label)}}return null}
+function rowText(r,vals){const pp=pairOf(vals),bp=pp&&pp.a,bd=pp&&pp.b;return vals.filter(f=>!(bp&&bd&&f===bd)).map(f=>bp&&bd&&f===bp?pp.short+' '+r[bp.id]+' / '+r[bd.id]+(bp.unit?' '+bp.unit:''):f.label+' '+r[f.id]+(f.unit?' '+f.unit:f.unitField&&r[f.unitField]?' '+r[f.unitField]:'')).join(', ')}
 function latestOf(c,s){let best=null;[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>{const fs=grp(s,g),tc=tcol(fs);if(!tc)return;rowsOf(c,s.setId,g).forEach(r=>{const t=rowT(r,tc);if(!Number.isFinite(t))return;const vals=rowVals(fs,tc,r);if(vals.length&&(!best||t>best.t))best={t,r,vals}})});return best}
 /* chunk 37c3: ward board row data (pure; no flags, no colours). Latest value is shown as recorded. */
 /* V5c: a cell follows set.view.board = {show:'latest'|'age', fields:[field ids]}; default is the latest value and its age, as recorded. */
@@ -1995,20 +2005,42 @@ const SECTION_HTML={
   narrative:(d,sp,x)=>x.sec('Narrative',d.narrative?`<div style="white-space:pre-wrap">${esc(d.narrative)}</div>`:'<div class="mu">No narrative entered.</div>'),
   activePathways:(d,sp,x)=>x.sec('Pathways',d.pathways.length?d.pathways.map(y=>`<div>${esc(y.title)}${y.startedAt?' <span class="mu">started '+esc(String(y.startedAt).slice(0,10))+'</span>':''}</div>`).join(''):x.none),
   latestValues:(d,sp,x)=>x.sec('Latest readings',d.latest.length?x.tbl(['Set','Latest value','Recorded'],d.latest.map(y=>[y.set,y.value,y.ageText])):'<div class="mu">No timed readings.</div>'),
-  newRows:(d,sp,x)=>x.sec('Entered in the last '+x.hrs+' h',d.newRows.length?x.tbl(['Set','Entered','Reading time','Value'],d.newRows.map(y=>[y.set,x.tm(y.enteredAt),x.tm(y.readingAt),y.value])):'<div class="mu">None. Rows without a recorded entry time are not listed.</div>'),
+  newRows:(d,sp,x)=>{const ho=sp&&sp.since==='lastHandover'?x.ho:null,
+    body=d.newRows.length?x.tbl(['Set','Entered','Reading time','Value'],d.newRows.map(y=>[y.set,x.tm(y.enteredAt),x.tm(y.readingAt),y.value])):'<div class="mu">None. Rows without a recorded entry time are not listed.</div>',
+    title=ho&&ho.base==='marked'?'Entered since '+x.tm(ho.at):ho&&ho.base==='encounter'?'Entered since this encounter started':'Entered in the last '+x.hrs+' h';
+    return x.sec(title,body)+(ho&&ho.can?`<div class="tj"><button class="b sm" type="button" data-ho-mark="1">Mark handover done</button> <span class="mu">${ho.at?'Last marked '+esc(x.tm(ho.at))+'. ':'Not marked yet. '}Uses the server clock and applies to you only.</span></div>`:'')},
   ackedAlerts:(d,sp,x)=>x.sec('Alerts acknowledged in the last '+(sp&&Number.isFinite(+sp.hours)&&+sp.hours>0?+sp.hours:24)+' h',d.acks24h.length?d.acks24h.map(y=>`<div>${esc(x.ruleText(y.ruleId,y.setId))} <span class="mu">acknowledged ${esc(x.tm(y.ackedAt))}</span></div>`).join(''):x.none)
 };
-function handoverHtml(d,hrs,ruleText,secs){
+function handoverHtml(d,hrs,ruleText,secs,ho){
   const tm=t=>{const x=new Date(t);return isNaN(x)?'':x.toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})},none='<div class="mu">None.</div>',
   sec=(t,b)=>`<div class="kh">${esc(t)}</div>${b}`,
   tbl=(hd,rows)=>`<div style="overflow-x:auto;max-width:100%"><table class="pt"><tr>${hd.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>${rows.map(r=>'<tr>'+r.map(x=>`<td>${esc(x)}</td>`).join('')+'</tr>').join('')}</table></div>`;
-  const x={tm,none,sec,tbl,hrs,ruleText};
+  const x={tm,none,sec,tbl,hrs,ruleText,ho};
   return'<div class="tj">Entries from the last '+[8,12,24].map(n=>`<button class="b sm" type="button" data-how="${n}" style="${hrs==n?'border:1px solid var(--ac)':'opacity:.6'}">${n} h</button>`).join(' ')+'</div>'
   +(Array.isArray(secs)?secs:handoverSections()).map(sp=>{const f=sp&&SECTION_HTML[sp.type];return f?f(d,sp,x):''}).join('')
 }
+const HO={};   // caseId -> {at: ISO|null, ts: ms of last fetch} (37d5)
 function handoverRender(el,secs){if(!el||!CUR)return;
   try{const rs=ruleReg().flatMap(x=>Array.isArray(x.rules)?x.rules:[]),rt=(rid,sid)=>{const r=rs.find(x=>x&&x.ruleId===rid),q=getSet(sid);return(r&&r.summary?r.summary:rid)+(q?' ('+shortOf(q)+')':'')};
-    el.innerHTML=handoverHtml(handoverData(CUR,Date.now()-HOW.h*36e5),HOW.h,rt,secs)}catch(e){el.innerHTML='<div class="mu">Handover could not be drawn.</div>'}}
+    // 37d5: the button and the "since" time exist only because a newRows section says since:'lastHandover'. No tab name is checked.
+    const wants=(Array.isArray(secs)?secs:handoverSections()).some(s=>s&&s.type==='newRows'&&s.since==='lastHandover');
+    let ho=null,since=Date.now()-HOW.h*36e5;
+    if(wants&&SRV()){
+      const id=CUR.id,h=HO[id],t=h&&h.at?new Date(h.at).getTime():NaN,es=CUR.encounterRecord&&CUR.encounterRecord.startAt?new Date(CUR.encounterRecord.startAt).getTime():NaN;
+      if(Number.isFinite(t)){since=t;ho={base:'marked',at:h.at}}
+      else if(Number.isFinite(es)){since=es;ho={base:'encounter',at:null}}
+      else ho={base:'window',at:null};
+      ho.can=Store.can('handover.mark');
+      if(!h||Date.now()-h.ts>6e4){HO[id]={at:h?h.at:null,ts:Date.now()};
+        Store.handover.get(id).then(r=>{HO[id]={at:(r&&r.lastHandoverAt)||null,ts:Date.now()};if(CUR&&CUR.id===id&&el.isConnected)handoverRender(el,secs)}).catch(()=>{})}
+    }
+    el.innerHTML=handoverHtml(handoverData(CUR,since),HOW.h,rt,secs,ho)}catch(e){el.innerHTML='<div class="mu">Handover could not be drawn.</div>'}}
+document.addEventListener('click',async e=>{const b=e.target.closest('.pane[data-surface-pane] [data-ho-mark]');if(!b||!CUR||!SRV())return;
+  if(!confirm('Mark handover done now? "Entered since" restarts from this moment, for you only.'))return;
+  const id=CUR.id,pane=b.closest('.pane');b.disabled=true;
+  try{const r=await Store.handover.mark(id);HO[id]={at:(r&&r.lastHandoverAt)||null,ts:Date.now()};toast('Handover marked done.')}
+  catch(er){toast(er.status===403?'Your role ('+Store.me.role+') may not mark handover.':er.status===404?'This chart is not on the server yet. Wait for "Saved", then try again.':'Could not mark handover: '+er.message);b.disabled=false;return}
+  if(CUR&&CUR.id===id)surfaceRender(pane.id)});
 // V7c2: a surface tab is drawn by its pathway's sections; the 8/12/24 h buttons live inside the pane.
 function surfaceRender(id){
   const ps=emrSurfaces('case_tab').find(x=>x.surface&&x.surface.id===id),pane=$(id),body=pane&&pane.querySelector('[data-surface-body]');
@@ -2329,7 +2361,7 @@ function createNote(){
     if(CUR.notes.some(x=>x.setId===sid&&!x.amends))return toast('A note for this disease set already exists.');
     n.setId=sid;
   }else if(type==='template'){
-    const set=registry().find(x=>x.setId==='template.basic_emr');
+    const set=registry().find(x=>x.kind==='template'&&x.starter);
     if(set){n.setId=set.setId;if(!(CUR.applied||[]).some(a=>a.setId===set.setId))CUR.applied.push({setId:set.setId,version:+set.version||1,addedAt:now});}
     else n.text='Presenting concern:\nHistory:\nRelevant examination:\nAssessment:\nPlan:\n';
   }

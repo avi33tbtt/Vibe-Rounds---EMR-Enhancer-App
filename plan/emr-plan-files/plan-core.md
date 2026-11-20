@@ -27,8 +27,8 @@ Steps 5, 11, 14 and 16 are different from the old order in section 15.3. The old
 | 4 | [x] | `plan-F.md` | F0 to F3b | 24, 25 | **Gate 2:** the coverage report is right on made-up sets and on real seed sets. Then (manual) read the coverage report for each seed set against the example in 7.1. |
 | 5 | [x] | `plan-P-coding.md` | P0 to P2b, P3a to P3d, P4a to P4d, P5a | 38, 39 | - |
 | 6 | [x] | `plan-V.md` | V6b1 to V8c (V5a to V6a done) | 11, 17 | V8c has the Phase V release gate (checked after step 8). |
-| 7 | [ ] | `plan-R.md` | R2 to R9 | 12, 18, 19 | - |
-| 8 | [ ] | `plan-5-handover.md` | 37d4 to 37d5 | - | **Phase V gate:** I/O sum, ward board and handover look the same as before; no clinical set or field name left in code except the V8a allow-list; switching the Handover pathway off removes its tab. |
+| 7 | [x] | `plan-R.md` | R2 to R9 | 12, 18, 19 | - |
+| 8 | [x] | `plan-5-handover.md` | 37d4 to 37d5 (both done, 20 Nov 2026) | - | **V8d1 to V8d8 done (20 Nov 2026; `ALLOW_MAX` is 0). Do now: the Phase V gate. First make `npm test` green: run it twice (see the note above the gate in `plan-V.md`), then do the manual checks.** I/O sum, ward board and handover look the same as before; no clinical set or field name left in code except the V8a allow-list; switching the Handover pathway off removes its tab. |
 | 9 | [ ] | `plan-D-demo.md` | D0 to D5b | 35, 36 | **Gate D:** ten demo patients load on a fresh database and in Demo mode and match `demo-expected.json`. Then (manual) open each demo patient on the ward board, handover and flowsheets and confirm everything is marked synthetic. |
 | 10 | [ ] | `plan-F.md` | F4 | 28 | - |
 | 11 | [ ] | `plan-P-coding.md` | P2c | - | P2c needs F4, so it moved here from step 5. |

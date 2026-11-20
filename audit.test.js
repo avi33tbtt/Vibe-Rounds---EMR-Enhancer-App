@@ -96,6 +96,7 @@ test('every write route writes exactly one audit row, attributed to the logged-i
     ['POST /patients/:id/encounters', 'encounter.create', 201, async () => { const r = await P(`/api/patients/${st.p.id}/encounters`, { type: 'admission' }); st.enc = r.body; return r; }],
     ['PATCH /encounters/:id', 'encounter.update', 200, () => api().patch(`/api/encounters/${st.enc.id}`).send({ expectedVersion: 1, ward: 'W1', bed: 'B1' })],
     ['POST /cases/:id/alert-acks', 'alert.ack', 201, () => P(c() + '/alert-acks', { ruleId: 'r1', setId: 'care.t', sig: 'r1|>=|38|C|2026-11-19T08:00:00.000Z|1' })],
+    ['POST /cases/:id/handover', 'handover.mark', 200, () => P(c() + '/handover', {})],
     ['POST /cases/:id/link', 'case.link', 200, async () => P(c() + '/link', { expectedVersion: (await owner.query('SELECT version FROM cases WHERE id=$1', [st.c.id])).rows[0].version, patientId: st.p.id, encounterId: st.enc.id })],
     ['POST /encounters/:id/close', 'encounter.close', 200, () => P(`/api/encounters/${st.enc.id}/close`, { expectedVersion: 2 })],
     ['POST /encounters/:id/cancel', 'encounter.cancel', 200, async () => {                    // a second, unlinked encounter made straight in the database (not audited), then cancelled through the route

@@ -39,7 +39,7 @@ Time is stored as offsets from one **anchor date**, so the data can be moved to 
 
 ### 27.3 Tasks
 
-#### [ ] D0. Inventory of existing demo and synthetic code (no code)
+#### [x] D0. Inventory of existing demo and synthetic code (no code)
 **Run yourself, paste the output:**
 ```text
 grep -n "demo\|synthetic\|Demo" enhancer.html store.js | head -60
@@ -50,29 +50,39 @@ sed -n 1,45p seed.js
 Do not change code. From this output list: (1) what Demo mode already generates (synthetic-case buttons, demo patients), (2) the smallest set of existing functions that create a patient, an encounter, a case, apply a set and append a row with a time, (3) whether patients can carry a "synthetic" marker today or need a column. Reply as a short table.
 ```
 
-#### [ ] D1. DEMO-DATA.md and persona schema (doc only)
+*D0 result (20 Nov 2026), from `enhancer.html`, `store.js`, `patients.js`, `api.js`, `001_core.sql`. (1) Demo mode today: localStorage cases (`Store.mode==='local'`), typed demo patient fields on the case (`demo_patient`: name, ageSex, bed, mrn), the `synth()` button "Load 12 synthetic cases" (snake-envenomation cases for the Analytics tab; random, `syn:true`), banners "Demo mode: ... synthetic data only". No demo patients with encounters or longitudinal rows exist. (2) Real paths, all server routes: `POST /patients` (strict body: name, sex, dateOfBirth or ageYears, phone, nationalId; duplicate check gives 409 unless `confirmDifferent`; date of birth cannot be in the future); `POST /patients/:id/encounters` (type, startAt not in the future, ward, bed, attendingId; one open encounter per bed); `POST /encounters/:id/close` (expectedVersion, endAt); `POST /cases` (client id allowed, `applied`, `narrative`, `pathways`); `POST /cases/:id/link` (expectedVersion, patientId, encounterId); `POST /cases/:id/rows` (setId, groupId, row, `rowTime`, client id allowed; checks `canAddRow` and the set's `enter` access); `POST /cases/:id/rows/:rid/error` and PATCH for entered-in-error and amend; `POST /patients/:id/merge` (admin). In Demo mode the same cases are written through `Store` into localStorage. (3) Gaps: **MRN** is made by the server (`patient_mrn_seq`, 7 digits plus Luhn check) and a client MRN is refused, so the "clearly synthetic MRN pattern" of decision 35 cannot be had through the real create path; **no synthetic marker** exists on `patients` (001_core.sql; check later migrations with `grep -n "ALTER TABLE patients" *.sql`); **`entered_at` is the server's `now()`** on every insert, so seeded history has a historical `row_time` but an `entered_at` of seeding time (this affects the handover "entered since" list and any entered-at analytics: state it in DEMO-DATA.md); the seeder needs a user to act as (`entered_by`, `created_by`). **Proposed defaults for D1, tell me if you disagree:** a migration adds `patients.synthetic_key text` (nullable, unique, set only by `seed-demo.js`, never by a route) and the screens show a "synthetic" tag when it is set; names are "Demo Patient 01" to "10"; MRN stays server-made (the marker and the name identify demo patients); `seed-demo.js` idempotency checks `synthetic_key`, not MRN; `seed-demo.js` runs the app's own route handlers as a named demo user.*
+
+#### [x] D1. DEMO-DATA.md and persona schema (doc only)
 **File:** new `DEMO-DATA.md` | **Paste:** 27.1 and 27.2 of this plan
 ```text
 Write DEMO-DATA.md from this text: the rules, the ten personas, the anchor-date idea, the persona file schema (sets, fields, schedule, generation spec, entered-in-error and missing-time rules, merge links) and the expected-results file. No code.
 ```
 
-#### [ ] D2a. `demo-data.js`: deterministic generator (pure)
+*D1 result (20 Nov 2026): `DEMO-DATA.md` written: rules, the ten personas, the anchor-date idea (offsets are zero or negative, default anchor `2026-11-01T08:00:00Z`), what the real routes allow (from D0), the synthetic marker (`patients.synthetic_key`, set by the seeder only, migration in D3a), the persona file schema (patient, encounters, cases, series with schedule, skip, noTime, badTime, inError, amend; values; notes; merge), the persona validation list and the derived `demo-expected.json`. Ranges use the key `plausible`, never `min` or `max`. Stated limit: `entered_at` is seeding time on the server. Decisions 35 to 37 applied as defaults.*
+
+#### [x] D2a. `demo-data.js`: deterministic generator (pure)
 **Files:** new root `demo-data.js`, `demo-data.test.js` | **Paste:** DEMO-DATA.md schema, one seed set
 ```text
 Create demo-data.js with generateDemo({seed, anchor, personas}) returning patients, encounters, cases and rows with timestamps, entered_by placeholders, status and error reasons, all derived from the persona data. The code must not name any set or field id. Seeded random numbers only. Tests with a made-up persona file: determinism (same seed and anchor, identical output), offsets applied to the anchor, a missing-time row, an entered-in-error row, a merge link.
 ```
 
-#### [ ] D2b. `demo-personas.json`: D-01 to D-04 (data only)
+*D2a result (20 Nov 2026): `demo-data.js` (pure; seeded mulberry32, one random stream per persona, one random number per generated field so edits elsewhere do not shift values) exports `generateDemo`, `validatePersonas`, `expectedOf`; `demo-data.test.js` (7 tests, made-up persona only, plus a test that the generator source names no set or field). Bad time is sent as the text `not a time`; a missing time is `rowTime: null`.*
+
+#### [x] D2b. `demo-personas.json`: D-01 to D-04 (data only)
 **File:** new `demo-personas.json` | **Paste:** DEMO-DATA.md schema, the pathway member lists for DKA, snakebite, fever
 ```text
 Add personas D-01 to D-04 (the four short stays) as data only, using the schema. Generation ranges only make plausible-looking numbers; no clinical range, band or target. Test: the file validates against the schema and generateDemo runs on it.
 ```
 
-#### [ ] D2c. `demo-personas.json`: D-05 to D-09 (data only)
+*D2b result (20 Nov 2026): `demo-personas.json` holds D-01 to D-04. Added to the generator: gen `datetime` (offset from the row or value time) and series key `timeAs: "date"` (for a date-typed time field such as `a1c_date`). Written nowhere: `fever_thr`, `tgt_low`, `tgt_high`, `a1c_target`, `a1c_due`, `gap`, `neuro`, `rxn`, `vials`. Free-text doses hold no numbers. D-04 has no daily grid (the grid set is not in the fever pathway; D-02 covers it). `cases[].pathways` holds pathway ids and `applied` lists the member sets: D3a converts this to whatever `POST /cases` takes. Tests check every set, group and field against `element-sets.js`.*
+
+#### [x] D2c. `demo-personas.json`: D-05 to D-09 (data only)
 **File:** demo-personas.json | **Paste:** the file from D2b, DEMO-DATA.md schema
 ```text
 Add personas D-05 to D-09: two long follow-ups (18 and 24 months, with missed visits), the readmission shell, the merged duplicate pair, the data-quality case. Data only. Test: validates and generateDemo runs on it. D-10 comes in D6.
 ```
+
+*D2c result (20 Nov 2026): D-05 to D-09 added; `demo-expected.json` derived by `expectedOf(generateDemo(...))` and checked by a test. Added to the schema: `extraPatients` (the duplicate record for D-08; both keep the name and age, `syntheticKey` `demo-08` and `demo-08b`, so the key pattern is now `demo-NN` plus an optional letter) and a stricter merge check (two different patients of the persona). D-05 and D-06 have no encounter (`encounter: null`; a chart may be linked with no encounter) and are spans of 550 and 730 days from day offsets. Totals now: 10 patient records, 9 encounters, 11 cases, 348 rows, 4 entered in error, 6 without time, 2 amended, 3 signed notes. **Not in the persona data: "a recorded conflict" for D-09.** The schema has no key for it and a conflict is a 409 between two real writers; raise it in D3a (seeder) or D4. D-10 is added in D6.*
 
 #### [ ] D3a. `seed-demo.js`: write through the real paths
 **File:** new root `seed-demo.js` | **Paste:** the D0 functions, create-admin.js (as a script model)

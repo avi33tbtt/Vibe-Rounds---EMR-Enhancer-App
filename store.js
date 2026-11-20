@@ -743,6 +743,12 @@
   };
 
 
+  // chunk 37d5: last-handover time (37d4 routes). Server mode only; not queued, because the server stamps the time.
+  Store.handover = {
+    get: serverOnly((caseId) => api('GET', '/cases/' + pid(caseId, 'case') + '/handover')),          // -> { lastHandoverAt: ISO | null }
+    mark: serverOnly((caseId) => api('POST', '/cases/' + pid(caseId, 'case') + '/handover', {})),    // body is ignored by the server
+  };
+
   // ---------------------------------------------------------------- live refresh (chunk 37a)
   // While a case is open, GET /cases/:id/changes?since= is polled every 10 to 15 seconds (not while the tab is hidden) and what others changed is merged in.
   // The rule that matters: NOTHING the person has typed is overwritten. Per item, "mine" is the screen's working copy (`live`, else the cache) compared with

@@ -1,0 +1,153 @@
+{
+ "schemaVersion": 1,
+ "totals": {
+  "patients": 10,
+  "encounters": 9,
+  "cases": 11,
+  "rows": 348,
+  "activeRows": 344,
+  "enteredInErrorRows": 4,
+  "rowsWithoutTime": 6,
+  "amendedRows": 2,
+  "signedNotes": 3
+ },
+ "personas": {
+  "D-01": {
+   "patients": 1,
+   "encounters": 1,
+   "openEncounters": 1,
+   "cases": 1,
+   "rowsBySet": {
+    "care.vitals/vitals": 12,
+    "care.intake_output/io": 17
+   },
+   "enteredInErrorRows": 0,
+   "rowsWithoutTime": 0,
+   "amendedRows": 0,
+   "signedNotes": 0
+  },
+  "D-02": {
+   "patients": 1,
+   "encounters": 1,
+   "openEncounters": 0,
+   "cases": 1,
+   "rowsBySet": {
+    "care.vitals/vitals": 19,
+    "care.sliding_scale_insulin/ssi_log": 16,
+    "care.daily_insulin_monitoring/dim": 20,
+    "care.hba1c_monitoring/hba1c": 1
+   },
+   "enteredInErrorRows": 0,
+   "rowsWithoutTime": 0,
+   "amendedRows": 0,
+   "signedNotes": 1
+  },
+  "D-03": {
+   "patients": 1,
+   "encounters": 1,
+   "openEncounters": 0,
+   "cases": 1,
+   "rowsBySet": {
+    "care.vitals/vitals": 12
+   },
+   "enteredInErrorRows": 0,
+   "rowsWithoutTime": 0,
+   "amendedRows": 0,
+   "signedNotes": 1
+  },
+  "D-04": {
+   "patients": 1,
+   "encounters": 1,
+   "openEncounters": 1,
+   "cases": 1,
+   "rowsBySet": {
+    "care.vitals/vitals": 16,
+    "care.fever_chart/fever": 24
+   },
+   "enteredInErrorRows": 0,
+   "rowsWithoutTime": 0,
+   "amendedRows": 0,
+   "signedNotes": 0
+  },
+  "D-05": {
+   "patients": 1,
+   "encounters": 0,
+   "openEncounters": 0,
+   "cases": 1,
+   "rowsBySet": {
+    "care.hba1c_monitoring/hba1c": 6,
+    "care.hba1c_monitoring/cbg": 11,
+    "care.vitals/vitals": 6
+   },
+   "enteredInErrorRows": 0,
+   "rowsWithoutTime": 0,
+   "amendedRows": 0,
+   "signedNotes": 0
+  },
+  "D-06": {
+   "patients": 1,
+   "encounters": 0,
+   "openEncounters": 0,
+   "cases": 1,
+   "rowsBySet": {
+    "care.vitals/vitals": 7
+   },
+   "enteredInErrorRows": 0,
+   "rowsWithoutTime": 0,
+   "amendedRows": 0,
+   "signedNotes": 0
+  },
+  "D-07": {
+   "patients": 1,
+   "encounters": 2,
+   "openEncounters": 0,
+   "cases": 2,
+   "rowsBySet": {
+    "care.vitals/vitals": 36,
+    "care.intake_output/io": 20
+   },
+   "enteredInErrorRows": 0,
+   "rowsWithoutTime": 0,
+   "amendedRows": 0,
+   "signedNotes": 0
+  },
+  "D-08": {
+   "patients": 2,
+   "encounters": 2,
+   "openEncounters": 0,
+   "cases": 2,
+   "rowsBySet": {
+    "care.vitals/vitals": 16
+   },
+   "enteredInErrorRows": 0,
+   "rowsWithoutTime": 0,
+   "amendedRows": 0,
+   "signedNotes": 0
+  },
+  "D-09": {
+   "patients": 1,
+   "encounters": 1,
+   "openEncounters": 0,
+   "cases": 1,
+   "rowsBySet": {
+    "care.vitals/vitals": 79,
+    "care.intake_output/io": 30
+   },
+   "enteredInErrorRows": 4,
+   "rowsWithoutTime": 6,
+   "amendedRows": 2,
+   "signedNotes": 1
+  }
+ },
+ "events": {
+  "D-07": {
+   "readmissionGapDays": 21
+  },
+  "D-08": {
+   "mergedInto": "demo-08",
+   "mergedFrom": "demo-08b",
+   "rowsOnDuplicate": 8,
+   "rowsOnKept": 8
+  }
+ }
+}

@@ -1,6 +1,7 @@
 'use strict';
 // node --test handover-data.test.js
 // Chunk 37d1: handoverData is a pure function (no rendering, no judgement text). Also guards the boardRow text after the shared-helper refactor.
+// V6/V7: handoverData reads its sections through handoverSections() and sectionsData() (the SECTIONS table); with no EMR view pathway in the registry it uses HANDOVER_FALLBACK. All of them are extracted from enhancer.html here.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -10,7 +11,9 @@ const html = fs.readFileSync('./enhancer.html', 'utf8');
 const grab = (re) => { const m = html.match(re); assert.ok(m, 'not found: ' + re); return m[0]; };
 const names = ['flS', 'vk', 'rowsOf', 'rowT', 'grp', 'tcol', 'shortOf', 'isPw', 'ageTxt'];
 const code = names.map((n) => grab(new RegExp('^const ' + n + '=.*\\n', 'm'))).join('')
-  + ['rowVals', 'rowText', 'latestOf'].map((n) => grab(new RegExp('^function ' + n + '\\(.*\\n', 'm'))).join('')
+  + ['pairOf', 'rowVals', 'rowText', 'latestOf'].map((n) => grab(new RegExp('^function ' + n + '\\(.*\\n', 'm'))).join('')
+  + grab(/^const SECTIONS=\{[\s\S]*?\n\};\n/m) + grab(/^const HANDOVER_FALLBACK=.*\n/m)
+  + ['handoverSections', 'sectionsData'].map((n) => grab(new RegExp('^function ' + n + '\\(.*\\n', 'm'))).join('')
   + grab(/^function handoverData[\s\S]*?\n}\n/m);
 const NOW = Date.parse('2026-11-20T12:00:00Z'), iso = (minAgo) => new Date(NOW - minAgo * 6e4).toISOString();
 const SETS = {
@@ -22,6 +25,7 @@ const SETS = {
 const ctx = { Date: class extends Date { constructor(...a) { a.length ? super(...a) : super(NOW); } static now() { return NOW; } } };
 vm.createContext(ctx);
 ctx.getSet = (id) => SETS[id] || null;
+ctx.emrSurfaces = () => [];                                  // no EMR view pathway in this made-up registry: the fallback sections apply
 vm.runInContext(code + ';this.handoverData=handoverData;', ctx);
 const J = (x) => JSON.parse(JSON.stringify(x));
 const kase = (rows, extra) => Object.assign({ applied: [{ setId: 'care.vitals' }], values: { 'care.vitals/@v': rows } }, extra);

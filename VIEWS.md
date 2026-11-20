@@ -18,6 +18,15 @@ All keys refer to field ids declared in the same set. The closed list is `VIEW_K
 
 **Keys used by those types:** `type`, `timeField`, `tempField`, `unitField`, `thresholdField`, `thresholdUnitField`, `extra` (field ids), `slotField`, `glucoseField`, `doseField`, `byField`, `slots`. (`thresholdField` and `doseField` name a field where a clinician types a value; the view never holds a number.)
 
+**Display keys added in V8d (all optional, all display or export only; ids and labels, never values):**
+
+| Key | Does |
+|---|---|
+| `methodField` (fever view) | the field whose value becomes the method text of the temperature reading in FHIR export (that field is not exported on its own) |
+| `targetLowField`, `targetHighField` (dailygrid view) | fields where the clinician types the display band; the band is drawn only when both are typed. Shown as typed, never judged |
+| `echo:{setId, label}` (dailygrid view) | a note that points to the card of another set; both parts are required text |
+| `extra:[field ids]` (fever view) | the first listed field is drawn as a second series |
+
 **Blocks added in Phase V and later:**
 
 | Key | Does | Status |
@@ -31,6 +40,18 @@ All keys refer to field ids declared in the same set. The closed list is `VIEW_K
 | `drives:{...}` | informational only, see decision 15 | allowed key, not built (ADT, 50) |
 
 **Pure helpers in `views.js`:** `validateView`, `validatePathwayViews`, `fieldsById`, `rowsInWindow(rows, timeField, fromMs, toMs)` (skips entered-in-error rows and unreadable times), `sumBy(rows, spec, fromMs, toMs)`; coding helpers `validateCoding`, `validateSetCoding`, `codingAllow` (see CODING.md).
+
+## Field and set flags (V8d)
+
+| Where | Flag | Does |
+|---|---|---|
+| field | `pair:{with, code, short}` | this field and the field `with` (same group) are one paired reading: joined in flowsheet lines, text lines and FHIR export as one reading. `code` is the export text, `short` the short label in text lines. Validated by `validateView` (even when the set has no `view`) |
+| field (date) | `followUp:{label, history?:{group, valueField, dateField}}` | this date field is the "next due" date of a follow-up: it gets the due badge in the case, the due label in the patient list (`label` + days) and, with `history`, a "days since last reading" line in Care pathway analytics from the named repeat group. One per set. Validated by `validateView` (date field, not repeat; `history` fields in the same group, a number and a date). Display only; no target or interval |
+| set | `quick.order` | order in the quick-add and pin lists |
+| set | `quick.summary` | shown as a quick-add button on Summary |
+| set | `quick.suggest` | position in the Demo-mode default suggestion list (lowest first) |
+| set | `starter:true` | the set used by "new note from template" |
+| set | `demoCases:true` | the set the Demo-mode sample cases are made for |
 
 ## Surface types (closed list)
 
@@ -66,7 +87,7 @@ The closed list is `SECTION_TYPES` in `views.js`. Built (V6): `narrative`, `acti
 
 ## Engine rules
 
-- **E1.** Code (`enhancer.html`, `store.js`, `api.js`) never names a clinical set id, field id or option text. Only seed data and tests do. `no-handcode.test.js` enforces it by scanning the code for every seed set and field id; ids of EMR view pathways (configuration names) are exempt. Its ALLOW list holds the hand-coded lines still to be moved into data (tasks V8d1 to V8d8); it may only shrink and must be empty at the Phase V gate.
+- **E1.** Code (`enhancer.html`, `store.js`, `api.js`) never names a clinical set id, field id or option text. Only seed data and tests do. `no-handcode.test.js` enforces it by scanning the code for every seed set and field id; ids of EMR view pathways (configuration names) are exempt. Its ALLOW list holds the hand-coded lines still to be moved into data (tasks V8d1 to V8d8; all done, it is now empty); it may only shrink and must be empty at the Phase V gate.
 - **E2.** Every screen is a registered view, section or surface type plus data.
 - **E3.** A new type needs one pure function, a test that uses a **made-up set** (proves it is generic), a validator entry, and one line in this file.
 - **E4.** View data holds ids, labels and display windows only. No doses, thresholds, bands or rules. Pathways stay `rules:[]` in seed. `views-safety.test.js` checks this on every seed view, surface and section.

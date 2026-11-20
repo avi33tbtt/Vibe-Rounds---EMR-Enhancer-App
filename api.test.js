@@ -159,7 +159,7 @@ test('notes: draft, sign (signer from session), signed is read-only, amend needs
 
 test('element sets: seed sets are read-only (PATCH, DELETE, POST all 403); user sets version up', async () => {
   const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'seed-')), 'element-sets.js');
-  fs.writeFileSync(tmp, "window.SEED_SETS=[{setId:'care.vitals',kind:'care',version:1,title:'Vitals',sections:[]}];");
+  fs.writeFileSync(tmp, "window.SEED_SETS=[{setId:'care.vitals',kind:'care',version:1,title:'Vitals',sections:[],access:{view:['admin','doctor','nurse','informatician','viewer'],enter:['admin','doctor'],amend:['admin','doctor'],approve:['admin','doctor'],configure:['admin'],export:['admin']}}];");
   const seeds = readSeedSets(tmp);
   assert.deepEqual(await seedSets(db, seeds), { inserted: 1, unchanged: 0 });
   assert.deepEqual(await seedSets(db, seeds), { inserted: 0, unchanged: 1 });
@@ -287,7 +287,7 @@ test('rules and protocols: delete needs the current version; protocol approval i
 test('GET /api/me returns the acting user (a session user: mode "session")', async () => {
   const r = await api().get('/api/me');
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.body).sort(), ['ai', 'allowed', 'id', 'mode', 'mustChangePassword', 'name', 'role']);
+  assert.deepEqual(Object.keys(r.body).sort(), ['ai', 'allowed', 'emrViews', 'id', 'mode', 'mustChangePassword', 'name', 'role']);
   assert.equal(r.body.ai, false, 'AI is off by default (chunk 36b)');
   assert.ok(Array.isArray(r.body.allowed) && r.body.allowed.includes('rule.approve') && r.body.allowed.includes('session.read'), 'allowed lists the actions of the role (chunk 32d2)');
   assert.equal(r.body.mode, 'session'); assert.equal(r.body.role, 'admin'); assert.match(r.body.id, /^[0-9a-f-]{36}$/);
@@ -306,8 +306,8 @@ test('seed: real element-sets.js loads, ids unique, zero rules, zero protocol ba
   for (const s of sets) {
     if (Array.isArray(s.rules) ? s.rules.length : s.rules != null) problems.push(`${s.setId}: ships with rules`);
     if (s.protocol && !(Array.isArray(s.protocol.bands) && s.protocol.bands.length === 0)) problems.push(`${s.setId}: protocol has bands`);
-    if (s.kind === 'pathway') {                                  // a pathway bundles sets only
-      if (!Array.isArray(s.members) || !s.members.length) problems.push(`${s.setId}: pathway has no members`);
+    if (s.kind === 'pathway') {                                  // a pathway bundles sets only; an EMR view pathway (contexts 'emr') is a screen description and has members: []
+      if (!(s.contexts || []).includes('emr') && (!Array.isArray(s.members) || !s.members.length)) problems.push(`${s.setId}: pathway has no members`);
       if (s.protocol) problems.push(`${s.setId}: pathway carries a protocol`);
     }
     // Threshold, target and band fields exist for the clinician to type into; none may be pre-filled.

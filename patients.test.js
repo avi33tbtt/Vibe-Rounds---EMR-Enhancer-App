@@ -475,3 +475,21 @@ test('34d: the Patient and Encounter builders copy only what they are given (uni
   const en = fhirEncounter({ type: 'emergency', status: 'cancelled', ward: 'W', bed: null, start_at: '2026-01-01T00:00:00Z', end_at: null }, 'urn:uuid:x', 'Dr Who');
   assert.equal(en.status, 'cancelled'); assert.equal(en.class.code, 'EMER'); assert.equal(en.location[0].location.display, 'W'); assert.equal(en.participant[0].individual.display, 'Dr Who');
 });
+
+test('synthetic marker: column exists, no route can set it, reads show only a yes/no flag, the key is unique', async () => {
+  const col = await owner.query("SELECT 1 FROM information_schema.columns WHERE table_name='patients' AND column_name='synthetic_key'");
+  assert.equal(col.rows.length, 1);
+  const bad = await reg({ synthetic_key: 'demo-01' });
+  assert.equal(bad.status, 400, 'create refuses synthetic_key');
+  const p = await mkPatient();
+  assert.equal(p.synthetic, false);
+  const pr = await who.nurse.agent.patch('/api/patients/' + p.id).send({ expectedVersion: p.version, reason: 'try marker', synthetic_key: 'demo-01' });
+  assert.equal(pr.status, 400, 'patch refuses synthetic_key');
+  await owner.query('UPDATE patients SET synthetic_key=$2 WHERE id=$1', [p.id, 'demo-t1']);
+  const g = await who.doctor.agent.get('/api/patients/' + p.id);
+  assert.equal(g.status, 200); assert.equal(g.body.synthetic, true);
+  assert.ok(!JSON.stringify(g.body).includes('demo-t1') && g.body.synthetic_key === undefined, 'the key itself is never returned');
+  const q = await mkPatient();
+  await assert.rejects(owner.query('UPDATE patients SET synthetic_key=$2 WHERE id=$1', [q.id, 'demo-t1']), /patients_synthetic_key_uq|unique/i);
+  await owner.query('UPDATE patients SET synthetic_key=NULL WHERE id=$1', [p.id]);
+});

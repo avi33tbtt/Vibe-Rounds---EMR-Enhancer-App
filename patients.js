@@ -21,7 +21,7 @@ const VIEW_THROTTLE_MIN = 10;
 // the same expressions as the indexes in 005_patients.sql
 const NORM = (p) => `lower(regexp_replace(btrim(${p}), '\\s+', ' ', 'g'))`;
 const DIGITS = (p) => `regexp_replace(${p}, '\\D', '', 'g')`;
-const PCOLS = `id, mrn, name, sex, to_char(date_of_birth, 'YYYY-MM-DD') AS dob, age_estimated, phone, national_id, (national_id IS NOT NULL) AS has_nid,
+const PCOLS = `id, mrn, name, sex, to_char(date_of_birth, 'YYYY-MM-DD') AS dob, age_estimated, phone, national_id, (national_id IS NOT NULL) AS has_nid, synthetic_key,
   active, merged_into, version, created_at, updated_at`;
 const ECOLS = 'id, patient_id, type, start_at, end_at, ward, bed, attending, status, cancel_reason, version, updated_at';
 
@@ -110,7 +110,7 @@ function fhirEncounter(e, patientUrl, attendingName) {
 function mountPatients(r, { db, ApiError, wrap, parse, idParam, iso, audit, auditOnce, can, loadCase }) {
   const fail = (s, c, m, x) => new ApiError(s, c, m, x);
   const patOut = (p, { detail = false, nid: showNid = false } = {}) => ({
-    id: p.id, mrn: p.mrn, name: p.name, sex: p.sex, dateOfBirth: p.dob, ageEstimated: p.age_estimated, active: p.active, mergedInto: p.merged_into, hasNationalId: p.has_nid, version: p.version,
+    id: p.id, mrn: p.mrn, name: p.name, sex: p.sex, dateOfBirth: p.dob, ageEstimated: p.age_estimated, active: p.active, mergedInto: p.merged_into, hasNationalId: p.has_nid, synthetic: p.synthetic_key != null, version: p.version,
     ...(detail ? { phone: p.phone, createdAt: iso(p.created_at), updatedAt: iso(p.updated_at) } : {}), ...(showNid ? { nationalId: p.national_id } : {}),
   });
   const snap = (p) => ({ name: p.name, sex: p.sex, dateOfBirth: p.dob, ageEstimated: p.age_estimated, phone: p.phone });      // audit content: no national id

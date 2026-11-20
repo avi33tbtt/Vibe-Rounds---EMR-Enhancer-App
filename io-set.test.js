@@ -42,12 +42,12 @@ test('care.intake_output has zero rules, thresholds, bands, targets, limits and 
   assert.ok(!/thr|tgt|target|limit|goal/i.test(ids), 'no field id for a threshold, target or limit');
 });
 
-test('care.intake_output has a summary block (V4b), version 2, and its view validates', () => {
-  assert.equal(io.version, 2);
-  assert.deepEqual(io.view.summary, [{ type: 'sumBy', timeField: 'io_time', keyField: 'io_type', valueField: 'io_volume', windowsHours: [8, 12, 24], label: 'sum of entered rows' }]);
+test('care.intake_output has a summary block (V4b), version 3, and its view validates', () => {
+  assert.equal(io.version, 3);
+  assert.deepEqual(JSON.parse(JSON.stringify(io.view.summary)), [{ type: 'sumBy', timeField: 'io_time', keyField: 'io_type', valueField: 'io_volume', windowsHours: [8, 12, 24], label: 'sum of entered rows' }]);
   const r = validateView(io);
-  assert.deepEqual(r.errors, []);
-  assert.deepEqual(r.warnings, []);
+  assert.deepEqual(JSON.parse(JSON.stringify(r.errors)), []);
+  assert.deepEqual(JSON.parse(JSON.stringify(r.warnings)), []);
 });
 
 test('the quick-bar order is unique among the direct sets', () => {
