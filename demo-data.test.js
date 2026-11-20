@@ -141,3 +141,121 @@ test('timestamps increase within each series; the two records of D-08 share a na
   const two = d.patients.filter((p) => p.personaId === 'D-08'); assert.equal(two[0].name, two[1].name); assert.notEqual(two[0].syntheticKey, two[1].syntheticKey);
   assert.equal(new Set(d.patients.map((p) => p.syntheticKey)).size, d.patients.length);
 });
+
+// ---- D5a: longitudinal checks (on the real generated data) ----
+const DAY = 86400000, MONTH = 30 * DAY;
+const seriesOf = (d) => { const m = {}; for (const r of d.rows) { const k = r.id.replace(/-r\d+$/, ''); (m[k] = m[k] || []).push(r); } return m; };
+const timesOf = (rows) => rows.filter((r) => r.timeKind === 'ok').map((r) => Date.parse(r.rowTime));
+
+test('D5a: within every series the rows are in index order and recorded times never go backwards or past the anchor', () => {
+  const f = fileOf(), d = demoOf(), A = Date.parse(f.anchor);
+  for (const [k, rows] of Object.entries(seriesOf(d))) {
+    const ix = rows.map((r) => r.index);
+    assert.deepEqual(ix, [...ix].sort((a, b) => a - b), k + ': rows not in index order');
+    const t = timesOf(rows);
+    for (let i = 1; i < t.length; i++) assert.ok(t[i] >= t[i - 1], k + ': time goes backwards at ' + i);
+    assert.ok(t.every((x) => x <= A), k + ': a time is after the anchor');
+  }
+});
+test('D5a: every encounter ends after it starts and not after the anchor; two stays of one patient never overlap', () => {
+  const f = fileOf(), d = demoOf(), A = Date.parse(f.anchor), by = {};
+  for (const e of d.encounters) {
+    assert.ok(Date.parse(e.startAt) <= A, e.id + ' starts after the anchor');
+    if (e.endAt) assert.ok(Date.parse(e.startAt) < Date.parse(e.endAt) && Date.parse(e.endAt) <= A, e.id + ' has a bad end');
+    (by[e.patient] = by[e.patient] || []).push(e);
+  }
+  for (const list of Object.values(by)) {
+    list.sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt));
+    for (let i = 1; i < list.length; i++) assert.ok(list[i - 1].endAt && Date.parse(list[i - 1].endAt) <= Date.parse(list[i].startAt), list[i].id + ' overlaps the stay before it');
+  }
+});
+test('D5a: D-05 and D-06 span their stated months (18 and 24, one month of slack) and their charts have no encounter', () => {
+  const d = demoOf();
+  for (const [id, months] of [['D-05', 18], ['D-06', 24]]) {
+    const t = timesOf(d.rows.filter((r) => r.personaId === id));
+    assert.ok(t.length >= 5, id + ': too few recorded visits');
+    assert.ok(Math.max(...t) - Math.min(...t) >= (months - 1) * MONTH, id + ' spans less than about ' + months + ' months');
+    assert.ok(d.cases.filter((c) => c.personaId === id).every((c) => c.encounter === null), id + ': a follow-up chart is linked to an encounter');
+  }
+});
+test('D5a: D-07 has two closed stays of one patient about three weeks apart, and the gap equals demo-expected.json', () => {
+  const d = demoOf(), e = JSON.parse(fs.readFileSync('./demo-expected.json', 'utf8')), s = d.encounters.filter((x) => x.personaId === 'D-07').sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt));
+  assert.equal(s.length, 2); assert.equal(s[0].patient, s[1].patient); assert.ok(s[0].endAt && s[1].endAt);
+  const gap = (Date.parse(s[1].startAt) - Date.parse(s[0].endAt)) / DAY;
+  assert.ok(gap >= 14 && gap <= 28, 'gap is ' + gap + ' days');
+  assert.equal(Math.round(gap), e.events['D-07'].readmissionGapDays);
+});
+test('D5a: demo-expected.json counts equal counts made again here from the raw generated rows', () => {
+  const d = demoOf(), e = JSON.parse(fs.readFileSync('./demo-expected.json', 'utf8')), T = e.totals, P = e.personas;
+  assert.equal(T.patients, d.patients.length); assert.equal(T.encounters, d.encounters.length); assert.equal(T.cases, d.cases.length); assert.equal(T.rows, d.rows.length);
+  assert.equal(T.activeRows, d.rows.filter((r) => r.status === 'active').length);
+  assert.equal(T.enteredInErrorRows, d.rows.filter((r) => r.status === 'entered_in_error').length);
+  assert.equal(T.rowsWithoutTime, d.rows.filter((r) => r.timeKind !== 'ok').length);
+  assert.equal(T.amendedRows, d.rows.filter((r) => r.amend).length);
+  assert.equal(T.signedNotes, d.notes.filter((n) => n.sign).length);
+  assert.equal(Object.keys(P).length, 10);
+  for (const [id, p] of Object.entries(P)) {
+    const rows = d.rows.filter((r) => r.personaId === id), by = {};
+    for (const r of rows) by[r.setId + '/' + r.groupId] = (by[r.setId + '/' + r.groupId] || 0) + 1;
+    assert.deepEqual(p.rowsBySet, by, id + ': rowsBySet');
+    assert.equal(p.patients, d.patients.filter((x) => x.personaId === id).length, id + ': patients');
+    assert.equal(p.encounters, d.encounters.filter((x) => x.personaId === id).length, id + ': encounters');
+    assert.equal(p.openEncounters, d.encounters.filter((x) => x.personaId === id && !x.endAt).length, id + ': open encounters');
+    assert.equal(p.cases, d.cases.filter((x) => x.personaId === id).length, id + ': cases');
+  }
+  for (const k of ['patients', 'encounters', 'cases', 'enteredInErrorRows', 'rowsWithoutTime', 'amendedRows', 'signedNotes']) assert.equal(Object.values(P).reduce((a, p) => a + p[k], 0), T[k], 'persona ' + k + ' do not add up to the total');
+});
+
+// ---- D5b1: merge and data-quality checks on the generated data (the projectCase and export half is D5b2, after F4) ----
+const ISO_TEXT = /\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z?)?/g;
+// Heuristic, on purpose narrow: dates and times are removed first, then a run of 7 or more digits (an MRN or phone), a "+" number, "(ddd)", ddd-ddd-dddd or an e-mail address is "real-looking".
+const lookReal = (s) => { const t = String(s).replace(ISO_TEXT, ''); return /\d{7,}/.test(t) || /\+\d/.test(t) || /\(\d{3}\)/.test(t) || /\b\d{3}[ -]\d{3}[ -]?\d{4}\b/.test(t) || /\S@\S/.test(t); };
+const textsOf = (d) => [
+  ...d.patients.map((p) => p.name), ...d.cases.map((c) => c.narrative), ...d.merges.map((m) => m.reason), ...d.values.map((v) => v.value),
+  ...d.notes.flatMap((n) => [n.text, n.amend && n.amend.text, n.amend && n.amend.reason]),
+  ...d.rows.flatMap((r) => [...Object.values(r.row), r.amend && r.amend.value, r.amend && r.amend.reason, r.error && r.error.reason]),
+].filter((x) => typeof x === 'string');
+
+test('D5b1: the real-looking detector flags phones, long digit runs and e-mail, and leaves dates, times and ordinary numbers alone', () => {
+  for (const bad of ['+977 9812345678', '9812345678', '555-123-4567', '(555) 123', '0123456', 'a@b.org']) assert.ok(lookReal(bad), bad + ' should be flagged');
+  for (const ok of ['2026-11-01T08:00:00.000Z', '2026-11-01', '120', '7.4', '98 72 14', 'not a time', 'Demo Patient 05', '']) assert.ok(!lookReal(ok), ok + ' should pass');
+});
+test('D5b1: no demo name, value, note, narrative or reason looks like a real phone, id number or e-mail; every name is "Demo Patient NN"', () => {
+  const d = demoOf(), hits = textsOf(d).filter(lookReal);
+  assert.deepEqual(hits, [], 'real-looking text: ' + hits.slice(0, 5).join(' | '));
+  for (const p of d.patients) assert.match(p.name, /^Demo Patient \d\d$/, p.id + ' name');
+  assert.ok(fileOf().personas.every((p) => !/phone|nationalid/i.test(JSON.stringify(p))), 'a persona carries a phone or national id key');
+});
+test('D5b1: the merged pair (D-08) is one person: every row has one id, is counted once, and both records resolve to the kept one', () => {
+  const d = demoOf(), e = expectedOf(d), into = {}, owner = {}, per = {};
+  assert.equal(new Set(d.rows.map((r) => r.id)).size, d.rows.length, 'a row id repeats');
+  for (const m of d.merges) { assert.ok(!into[m.from], m.from + ' is merged twice'); assert.notEqual(m.from, m.into); into[m.from] = m.into; }
+  const keep = (id) => { for (let n = 0; into[id]; n++) { assert.ok(n < 5, 'merge loop at ' + id); id = into[id]; } return id; };
+  for (const c of d.cases) owner[c.id] = c.patient;
+  for (const r of d.rows) { assert.ok(owner[r.case], r.id + ': its chart is missing'); const k = keep(owner[r.case]); per[k] = (per[k] || 0) + 1; }
+  assert.equal(Object.values(per).reduce((a, n) => a + n, 0), d.rows.length, 'a row was lost or counted twice');
+  assert.equal(new Set(d.patients.map((p) => keep(p.id))).size, d.patients.length - d.merges.length, 'people after merge');
+  const m = d.merges.find((x) => d.patients.find((p) => p.id === x.into).personaId === 'D-08'), ev = e.events['D-08'];
+  assert.ok(m && ev.rowsOnDuplicate > 0 && ev.rowsOnKept > 0);
+  assert.equal(per[m.into], ev.rowsOnDuplicate + ev.rowsOnKept, 'rows of both records land on the kept record');
+  assert.equal(per[m.from], undefined, 'rows are still counted under the duplicate');
+});
+test('D5b1: rows without a usable time are flagged (none or bad), never given a date; error and amended rows say who and why', () => {
+  const f = fileOf(), d = demoOf(), kinds = new Set();
+  for (const r of d.rows) {
+    kinds.add(r.timeKind);
+    if (r.timeKind === 'ok') assert.ok(Number.isFinite(Date.parse(r.rowTime)), r.id + ': bad recorded time');
+    else if (r.timeKind === 'none') assert.equal(r.rowTime, null, r.id);
+    else { assert.equal(r.timeKind, 'bad', r.id); assert.equal(r.rowTime, 'not a time', r.id); assert.ok(Object.values(r.row).includes('not a time'), r.id + ': the bad time text is not in the row'); }
+    if (r.status === 'entered_in_error') {
+      assert.ok(r.error && r.error.by && r.error.reason.length >= 3 && r.error.reason.length <= 1000, r.id + ': error needs who and a reason of 3 to 1000 characters');
+      if (f.actors) assert.ok(f.actors[r.error.by], r.id + ': error by an unknown actor');
+    } else { assert.equal(r.status, 'active', r.id); assert.equal(r.error, null, r.id); }
+    if (r.amend) assert.ok(r.amend.by && r.amend.field && r.amend.reason.length >= 3 && typeof r.amend.value === 'string', r.id + ': amend needs who, field, reason, value');
+  }
+  assert.ok(kinds.has('none') && kinds.has('bad'), 'the data should hold both a missing and an invalid time');
+  const T = expectedOf(d).totals;
+  assert.equal(T.activeRows + T.enteredInErrorRows, T.rows, 'every row is active or entered in error');
+  assert.equal(T.rowsWithoutTime, d.rows.filter((r) => r.timeKind !== 'ok').length);
+});
+test.todo('D5b2 (needs F4): D-08 appears once in projectCase and once in the export; D-09 error rows and missing-time rows are skipped or flagged in projectCase as designed');

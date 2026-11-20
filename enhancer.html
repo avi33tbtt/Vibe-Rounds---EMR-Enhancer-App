@@ -217,7 +217,7 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 <div id="hist" role="dialog" aria-modal="false" aria-labelledby="histTitle"><div class="sh"><b id="histTitle">Case history</b><span style="flex:1"></span><label id="histErrWrap" class="mu" hidden style="display:none;align-items:center;gap:4px;margin:0"><input type="checkbox" id="histErr"> Show entered-in-error</label><button class="b sm" type="button" id="histClose">Close</button></div><div class="mu" id="histMsg" aria-live="polite"></div><div id="histBody"></div></div>
 <div id="addPanel"><div class="sh"><b>Add to chart</b><span style="flex:1"></span><button class="b sm" type="button" id="addClose">Close</button></div><aside id="sb"><b>Suggested</b><div id="chips"></div><button class="b sm" id="sugb" style="margin-top:6px" onclick="suggestSets()" disabled title="AI is off, or not available to your role.">Suggest sets &amp; pathways from narrative</button><div id="sugs"></div><label for="ctxp" style="margin-top:14px">Context</label><select id="ctxp" onchange="CTX=this.value;sidebar()"></select><label for="q" style="margin-top:10px">Element sets</label><input id="q" placeholder="Search sets…"><div id="slist"></div></aside></div>
 <div id="noCase" class="cd patients-screen">
-  <div class="patients-head"><div><h2>Patients</h2><div class="mu">Ward list · synthetic demo records only</div></div><button class="b" id="patientsNew" type="button">+ New patient</button></div>
+  <div class="patients-head"><div><h2>Patients</h2><div class="mu">Ward list · synthetic demo records only</div></div><button class="b sm" id="demoLoad" type="button" hidden title="Demo mode only: loads ten synthetic patients into this browser">Load 10 demo patients</button><button class="b" id="patientsNew" type="button">+ New patient</button></div>
   <div class="patients-tools"><input id="patientsSearch" type="search" placeholder="Search name or MRN…" aria-label="Search patients by name or MRN"><select id="patientsWard" aria-label="Filter by ward"><option value="">All wards</option></select><select id="patientsSort" aria-label="Sort patients"><option value="bed">Sort: bed</option><option value="recent">Sort: most recent activity</option></select><label class="mypts-toggle"><input id="myPatients" type="checkbox"> My patients</label></div>
   <div class="mu patients-hint">Keyboard: <kbd>/</kbd> search · <kbd>Alt</kbd>+<kbd>1</kbd>–<kbd>6</kbd> chart sections · <kbd>Alt</kbd>+<kbd>P</kbd> patients</div>
   <div id="patientsCount" class="mu" aria-live="polite"></div>
@@ -892,6 +892,7 @@ Object.assign(g,{toCdsCard,generateRuleDraft,ruleBox,pwRuleBoxes,ruleUI,cdsRende
 </script>
 <script src="store.js"></script>
 <script src="views.js"></script>
+<script src="demo-local.js"></script>
 <script>
 const $=i=>document.getElementById(i);
 let CUR=null,PT=null;
@@ -2458,7 +2459,7 @@ function paintSave(st){
 }
 function paintMode(){
   const demo=Store.mode==='local';
-  $('demoBan').hidden=!demo;$('wireBan').hidden=demo||WIRING_DONE;
+  $('demoBan').hidden=!demo;$('wireBan').hidden=demo||WIRING_DONE;{const dl=$('demoLoad');if(dl)dl.hidden=!demo}
   const t=$('modeToggle');t.textContent='Demo mode: '+(demo?'on':'off');t.setAttribute('aria-pressed',String(demo));
 }
 let BOOTED=false;
@@ -2871,6 +2872,21 @@ $('conflictBan').addEventListener('click',e=>{const r=e.target.closest('[data-re
 Store.hooks.onConflict=(key,cur,info)=>{const id=String(key).slice(String(key).indexOf(':')+1).split('|')[0],ci=Store.conflictInfo(id);if(ci&&ci.isCase&&CUR&&CUR.id===id&&CASE_OPEN&&$('cfm').hidden)cfmOpen(id)};
 Store.hooks.onStatus=paintSave;
 $('bootRetry').addEventListener('click',()=>boot());
+$('demoLoad').addEventListener('click',async()=>{
+  if(Store.mode!=='local')return;                                   // server mode never loads demo data
+  const had=getC().some(c=>c.demo);
+  if(!confirm((had?'Replace the demo patients already here with a fresh set? ':'')+'Load the synthetic demo patients into this browser? Your other cases are kept. Synthetic data only.'))return;
+  try{
+    const [src,pj]=await Promise.all([
+      fetch('/demo-data.js').then(r=>{if(!r.ok)throw new Error('demo-data.js not found');return r.text()}),
+      fetch('/demo-personas.json').then(r=>{if(!r.ok)throw new Error('demo-personas.json not found');return r.json()})]);
+    const m={exports:{}};new Function('module','exports',src)(m,m.exports);
+    const data=m.exports.generateDemo({seed:1,anchor:'2026-11-01T08:00:00Z',personas:Array.isArray(pj)?pj:(pj.personas||pj)});   // same seed and anchor as seed-demo.js
+    const demo=DemoLocal.toLocalCases(data);
+    if(!setC(getC().filter(c=>!c.demo).concat(demo)))return;
+    toast('Loaded '+demo.length+' demo cases. Reloading…');setTimeout(()=>location.reload(),600);
+  }catch(e){toast('Could not load demo patients: '+e.message)}
+});
 $('bootDemo').addEventListener('click',()=>Store.setMode('local'));
 $('saveRetry').addEventListener('click',()=>Store.retry());
 $('modeToggle').addEventListener('click',()=>{

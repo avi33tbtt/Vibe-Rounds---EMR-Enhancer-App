@@ -161,7 +161,7 @@ The numbers above are an example. The file is **derived** by `expectedOf(generat
 | File | Written in | Holds |
 |---|---|---|
 | `DEMO-DATA.md` | D1 (this), extended in D8 | the contract |
-| `demo-data.js`, `demo-data.test.js` | D2a, D5a, D5b | pure generator, schema check, `expectedOf` |
+| `demo-data.js`, `demo-data.test.js` | D2a, D5a, D5b1, D5b2 | pure generator, schema check, `expectedOf`; tests for longitudinal shape, merge, data quality and real-looking text (D5b1), projectCase and export (D5b2, after F4) |
 | `demo-personas.json` | D2b (D-01 to D-04), D2c (D-05 to D-09), D6 (D-10, ADT, allergy, order, MAR rows) | the ten people |
 | `demo-expected.json` | D2c, D6 | expected counts and events |
 | `seed-demo.js` | D3a, D3b | server loader (guards, idempotency) |

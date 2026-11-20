@@ -84,35 +84,52 @@ Add personas D-05 to D-09: two long follow-ups (18 and 24 months, with missed vi
 
 *D2c result (20 Nov 2026): D-05 to D-09 added; `demo-expected.json` derived by `expectedOf(generateDemo(...))` and checked by a test. Added to the schema: `extraPatients` (the duplicate record for D-08; both keep the name and age, `syntheticKey` `demo-08` and `demo-08b`, so the key pattern is now `demo-NN` plus an optional letter) and a stricter merge check (two different patients of the persona). D-05 and D-06 have no encounter (`encounter: null`; a chart may be linked with no encounter) and are spans of 550 and 730 days from day offsets. Totals now: 10 patient records, 9 encounters, 11 cases, 348 rows, 4 entered in error, 6 without time, 2 amended, 3 signed notes. **Not in the persona data: "a recorded conflict" for D-09.** The schema has no key for it and a conflict is a 409 between two real writers; raise it in D3a (seeder) or D4. D-10 is added in D6.*
 
-#### [ ] D3a. `seed-demo.js`: write through the real paths
+#### [x] D3a. `seed-demo.js`: write through the real paths
 **File:** new root `seed-demo.js` | **Paste:** the D0 functions, create-admin.js (as a script model)
 ```text
 Add a script that writes generateDemo output through the existing create and append paths (so version and audit rows are written) and prints a summary. Nothing else yet.
 ```
 
-#### [ ] D3b. Guards and idempotency for `seed-demo.js`
+*D3a result (20 Nov 2026): `seed-demo.js` runs against a running server's own `/api` routes with a cookie and CSRF client, logged in as the named demo user `demo-seeder` (role admin, random password made at run time, never printed or stored). Order: patients (the D-08 duplicate warning is confirmed on purpose), encounters, cases linked to patient and encounter, rows with their time, entered-in-error where the persona says so, close finished stays, merges. `patients.synthetic_key` is set by direct SQL after each create, because no route accepts it. `--dry` prints the shape of the generated data and touches nothing. Exports `seed`, `client`, `demoUser`. **Still not handled: D-09's "recorded conflict"** (the persona schema has no key for it); decide in D4-era follow-up or leave to D7b.*
+
+#### [x] D3b. Guards and idempotency for `seed-demo.js`
 **Files:** seed-demo.js, test | **Paste:** seed-demo.js, the test database setup
 ```text
 Refuse unless ALLOW_DEMO_SEED=true and NODE_ENV is not production; skip patients whose synthetic MRN already exists. Test on the test database: counts equal demo-expected.json; running twice adds nothing; production refused.
 ```
 
-#### [ ] D4. Demo mode loader (browser, localStorage)
+*D3b result (20 Nov 2026): `seed-demo.js` gained `assertAllowed` (production is checked first and cannot be overridden by the flag; `ALLOW_DEMO_SEED` must be exactly `true`), `seededState` and `run`. **Idempotency keys on `patients.synthetic_key`, not on MRN** (MRN is server-made, D0). All ten keys present: nothing is added. A partly seeded database is refused with a message, because the cases use fixed ids and cannot be resumed safely; use a fresh throwaway database. `seed-demo.test.js`: guard tests (no database needed) and a test on the test database (counts equal the generated data, second run adds nothing, production refused). The counts are checked against the generated data; the match to `demo-expected.json` is done by the existing expectedOf test.*
+
+#### [x] D4. Demo mode loader (browser, localStorage)
 **Files:** store.js, enhancer.html | **Paste:** the Demo mode demo-patient migration code
 ```text
 Add "Load 10 demo patients" in Demo mode, using the same generateDemo output with a fixed anchor, so Demo mode and the server show the same data. Server mode never shows this button. Test: Demo mode count equals demo-expected.json.
 ```
 
-#### [ ] D5a. Longitudinal checks
+*D4 result (20 Nov 2026): new `demo-local.js` (pure, works in Node and the browser; `toLocalCases(data)` turns generateDemo output into Demo-mode cases) and `demo-local.test.js`. `enhancer.html`: a "Load 10 demo patients" button on the Patients screen, hidden unless Demo mode is on (set in `paintMode`), and a click handler that fetches `/demo-data.js` and `/demo-personas.json`, runs `generateDemo` with seed 1 and anchor `2026-11-01T08:00:00Z` (the same as `seed-demo.js`), replaces earlier demo cases (`demo:true`) and keeps all other cases, then reloads. `server.js`: the three files added to `STATIC_FILES`. `store.js` is unchanged. Demo cases are not `syn:true`, so the Analytics tab's "Clear synthetic" leaves them alone. Demo patients carry a typed MRN such as `DEMO-01` (never a real-looking one). **Limits, state them in DEMO-DATA.md:** a merge is a server idea, so both D-08 charts load in Demo mode; the browser runs `demo-data.js` through a `module` shim, so it must not `require` anything; `demo-expected.json` key names are checked tolerantly in the test (it prints the keys if one is missing). **Check by hand:** `views.js` is not in `STATIC_FILES` (find what serves it and add the three files there if needed).*
+
+#### [x] D5a. Longitudinal checks
 **File:** `demo-data.test.js` | **Paste:** the persona schema only
 ```text
 Tests on the real generated data: timestamps increase within a group; D-05 and D-06 span at least their stated months; D-07 has two encounters with the stated gap; counts equal demo-expected.json.
 ```
 
-#### [ ] D5b. Merge and data-quality checks
-**File:** `demo-data.test.js` | **Paste:** projectCase (F4) once it exists
+*D5a result (20 Nov 2026): five tests added to the end of `demo-data.test.js` (no change to `demo-data.js`). (1) Within every series the rows are in index order, recorded times never go backwards and none is after the anchor; this is stronger than the D2c test, which only compared indexes. (2) Every encounter ends after it starts and not after the anchor; two stays of one patient never overlap. (3) D-05 and D-06 span their stated 18 and 24 months with **one month of slack** (a series starts at its first visit, not on day one), have at least 5 recorded visits, and their charts have no encounter. (4) D-07 has two closed stays of one patient 14 to 28 days apart and the rounded gap equals `demo-expected.json`. (5) `demo-expected.json` totals, per-persona counts and `rowsBySet` equal counts made again from the raw generated rows, not through `expectedOf`, and persona counts add up to the totals. **Not run when written:** the persona and expected files were not available, so only a syntax check was done. If test 3 or 4 fails, say which: fix the persona schedule if the data is wrong, or the stated tolerance here if the plan's "about" is meant loosely.*
+
+#### [x] D5b1. Merge and data-quality checks on the generated data
+**File:** `demo-data.test.js` | **Paste:** nothing (the persona schema is enough)
 ```text
-Tests: D-08 appears once in projectCase and in the export; D-09's error rows and missing-time rows are skipped or flagged as designed; no demo value or name matches a real-looking pattern (phone, long digit runs).
+Tests on the real generated data: the merged pair D-08 is one person (row ids unique, every row counted once, both records resolve to the kept one); rows with a missing or invalid time are flagged and never dated; error and amended rows carry who and why; no demo name, value, note or reason matches a real-looking pattern (phone, long digit runs, e-mail).
 ```
+
+*D5b1 result (20 Nov 2026): four tests and one `test.todo` added to the end of `demo-data.test.js` (no change to `demo-data.js`). (1) A small detector for real-looking text (7 or more digits in a row, a "+" number, "(ddd)", ddd-ddd-dddd, an e-mail), tested on its own; dates and times are removed first. It is a narrow heuristic, not a proof. (2) No name, value, note, narrative or reason is flagged by it, every name is "Demo Patient NN", and no persona has a phone or national id key. (3) D-08: row ids are unique, merges form no chain or loop, rows of both records add up on the kept record and equal `rowsOnDuplicate + rowsOnKept` in `demo-expected.json`, nothing is left on the duplicate. (4) Every row is `ok` (a real time), `none` (null) or `bad` (the text `not a time`); error rows have who (a known actor) and a reason of 3 to 1000 characters; amended rows have who, field, reason and value; the data holds both a missing and an invalid time. **Run only on a stand-in persona file** (the real `demo-personas.json`, `demo-expected.json` and `element-sets.js` were not available): the four tests passed there. If test 4 fails on "both a missing and an invalid time", the personas use only one kind: fix the persona data, not the test.*
+
+#### [ ] D5b2. projectCase and export checks for D-08 and D-09 (after F4)
+**File:** `demo-data.test.js` | **Paste:** projectCase (F4)
+```text
+Replace the `test.todo` named D5b2 at the end of demo-data.test.js with real tests: D-08 appears once in projectCase and once in the export (counted once, not twice); D-09's error rows and missing-time rows are skipped or flagged in projectCase exactly as F4 designs it, and the counts equal demo-expected.json.
+```
+*Moved out of D5b on 20 Nov 2026: it needs F4 (plan-core step 10), which comes after Gate D's other checks. Do it right after F4. The export half is also covered again by D7a.*
 
 #### [ ] D6. Add D-10 and extend others after Phase 7 and Phase O
 **Files:** demo-personas.json, demo-expected.json | **Paste:** the care.orders, care.allergies, care.mar, care.adt_schedule seeds
@@ -144,4 +161,4 @@ Document, in DEMO-DATA.md, which generator seeds and options to use for volume d
 Write a one-page walkthrough: for each demo patient, which screen to open and what to see (ward board, handover, flowsheet, summary cards, history drawer, orders, export, then the Analytics app and its coverage and readiness). Plain words, no judgement of care, banner visible in every step.
 ```
 
-**Gate D:** after D5 the ten patients load on a fresh database and in Demo mode and match `demo-expected.json`; after D7 the same data reaches the Analytics app and its wave 1 results match the expectations.
+**Gate D:** after D5 (D5a and D5b1; D5b2 follows F4) the ten patients load on a fresh database and in Demo mode and match `demo-expected.json`; after D7 the same data reaches the Analytics app and its wave 1 results match the expectations.
