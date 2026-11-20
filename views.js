@@ -153,7 +153,53 @@ function sumBy(rows,spec,fromMs,toMs){
   return o;
 }
 
-var api={validateView:validateView,validatePathwayViews:validatePathwayViews,rowsInWindow:rowsInWindow,fieldsById:fieldsById,sumBy:sumBy};
+/* P2a: coding choices on a field (see CODING.md). field.coding = {allow:[code system ids, 'local' or 'none']}.
+   No coding block means {allow:['none']}. Any mix is allowed. The software never fills a code in, so keys named default or auto are refused.
+   knownSystems: list (or Set) of code_systems ids, or of objects with an id. Returns {errors}. */
+var CODING_KEYS=['allow'], CODING_BANNED=['default','auto'];
+function codingAllow(field){
+  var c=field&&field.coding;
+  return c&&Array.isArray(c.allow)?c.allow.slice():['none'];
+}
+function isLegacyCoding(c){ return !!c&&typeof c==='object'&&!Array.isArray(c)&&c.allow===undefined&&(c.code!==undefined||c.system!==undefined); }
+function walkCoding(node,path,errors){
+  if(!node||typeof node!=='object') return;
+  if(Array.isArray(node)){ node.forEach(function(n,i){walkCoding(n,path+'['+i+']',errors);}); return; }
+  Object.keys(node).forEach(function(k){
+    if(CODING_BANNED.indexOf(String(k).toLowerCase())>=0) errors.push('coding key "'+path+k+'" is not allowed (a code is never filled in by the software)');
+    walkCoding(node[k],path+k+'.',errors);
+  });
+}
+function validateCoding(field,knownSystems){
+  var errors=[];
+  if(!field||typeof field!=='object'||field.coding===undefined||field.coding===null) return {errors:errors};
+  var who='field "'+(field.id||'?')+'" ';
+  var c=field.coding;
+  if(isLegacyCoding(c)) return {errors:errors};   /* the client attaches {system,code,display} to a field in memory; that is a bound code, not a choice block */
+  if(typeof c!=='object'||Array.isArray(c)){ errors.push(who+'coding must be an object'); return {errors:errors}; }
+  walkCoding(c,'coding.',errors);
+  Object.keys(c).forEach(function(k){
+    if(CODING_KEYS.indexOf(k)<0&&CODING_BANNED.indexOf(k.toLowerCase())<0) errors.push(who+'coding has unknown key "'+k+'"');
+  });
+  var known={};
+  if(knownSystems&&typeof knownSystems.forEach==='function') knownSystems.forEach(function(x){ var id=typeof x==='string'?x:(x&&x.id); if(id) known[id]=true; });
+  if(!Array.isArray(c.allow)||!c.allow.length) errors.push(who+'coding.allow must be a non-empty list');
+  else c.allow.forEach(function(id){
+    if(typeof id!=='string'||!id) errors.push(who+'coding.allow has an entry that is not text');
+    else if(id!=='local'&&id!=='none'&&!known[id]) errors.push(who+'coding.allow names unknown code system "'+id+'"');
+  });
+  return {errors:errors};
+}
+
+/* P3b: validateCoding over every field of a set (sections[].fields[] and fields[]). Returns {errors}. */
+function validateSetCoding(set,knownSystems){
+  var errors=[];
+  var fs=[].concat.apply([],((set&&set.sections)||[]).map(function(x){ return (x&&x.fields)||[]; })).concat((set&&set.fields)||[]);
+  fs.forEach(function(f){ validateCoding(f,knownSystems).errors.forEach(function(e){ errors.push(e); }); });
+  return {errors:errors};
+}
+
+var api={validateView:validateView,validatePathwayViews:validatePathwayViews,rowsInWindow:rowsInWindow,fieldsById:fieldsById,sumBy:sumBy,validateCoding:validateCoding,validateSetCoding:validateSetCoding,codingAllow:codingAllow};
 root.Views=api;
 if(typeof module!=='undefined') module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

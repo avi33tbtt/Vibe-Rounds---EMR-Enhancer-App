@@ -89,6 +89,7 @@ const ROUTE_ACTIONS = {
   'POST /element-sets': 'set.write', 'PATCH /element-sets/:setId': 'set.write', 'DELETE /element-sets/:setId': 'set.write',
   'GET /usage': 'ref.read', 'POST /usage/:setId': 'usage.write', 'DELETE /usage': 'usage.write',
   'GET /codes': 'ref.read', 'POST /codes': 'code.write', 'POST /codes/:system/:code/live': 'code.write',
+  'GET /code-systems': 'ref.read',
   'GET /bindings': 'ref.read', 'PUT /bindings': 'binding.write', 'DELETE /bindings/:setId/:fieldId': 'binding.write',
   'GET /rules': 'ref.read', 'PUT /rules/:owner/:ruleId': 'rule.write', 'POST /rules/:owner/:ruleId/approve': 'rule.approve',
   'POST /rules/:owner/:ruleId/disable': 'rule.write', 'DELETE /rules/:owner/:ruleId': 'rule.write',

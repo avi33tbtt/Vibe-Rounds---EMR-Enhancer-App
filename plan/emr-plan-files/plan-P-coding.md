@@ -24,17 +24,19 @@
 Write CODING.md: the coding choices, that no code is always allowed, that the software never fills a code in, local systems, the profile idea and the wording rule (never "compliant"). No code.
 ```
 
-#### [ ] P1a. Migration: `code_systems`
+#### [x] P1a. Migration: `code_systems`
 **File:** new migration | **Paste:** the verified_codes table and its check constraint (001_core.sql, 51a1)
 ```text
 Add table code_systems (id, uri, name, kind 'standard' or 'local', licence_note, created_by, created_at). Replace the closed check on verified_codes.system with a foreign key to code_systems. Existing rows keep working. Migration test: fresh and upgrade both pass.
 ```
+*P1a result (20 Nov 2026): `verified_codes.system` had no check constraint (plain text), so nothing was replaced; `009_code_systems.sql` adds `code_systems`, seeds `snomed` and `loinc` (ids match the existing `sysEnum`), keeps any other existing system as a local one, adds the foreign key and grants `emr_app`. Test: `code-systems.test.js`. `/api/codes` still accepts only snomed and loinc until `sysEnum` is widened.*
 
 #### [ ] P1b. Seed the code systems (data only)
 **Files:** seed.js, new `code-systems.js` | **Paste:** seed.js loop
 ```text
 Seed code_systems with SNOMED CT, LOINC, ICD-10, ICD-11 and UCUM (id, URI, name, kind standard, licence note). No codes. Test: seeded twice adds nothing; verified_codes still empty.
 ```
+*Note: 009 already created `snomed` and `loinc` with no licence note. Seed with `ON CONFLICT (id) DO UPDATE` to fill the note, and add icd10, icd11 and ucum. Use short ids in the same style.*
 
 #### [ ] P2a. `validateCoding(field)` (pure)
 **File:** views.js | **Paste:** one seed field, decision 38
@@ -77,6 +79,7 @@ In the Codes tool add "Local code systems": create a system, add codes, see thei
 ```text
 A slot may carry codeSystem (default 'any'). 'any' matches with or without codes. A named system is met only if the element has a coding in that system; otherwise 'partly' with the basis "needs a code in <system>". Tests with made-up sets: any, named met, named missing, none.
 ```
+*Note (20 Nov 2026): `elements.js` already matches a slot `codeSystem` (met, or partly with a code-system basis) and already carries several codings in the key. In this chat check it and add only the missing tests; do not rewrite.*
 
 #### [ ] P5b. Analytics app: SNOMED CT and LOINC only for now (Analytics repo)
 **File:** defs.js | **Paste:** validateAnalytic (AA1), the slot rules

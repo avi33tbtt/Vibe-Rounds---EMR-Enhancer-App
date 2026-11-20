@@ -23,8 +23,8 @@ Steps 5, 11, 14 and 16 are different from the old order in section 15.3. The old
 |---|---|---|---|---|---|
 | 1 | [x] | `plan-V.md` | V0a to V1a | - | Create the repo-side basics: orphan tests into npm test, hand-code inventory, VIEWS.md. |
 | 2 | [x] | `plan-R.md` | R1 | - | - |
-| 3 | [ ] | `plan-V.md` | V2a to V4d | 13 | **Gate 1:** the I/O sum looks identical and no hand-named I/O code is left. Then (manual) build one real specialty template as data and note every place it needed a new view type. |
-| 4 | [ ] | `plan-F.md` | F0 to F3b | 24, 25 | **Gate 2:** the coverage report is right on made-up sets and on real seed sets. Then (manual) read the coverage report for each seed set against the example in 7.1. |
+| 3 | [x] | `plan-V.md` | V2a to V4d | 13 | **Gate 1:** the I/O sum looks identical and no hand-named I/O code is left. Then (manual) build one real specialty template as data and note every place it needed a new view type. |
+| 4 | [x] | `plan-F.md` | F0 to F3b | 24, 25 | **Gate 2:** the coverage report is right on made-up sets and on real seed sets. Then (manual) read the coverage report for each seed set against the example in 7.1. |
 | 5 | [ ] | `plan-P-coding.md` | P0 to P2b, P3, P4a, P4b, P5a | 38, 39 | - |
 | 6 | [ ] | `plan-V.md` | V5a to V8c | 11, 17 | V8c has the Phase V release gate (checked after step 8). |
 | 7 | [ ] | `plan-R.md` | R2 to R9 | 12, 18, 19 | - |

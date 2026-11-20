@@ -15,7 +15,7 @@ const { hashPassword, verifyPassword, passwordProblem } = require('./auth.js'); 
 const { audit, auditOnce, auditContext, auditPage, auditOut, csvLine, csvCell, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
 const { mountLlm, createProvider } = require('./llm.js');                  // chunk 36a: AI proxy routes and admin switch
 const { mountPatients } = require('./patients.js');                        // chunk 34a: patients, encounters, link a case to them
-const { validateView, validatePathwayViews } = require('./views.js');                          // V2b: view blocks are checked on save
+const { validateView, validatePathwayViews, validateSetCoding, codingAllow } = require('./views.js');                          // V2b: view blocks are checked on save
 
 class ApiError extends Error {
   constructor(status, code, message, extra) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -771,6 +771,8 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     const vv = validateView(b.body);
     const pv = validatePathwayViews({ ...b.body, kind: b.kind });   // member ids are checked by the caller; not done on save yet
     if (vv.errors.length || pv.errors.length) throw new ApiError(422, 'bad_view', 'The view block of this set is not valid', { errors: [...vv.errors, ...pv.errors], warnings: [...vv.warnings, ...pv.warnings] });
+    const cs = validateSetCoding(b.body, (await db.query('SELECT id FROM code_systems')).rows.map((x) => x.id));   // P3b: coding choices name known code systems only
+    if (cs.errors.length) throw new ApiError(422, 'bad_coding', 'The coding choices of this set are not valid', { errors: cs.errors });
     const out = await db.withTx(async (c) => {
       await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['set|' + b.setId]);
       const cur = (await c.query('SELECT * FROM element_sets WHERE set_id=$1 ORDER BY version DESC LIMIT 1', [b.setId])).rows[0];
@@ -861,24 +863,44 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     });
     res.json(codeOut(row));
   }));
+  // P3a: the code systems a field may allow (read only; the list is filled by 009 and seed.js)
+  r.get('/code-systems', wrap(async (req, res) => {
+    res.json((await db.query('SELECT id,uri,name,kind,licence_note FROM code_systems ORDER BY (kind = $1), id', ['local'])).rows
+      .map((x) => ({ id: x.id, uri: x.uri, name: x.name, kind: x.kind, licenceNote: x.licence_note })));
+  }));
   r.get('/bindings', wrap(async (req, res) => {
     res.json((await db.query('SELECT set_id,field_id,system,code,display FROM code_bindings ORDER BY set_id,field_id')).rows
       .map((b) => ({ setId: b.set_id, fieldId: b.field_id, system: b.system, code: b.code, display: b.display })));
   }));
+  // P2b: a field may carry one binding per code system. If the field has a coding block, a system it does not list is refused.
+  // A field with no coding block, or a set not on the server, behaves as before (no refusal).
+  const codingAllowOf = async (c, setId, fieldId) => {
+    const s = (await c.query('SELECT body FROM element_sets_latest WHERE set_id=$1', [setId])).rows[0];
+    const body = (s && s.body) || {};
+    const fs = [].concat(...((body.sections) || []).map((x) => (x && x.fields) || []), body.fields || []);
+    const f = fs.find((x) => x && x.id === fieldId);
+    return f && f.coding && Array.isArray(f.coding.allow) ? codingAllow(f) : null;   // a legacy {system,code,display} coding is not a choice block
+  };
   r.put('/bindings', wrap(async (req, res) => {
     const b = parse(S.bindPut, req.body);
     await db.withTx(async (c) => {
-      const old = (await c.query('SELECT system,code,display FROM code_bindings WHERE set_id=$1 AND field_id=$2 FOR UPDATE', [b.setId, b.fieldId])).rows[0] || null;
+      const allow = await codingAllowOf(c, b.setId, b.fieldId);
+      if (allow && !allow.includes(b.system)) throw new ApiError(422, 'coding_not_allowed', `This field's coding choices do not include ${b.system}. Change the field's coding first, then add the code.`);
+      const old = (await c.query('SELECT system,code,display FROM code_bindings WHERE set_id=$1 AND field_id=$2 AND system=$3 FOR UPDATE', [b.setId, b.fieldId, b.system])).rows[0] || null;
       await c.query(`INSERT INTO code_bindings (set_id,field_id,system,code,display) VALUES ($1,$2,$3,$4,$5)
-        ON CONFLICT (set_id,field_id) DO UPDATE SET system=EXCLUDED.system, code=EXCLUDED.code, display=EXCLUDED.display`, [b.setId, b.fieldId, b.system, b.code, b.display]);
+        ON CONFLICT (set_id,field_id,system) DO UPDATE SET code=EXCLUDED.code, display=EXCLUDED.display`, [b.setId, b.fieldId, b.system, b.code, b.display]);
       await audit(c, { action: 'binding.set', entity: 'code_binding', entity_id: `${b.setId}/${b.fieldId}`, before: old, after: { system: b.system, code: b.code, display: b.display } });
     });
     res.json(b);
   }));
   r.delete('/bindings/:setId/:fieldId', wrap(async (req, res) => {
     const sid = identParam(req.params.setId), fid = identParam(req.params.fieldId);
+    const sq = req.query.system === undefined ? null : sysEnum.safeParse(req.query.system);
+    if (sq && !sq.success) throw new ApiError(400, 'validation', 'Invalid code system');
+    const only = sq ? sq.data : null;   // P2b: ?system= removes one binding, none removes every binding of the field
     await db.withTx(async (c) => {
-      const d = await c.query('DELETE FROM code_bindings WHERE set_id=$1 AND field_id=$2 RETURNING system,code,display', [sid, fid]);
+      const d = only ? await c.query('DELETE FROM code_bindings WHERE set_id=$1 AND field_id=$2 AND system=$3 RETURNING system,code,display', [sid, fid, only])
+        : await c.query('DELETE FROM code_bindings WHERE set_id=$1 AND field_id=$2 RETURNING system,code,display', [sid, fid]);
       await audit(c, { action: 'binding.delete', entity: 'code_binding', entity_id: `${sid}/${fid}`, before: d.rows[0] || null });
     });
     res.status(204).end();
