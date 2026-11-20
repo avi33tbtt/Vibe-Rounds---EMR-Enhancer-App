@@ -6,7 +6,7 @@
 
 *Sections 6 and 2. F0 to F3 come right after V4 (Gate 1). They are pure functions with tests and no screen. F4 to F9 follow Phase V. This phase is the whole of the EMR's analytics work. Every task is one file and one concern.*
 
-#### [ ] F0. Element inventory (no code)
+#### [x] F0. Element inventory (no code)
 **Run yourself, paste the output:**
 ```text
 grep -c '"fhir"' element-sets.js
@@ -19,25 +19,27 @@ Do not change code. From this output make three lists: (1) every seed field with
 ```
 **Done when:** the tables are pasted under F2 as the starting data for tests.
 
-#### [ ] F1. ELEMENTS.md (doc only)
+*F0 result (20 Nov 2026): inventory kept in `F0-inventory.md` (65 seed fields, 24 with a fhir block; roles per 6.4; five gaps in 6.4 listed there). Give that file in the F1 and F2 chats.*
+
+#### [x] F1. ELEMENTS.md (doc only)
 **File:** new `ELEMENTS.md` | **Paste:** sections 6.2 to 6.5 of this plan
 ```text
 Write ELEMENTS.md in the repo root from this text: the glossary, the closed role list, the element key format, the projection rules and the element row shape. End with a "How to add a role" checklist: informatician proposal, admin approval, validator entry, made-up-set test, one line here. No code.
 ```
 
-#### [ ] F2. `elements.js`: roles, element keys, provides (pure)
+#### [x] F2. `elements.js`: roles, element keys, provides (pure)
 **File:** new root `elements.js` (browser + Node, ends with `if(typeof module!=='undefined')module.exports=...`) | **Paste:** ELEMENTS.md role table, one seed set (care.intake_output), one `code_bindings` row shape
 ```text
 Create elements.js with roleOf(field), elementKey(set, field, binding) and providesOf(set, bindings) returning [{fieldId, group, role, resource, unit, system, code, key}]. Role comes only from field.type and the optional fhir block (table 6.4); a field with no fhir block still gets a role but resource null. A code appears only from the bindings passed in. Never convert units. Plus elements.test.js using a made-up set (different field ids and units than any seed set): one case per role, one with a binding, one with no fhir block.
 ```
 
-#### [ ] F3a. `compatibility()`: slot matching (pure)
+#### [x] F3a. `compatibility()`: slot matching (pure)
 **File:** elements.js | **Paste:** ELEMENTS.md, the slot example in section 7.1
 ```text
 Add compatibility(requires, provides) returning {slots:[{slot, status:'met'|'unmet', matched:[{fieldId, basis}]}]}. A slot is met when resource, role and unit string all match (unit "any" matches every unit; no conversion). Every match carries a basis such as "matched on: quantity, mL". Tests with made-up sets: met, unmet, unit "any". Nothing else.
 ```
 
-#### [ ] F3b. `compatibility()`: partly, manual binding, unused fields (pure)
+#### [x] F3b. `compatibility()`: partly, manual binding, unused fields (pure)
 **File:** elements.js | **Paste:** compatibility() from F3a
 ```text
 Extend compatibility(requires, provides, manualBindings): status 'partly' when role matches but unit or code differs (say which); a manual binding {slot, fieldId} is honoured with basis "bound by hand"; add unusedFields (provided fields no slot matched). Tests with made-up sets: partly (unit differs), manual binding, unused field, and one test proving the function never mentions a set id or field id from element-sets.js.

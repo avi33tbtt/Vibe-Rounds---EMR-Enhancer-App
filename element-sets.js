@@ -96,7 +96,7 @@ window.SEED_SETS=[
  "direct":true,
  "quick":{"order":4,"short":"HbA1c"},
  "kind":"care",
- "version":1,
+ "version":2,
  "title":"HbA1c monitoring",
  "description":"HbA1c readings over time with a clinician-set target and next-due date, plus capillary glucose.",
  "contexts":["care"],
@@ -106,7 +106,7 @@ window.SEED_SETS=[
   {"title":"HbA1c","fields":[
    {"id":"a1c_date","label":"HbA1c date","type":"date","repeat":true,"group":"hba1c","rationale":"Date of this reading."},
    {"id":"a1c","label":"HbA1c","type":"number","unit":"%","rationale":"Longitudinal glycaemic control.","repeat":true,"target":"a1c_target","fhir":{"resource":"Observation","valueType":"valueQuantity"},"group":"hba1c"},
-   {"id":"a1c_target","label":"HbA1c target (entered by clinician)","type":"number","unit":"%","rationale":"Individualised target; no default is supplied.","fhir":{"resource":"Observation","valueType":"valueQuantity"}},
+   {"id":"a1c_target","label":"HbA1c target (entered by clinician)","type":"number","unit":"%","rationale":"Individualised target; no default is supplied."},
    {"id":"a1c_due","label":"Next HbA1c due","type":"date","rationale":"Follow-up scheduling."}]},
   {"title":"Capillary glucose","fields":[
    {"id":"cbg_time","label":"Time","type":"datetime","repeat":true,"group":"cbg"},

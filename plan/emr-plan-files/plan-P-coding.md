@@ -18,7 +18,7 @@
 
 ### 28.2 Tasks
 
-#### [ ] P0. CODING.md (doc only)
+#### [x] P0. CODING.md (doc only)
 **File:** new `CODING.md` | **Paste:** 28.1 and decisions 38 to 41
 ```text
 Write CODING.md: the coding choices, that no code is always allowed, that the software never fills a code in, local systems, the profile idea and the wording rule (never "compliant"). No code.

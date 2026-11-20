@@ -78,26 +78,26 @@ Add pure helpers rowsInWindow(rows, timeField, fromMs, toMs) (skips entered_in_e
 
 ### V4. I/O sum becomes data
 
-#### [ ] V4a. `sumBy(rows, spec, fromMs, toMs)`
+#### [x] V4a. `sumBy(rows, spec, fromMs, toMs)`
 **Files:** views.js, sum-by-type.test.js | **Paste:** sumByType, sum-by-type.test.js
 ```text
 Add sumBy(rows, spec, fromMs, toMs) with spec {timeField, keyField, valueField}: same behaviour as sumByType (plain numbers per key, entered_in_error skipped, '(no type)' key). Port the 5 cases in sum-by-type.test.js to call sumBy with the I/O field names passed in the test, and add one case with a different made-up set. Do not touch enhancer.html yet.
 ```
 
-#### [ ] V4b. Put the summary in the I/O seed (data only)
+#### [x] V4b. Put the summary in the I/O seed (data only)
 **Files:** element-sets.js, io-set.test.js | **Paste:** the care.intake_output entry, view example from section 9
 ```text
 Add the "summary" block from the I/O example to care.intake_output's view and bump its version to 2. Do not change fields. Update io-set.test.js: validateView passes; the set still has zero rules, thresholds, limits and defaults.
 ```
 
-#### [ ] V4c. Render summaries from the view block
+#### [x] V4c. Render summaries from the view block
 **File:** enhancer.html | **Paste:** ioSum, IOW state, where ioSum is called
 ```text
 Replace ioSum with renderSummaries(set, rows): for each entry of set.view.summary of type sumBy, show the window choice from windowsHours and one line per key using sumBy. Label from the data ("sum of entered rows"). Keep the window choice state per set id. Delete sumByType and every mention of care.intake_output and io_ from enhancer.html. Same text and layout as before. Server mode only as before.
 ```
 **Done when:** `grep -n "intake_output\|io_" enhancer.html` finds nothing; I/O flowsheet looks the same on a case that has the set re-applied (decision 13).
 
-#### [ ] V4d. Proof test: a made-up set gets a sum with no code change
+#### [x] V4d. Proof test: a made-up set gets a sum with no code change
 **File:** new `views-generic.test.js` | **Paste:** how an existing jsdom or vm test loads functions from enhancer.html
 ```text
 Test: define a made-up set "test.fluids" with different field ids and a sumBy block; renderSummaries shows its sums; remove the block and nothing is shown. No code change outside the test.
