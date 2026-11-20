@@ -138,7 +138,43 @@ function compatibility(requires,provides,manualBindings){
     unusedFields:prov.filter(function(e){ return e&&!used[e.fieldId]; }).map(function(e){ return {fieldId:e.fieldId,key:e.key}; })};
 }
 
-var api={roleOf:roleOf,elementKey:elementKey,providesOf:providesOf,compatibility:compatibility};
+/* F4: case rows -> element rows (shape in ELEMENTS.md). Pure: writes nothing, converts nothing.
+   rows = [{id, set_id, row:{fieldId:value}, row_time, status}] (case_rows columns); sets = set definitions;
+   bindings = code_bindings rows. A field is an element only if it has a role AND a fhir block.
+   entered_in_error rows are skipped; empty values are skipped; row_time null stays null.
+   A number is valueNumber only if typed as a number or plain digits ("2,5" stays text, never guessed).
+   A unit chosen per row comes from that row's own unit field ('-' if none). A code comes only from bindings. */
+function isEmpty(v){ return v===undefined||v===null||(typeof v==='string'&&v.trim()===''); }
+function projectCase(args){
+  var a=args||{}, rows=Array.isArray(a.rows)?a.rows:[], sets=Array.isArray(a.sets)?a.sets:[];
+  var byId={}, cache={}, out=[];
+  sets.forEach(function(s){ if(s&&s.setId) byId[s.setId]=s; });
+  rows.forEach(function(r){
+    if(!r||r.status==='entered_in_error') return;
+    var set=byId[r.set_id]; if(!set) return;
+    var prov=cache[r.set_id]||(cache[r.set_id]=providesOf(set,a.bindings));
+    var data=r.row&&typeof r.row==='object'?r.row:{};
+    prov.forEach(function(e){
+      if(!e.resource) return;
+      var v=data[e.fieldId]; if(isEmpty(v)) return;
+      var num=null, txt=null;
+      if(e.role==='quantity'){
+        if(typeof v==='number'&&isFinite(v)) num=v;
+        else if(typeof v==='string'&&/^\s*-?\d+(\.\d+)?\s*$/.test(v)) num=Number(v);
+        else txt=String(v);
+      } else txt=String(v);
+      var unit=e.unit;
+      if(e.unitField) unit=str(data[e.unitField])?data[e.unitField]:'-';
+      out.push({patientId:a.patientId||null,encounterId:a.encounterId||null,caseId:a.caseId||null,
+        rowId:r.id||null,resource:e.resource,role:e.role,unit:unit,system:e.system,code:e.code,
+        valueNumber:num,valueText:txt,time:r.row_time||null,status:'active',
+        source:{setId:set.setId,setVersion:set.version===undefined?null:set.version,fieldId:e.fieldId}});
+    });
+  });
+  return out;
+}
+
+var api={roleOf:roleOf,elementKey:elementKey,providesOf:providesOf,compatibility:compatibility,projectCase:projectCase};
 root.Elements=api;
 if(typeof module!=='undefined') module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

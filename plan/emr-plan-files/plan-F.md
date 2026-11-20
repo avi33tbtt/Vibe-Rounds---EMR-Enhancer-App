@@ -46,7 +46,9 @@ Extend compatibility(requires, provides, manualBindings): status 'partly' when r
 ```
 **Done when (Gate 2):** run it by hand over every seed set against the slot example in 7.1 and read the report; it must say what you expect, with a basis on every line.
 
-#### [ ] F4. `projectCase(...)`: element rows (pure)
+#### [x] F4. `projectCase(...)`: element rows (pure)
+*F4 result (20 Nov 2026): `projectCase` added to `elements.js`; tests in `elements.project.test.js` (6 cases). A field is projected only if it has a role and a fhir block; digits-only strings become numbers, anything else stays text.*
+
 **File:** elements.js | **Paste:** the `case_rows` columns (section 6.3), providesOf from F2
 ```text
 Add projectCase({rows, sets, bindings, patientId, encounterId, caseId}) returning element rows in the shape of 6.5. Rules: skip entered_in_error; keep rows with null row_time but time null; one element row per bound field with a value; value as typed; no unit conversion; code only from bindings. Tests with a made-up set: skipped error row, null time, unbound field absent, a bound code appears, a value typed with a comma is kept as text and not guessed.
