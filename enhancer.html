@@ -1065,8 +1065,17 @@ return`<table class="pt"><tr>${head}<th></th></tr>${body||`<tr><td colspan="${fs
 function refreshGroup(sid,g){const s=getSet(sid),el=$('rg_'+sid+'@'+g);if(!s||!el)return;el.innerHTML=grpInner(s,g);drawCharts(s,g);codesUI()}
 function drawAll(){if(!CUR)return;CUR.applied.forEach(a=>{const s=getSet(a.setId,a);if(!s)return;[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>drawCharts(s,g))})}
 let OVM=false;
+/* V3a: view registry. Each renderer is fn(set, group, rows) returning html. The if-chain in chartHtml still does the dispatch until V3a2. */
+const VIEWS={};
+/* o.need = the view key naming the field that must be in the group; o.err = text when drawing fails; o.full = the view is the whole chart (nothing else is added after it) */
+function registerView(type,fn,o){VIEWS[type]=Object.assign(fn,o||{})}
+registerView('fever',(s,g,rows)=>feverChart(s,rows),{need:'tempField',err:'Fever chart could not be drawn.',full:1});
+registerView('dailygrid',(s,g,rows)=>dailyGrid(s,rows),{need:'glucoseField',err:'Daily grid could not be drawn.',full:1});
+registerView('flowsheet',(s,g,rows)=>fsToggle(s)+(FSV[s.setId]=='table'&&!OVM?'':flowsheet(s,rows)+ioSum(s,rows)),{need:'timeField',err:'Flowsheet could not be drawn.'});
+/* V3a2: one dispatcher. Returns html, or null when the set has no registered view for this group. */
+function renderSetView(s,g,rows){const v=s&&s.view,fn=v&&VIEWS[v.type];if(!fn||!grp(s,g).some(f=>f.id==v[fn.need]))return null;try{return fn(s,g,rows)}catch(e){return'<div class="mu">'+fn.err+'</div>'}}
 function chartHtml(s,g){
-if(s.view&&s.view.type=='fever'&&grp(s,g).some(f=>f.id==s.view.tempField)){try{return feverChart(s,rowsOf(CUR,s.setId,g))}catch(e){return'<div class="mu">Fever chart could not be drawn.</div>'}}if(s.view&&s.view.type=='dailygrid'&&grp(s,g).some(f=>f.id==s.view.glucoseField)){try{return dailyGrid(s,rowsOf(CUR,s.setId,g))}catch(e){return'<div class="mu">Daily grid could not be drawn.</div>'}}const fs=grp(s,g),tc=tcol(fs),rows=rowsOf(CUR,s.setId,g);let h='';if(s.view&&s.view.type=='flowsheet'&&fs.some(f=>f.id==s.view.timeField)){try{h+=fsToggle(s)+(FSV[s.setId]=='table'&&!OVM?'':flowsheet(s,rows)+ioSum(s,rows))}catch(e){h+='<div class="mu">Flowsheet could not be drawn.</div>'}}
+const fs=grp(s,g),tc=tcol(fs),rows=rowsOf(CUR,s.setId,g),rv=renderSetView(s,g,rows);if(rv!==null&&VIEWS[s.view.type].full)return rv;let h='';if(rv!==null)h+=rv;
 if(tc&&tc.type=='date'){const ts=rows.filter(r=>fs.some(f=>f!==tc&&r[f.id]!==undefined&&r[f.id]!=='')).map(r=>rowT(r,tc)).filter(t=>!isNaN(t));
 if(ts.length){const dd=Math.round((new Date(nowStr('date')).getTime()-Math.max(...ts))/864e5);h+=`<div class="mu" style="margin-top:6px">Days since last reading: <b>${dd<0?'last date is in the future':dd}</b></div>`}}
 fs.filter(f=>['number','integer','duration_min'].includes(f.type)).forEach(f=>{

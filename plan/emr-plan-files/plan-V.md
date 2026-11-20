@@ -37,19 +37,19 @@ Write VIEWS.md in the repo root from this text: layers, view block keys, surface
 
 ### V2. Validate view data (no screens)
 
-#### [ ] V2a. `views.js`: validateView(set)
+#### [x] V2a. `views.js`: validateView(set)
 **File:** new root `views.js` (browser + Node, ends with `if(typeof module!=='undefined')module.exports=...`) | **Paste:** VIEWS.md key table, one seed set (care.intake_output)
 ```text
 Create views.js with validateView(set) returning {errors, warnings}. Errors: unknown view key or type; a referenced field id missing from the set; summary timeField not a datetime, valueField not number/integer, keyField not text/select; windowsHours not positive integers (max 8 entries); any key named eval or function; any key named threshold, band, dose, limit, target or default. Plus views.test.js: one passing case from the I/O example and one failing case per error, using a made-up set, not a seed set.
 ```
 
-#### [ ] V2b. Validate on seed and on save
+#### [x] V2b. Validate on seed and on save
 **Files:** seed.js, api.js (element-sets create route) | **Paste:** the seed loop, the set create/update route
 ```text
 Call validateView in seed.js (a seed with a bad view stops seeding with the set id in the message) and in the set create and update routes (422 with the error list). Test: a set with a bad view is refused; the real element-sets.js still seeds.
 ```
 
-#### [ ] V2c. `validatePathwayViews(pathway)`
+#### [x] V2c. `validatePathwayViews(pathway)`
 **File:** views.js | **Paste:** the two pathway examples in VIEWS.md
 ```text
 Add validatePathwayViews(p) for pathways whose contexts include "emr": surface.type must be in the closed list; case_tab needs id, label; every section type must be in the closed list; hours/windows positive integers; rules must be []; members must exist as set ids (checked by the caller). Tests: one failing case per error, one passing for ward_board and handover examples. Call it from seed.js and the set routes beside validateView.
@@ -57,20 +57,20 @@ Add validatePathwayViews(p) for pathways whose contexts include "emr": surface.t
 
 ### V3. Generic client engine (no change in behaviour)
 
-#### [ ] V3a. View registry and one dispatcher (part 1: registry only)
+#### [x] V3a. View registry and one dispatcher (part 1: registry only)
 **File:** enhancer.html | **Paste:** the view-type dispatcher (about line 1052: fever, dailygrid, flowsheet branches)
 ```text
 Add VIEWS={} and registerView(type, fn). Register the existing fever, dailygrid and flowsheet renderers unchanged (wrap them, do not edit them). Do not touch the if-chain yet.
 ```
 
-#### [ ] V3a2. Switch the dispatcher to the registry
+#### [x] V3a2. Switch the dispatcher to the registry
 **File:** enhancer.html | **Paste:** the if-chain (about line 1052) and the registry from V3a
 ```text
 Replace the if-chain with one function renderSetView(set, group, rows) that looks up VIEWS[set.view.type] and falls back to the old "could not be drawn" text. Output must be byte-identical.
 ```
 **Done when:** `npm test` passes; open a fever chart, daily grid and flowsheet by hand and compare.
 
-#### [ ] V3b. Pure helpers
+#### [x] V3b. Pure helpers
 **File:** views.js (browser + Node) | **Paste:** `rowT`, `fnum` and how `__status` is read
 ```text
 Add pure helpers rowsInWindow(rows, timeField, fromMs, toMs) (skips entered_in_error and unreadable times) and fieldsById(set). Tests with a made-up set: window edges, entered_in_error, bad time.

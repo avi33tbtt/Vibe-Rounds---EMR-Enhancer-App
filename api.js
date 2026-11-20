@@ -15,6 +15,7 @@ const { hashPassword, verifyPassword, passwordProblem } = require('./auth.js'); 
 const { audit, auditOnce, auditContext, auditPage, auditOut, csvLine, csvCell, CSV_COLUMNS, AUDIT_CSV_MAX } = require('./audit.js');   // chunk 33a: every write route audits inside its own transaction
 const { mountLlm, createProvider } = require('./llm.js');                  // chunk 36a: AI proxy routes and admin switch
 const { mountPatients } = require('./patients.js');                        // chunk 34a: patients, encounters, link a case to them
+const { validateView, validatePathwayViews } = require('./views.js');                          // V2b: view blocks are checked on save
 
 class ApiError extends Error {
   constructor(status, code, message, extra) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -767,6 +768,9 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   }));
   r.post('/element-sets', wrap(async (req, res) => {
     const b = parse(S.setPost, req.body);
+    const vv = validateView(b.body);
+    const pv = validatePathwayViews({ ...b.body, kind: b.kind });   // member ids are checked by the caller; not done on save yet
+    if (vv.errors.length || pv.errors.length) throw new ApiError(422, 'bad_view', 'The view block of this set is not valid', { errors: [...vv.errors, ...pv.errors], warnings: [...vv.warnings, ...pv.warnings] });
     const out = await db.withTx(async (c) => {
       await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['set|' + b.setId]);
       const cur = (await c.query('SELECT * FROM element_sets WHERE set_id=$1 ORDER BY version DESC LIMIT 1', [b.setId])).rows[0];

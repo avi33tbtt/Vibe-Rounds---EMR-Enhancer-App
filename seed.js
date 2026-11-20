@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { hashOf } = require('./api.js');
+const { validateView, validatePathwayViews } = require('./views.js');
 
 function readSeedSets(file = path.join(__dirname, 'element-sets.js')) {
   const sandbox = { window: {} };
@@ -16,9 +17,14 @@ function readSeedSets(file = path.join(__dirname, 'element-sets.js')) {
 }
 async function seedSets(db, sets) {
   const out = { inserted: 0, unchanged: 0 };
+  const knownIds = new Set(sets.map((x) => x && x.setId));
   await db.withTx(async (c) => {
     for (const s of sets) {
       if (!s || !/^[A-Za-z0-9_.-]{1,100}$/.test(s.setId || '') || !['care', 'template', 'disease', 'custom', 'pathway'].includes(s.kind)) throw new Error('Bad seed set: ' + (s && s.setId));
+      const vv = validateView(s);
+      if (vv.errors.length) throw new Error(`Seed set ${s.setId} has a bad view: ${vv.errors.join('; ')}`);
+      const pv = validatePathwayViews(s, knownIds);
+      if (pv.errors.length) throw new Error(`Seed pathway ${s.setId} has a bad view surface: ${pv.errors.join('; ')}`);
       const version = Number.isInteger(s.version) && s.version >= 1 ? s.version : 1, h = hashOf(s);
       const cur = (await c.query('SELECT content_hash FROM element_sets WHERE set_id=$1 AND version=$2', [s.setId, version])).rows[0];
       if (cur) {
