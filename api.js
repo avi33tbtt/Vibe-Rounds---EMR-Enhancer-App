@@ -16,6 +16,8 @@ const { audit, auditOnce, auditContext, auditPage, auditOut, csvLine, csvCell, C
 const { mountLlm, createProvider } = require('./llm.js');                  // chunk 36a: AI proxy routes and admin switch
 const { mountPatients } = require('./patients.js');                        // chunk 34a: patients, encounters, link a case to them
 const { validateView, validatePathwayViews, validateSetCoding, codingAllow, validateAccess } = require('./views.js');                          // V2b: view blocks are checked on save
+const Elements = require('./elements.js');                                 // F5: element index and a case's element rows (pure helpers, no set or field ids)
+const CoreElements = require('./core-elements.js');                         // F6: what registration provides (data only)
 
 class ApiError extends Error {
   constructor(status, code, message, extra) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -507,6 +509,32 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     // sent): for a medical record, an unlogged read is worse than an unavailable one.
     await db.withTx((cl) => auditOnce(cl, { action: 'view', entity: 'case', entity_id: c.id, case_id: c.id }, VIEW_THROTTLE_MIN));
     res.json(c);
+  }));
+  // F5: read-only element views for analytics (Phase F). Neither route writes anything except the throttled 'view' audit row on a case, as GET /cases/:id does.
+  const latestSets = async () => (await db.query('SELECT set_id, version, body FROM element_sets_latest ORDER BY set_id')).rows
+    .map((s) => ({ ...s.body, setId: s.set_id, version: s.version }));
+  const bindingRows = async () => (await db.query('SELECT set_id, field_id, system, code FROM code_bindings')).rows;
+  r.get('/elements/index', wrap(async (req, res) => {          // ref.read; the registration core (F6) comes last
+    const [sets, binds] = await Promise.all([latestSets(), bindingRows()]);
+    res.json({ sets: sets.map((s) => ({ setId: s.setId, version: s.version, provides: Elements.providesOf(s, binds) })).filter((s) => s.provides.length)
+      .concat([{ setId: CoreElements.setId, version: null, recording: false, provides: CoreElements.provides() }]) });
+  }));
+  r.get('/cases/:id/elements', wrap(async (req, res) => {      // case.read; follows mergedInto through recordsOf, logs a view like the case read
+    const id = idParam(req.params.id);
+    const c = (await db.query('SELECT id, patient_id, encounter_id FROM cases WHERE id=$1', [id])).rows[0];
+    if (!c) throw new ApiError(404, 'not_found', 'Case not found');
+    const asOf = await changeCursor(db);
+    const [recs, rows, sets, binds, locals] = await Promise.all([
+      recordsOf(db, c.patient_id, c.encounter_id),
+      db.query(`SELECT id, set_id, row, row_time, status FROM case_rows WHERE case_id=$1 AND status='active' ORDER BY row_time NULLS LAST, entered_at, id`, [id]),
+      latestSets(), bindingRows(),
+      db.query("SELECT id FROM code_systems WHERE kind='local'"),
+    ]);
+    const finalPatient = recs.patientRecord ? recs.patientRecord.id : c.patient_id;
+    const elements = Elements.projectCase({ rows: rows.rows, sets, bindings: binds, localSystems: locals.rows.map((x) => x.id),
+      patientId: can(req.actor, 'patient.read') ? finalPatient : null, encounterId: can(req.actor, 'patient.read') ? c.encounter_id : null, caseId: id });
+    await db.withTx((cl) => auditOnce(cl, { action: 'view', entity: 'case', entity_id: id, case_id: id }, VIEW_THROTTLE_MIN));
+    res.json({ caseId: id, asOf, elements });
   }));
   // Chunk 33c1: the old versions of rows and values (row_versions, value_versions) plus the current one, newest first. Only rows and values that were ever changed
   // (version above 1) are listed. Rows entered in error, and every version of them, are for case.read_errors holders (doctor, admin) only. Reading this writes no audit row.

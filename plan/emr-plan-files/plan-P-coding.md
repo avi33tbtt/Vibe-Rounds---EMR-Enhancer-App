@@ -52,11 +52,12 @@ Allow more than one binding per (set, field) when systems differ; the unique key
 ```
 *P2b result (20 Nov 2026): `010_code_bindings_multi.sql` changes the key to (set_id, field_id, system). `PUT /bindings` refuses (422, `coding_not_allowed`) a system the field's `coding.allow` does not list. A field with NO coding block, or a set not on the server, behaves as before (accepted), so existing seed fields and tests keep working; making a missing block mean "none only" is a later decision, once P3 lets authors tick systems. `DELETE /bindings/:setId/:fieldId?system=x` removes one binding; without `system` it removes all of the field's bindings. No new route, so permissions.js and the audit-coverage test are unchanged. Tests: `bindings-multi.test.js`.*
 
-#### [ ] P2c. `projectCase` emits a list of codings
+#### [x] P2c. `projectCase` emits a list of codings
 **File:** elements.js | **Paste:** projectCase and its tests (F4)
 ```text
 Element rows carry codings:[{system, code}] (empty list when none) in place of single system and code. Only codes from bindings. Update the element row shape in ELEMENTS.md. Tests with a made-up set: two systems on one field, none, and a disallowed system absent.
 ```
+*P2c result (20 Nov 2026): `projectCase` in `elements.js` now sets `codings:[{system,code}]` on every element row and no longer sets `system` and `code`. It reads the bindings itself, so `providesOf` and `compatibility()` are unchanged (they still use the first binding for the key). Duplicates are dropped; a field with `coding.allow` drops a binding whose system is not listed (`none` allows nothing; `local` allows only the system ids passed in the new optional argument `localSystems`, because `elements.js` cannot know which systems are local); a field with no coding block keeps all its bindings. `ELEMENTS.md` row shape and rule 4 updated. Tests in `elements.project.test.js`: the old single-code test replaced, two new tests. **The F7c route must pass `localSystems`** (ids of kind local from `code_systems`) or local codes will not be exported. Anything that read a row's `system` or `code` must read `codings` (none yet: F7 is not built).*
 
 #### [x] P3a. Read route: `GET /code-systems` (server)
 **Files:** api.js, permissions.js | **Paste:** `r.get('/codes')` in api.js, ROUTE_ACTIONS, the audit-coverage list

@@ -20,12 +20,31 @@ test('field with no fhir block is absent; empty values absent',()=>{
   const r=projectCase({...base,rows:[row({row:{loose:9,amt:'',note:'  '}})]});
   assert.deepStrictEqual(r,[]);
 });
-test('code appears only from bindings',()=>{
+test('codings come only from bindings (empty list when none)',()=>{
   const none=projectCase({...base,rows:[row({row:{amt:5}})]})[0];
-  assert.strictEqual(none.code,null);
-  const b=[{set_id:'x.demo',field_id:'amt',system:'local',code:'A1'}];
+  assert.deepStrictEqual(none.codings,[]); assert.ok(!('system' in none)&&!('code' in none));
+  const b=[{set_id:'x.demo',field_id:'amt',system:'lsys',code:'A1'}];
   const got=projectCase({...base,bindings:b,rows:[row({row:{amt:5}})]})[0];
-  assert.strictEqual(got.system,'local'); assert.strictEqual(got.code,'A1');
+  assert.deepStrictEqual(got.codings,[{system:'lsys',code:'A1'}]);
+});
+test('two systems on one field give two codings, in order, no repeats; other fields are unaffected',()=>{
+  const b=[{set_id:'x.demo',field_id:'amt',system:'sysa',code:'1'},{set_id:'x.demo',field_id:'amt',system:'sysb',code:'2'},
+    {set_id:'x.demo',field_id:'amt',system:'sysa',code:'1'},{set_id:'x.demo',field_id:'note',system:'sysa',code:'9'}];
+  const r=projectCase({...base,bindings:b,rows:[row({row:{amt:5,note:'n'}})]});
+  assert.deepStrictEqual(r.find(x=>x.source.fieldId==='amt').codings,[{system:'sysa',code:'1'},{system:'sysb',code:'2'}]);
+  assert.deepStrictEqual(r.find(x=>x.source.fieldId==='note').codings,[{system:'sysa',code:'9'}]);
+});
+test('a system the field does not allow is absent; none allows no code; local needs localSystems; no coding block keeps all',()=>{
+  const mk=(allow)=>({setId:'x.c',version:1,sections:[{fields:[{id:'v',type:'number',unit:'mL',fhir:{resource:'Observation'},coding:{allow}}]}]});
+  const b=[{set_id:'x.c',field_id:'v',system:'sysa',code:'1'},{set_id:'x.c',field_id:'v',system:'sysb',code:'2'},{set_id:'x.c',field_id:'v',system:'mine',code:'3'}];
+  const run=(set,extra)=>projectCase({...base,sets:[set],bindings:b,...extra,rows:[row({set_id:'x.c',row:{v:1}})]})[0].codings.map(c=>c.system);
+  assert.deepStrictEqual(run(mk(['sysa'])),['sysa']);
+  assert.deepStrictEqual(run(mk(['none'])),[]);
+  assert.deepStrictEqual(run(mk(['local'])),[]);
+  assert.deepStrictEqual(run(mk(['local']),{localSystems:['mine']}),['mine']);
+  assert.deepStrictEqual(run(mk(['sysa','local']),{localSystems:['mine']}),['sysa','mine']);
+  const legacy=mk(['x']); delete legacy.sections[0].fields[0].coding;
+  assert.deepStrictEqual(run(legacy),['sysa','sysb','mine']);
 });
 test('comma value stays text; plain digits become number; no conversion',()=>{
   const r=projectCase({...base,rows:[row({row:{amt:'2,5'}}),row({id:'r2',row:{amt:'250'}})]});

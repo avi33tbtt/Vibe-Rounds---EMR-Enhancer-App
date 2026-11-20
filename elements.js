@@ -143,12 +143,28 @@ function compatibility(requires,provides,manualBindings){
    bindings = code_bindings rows. A field is an element only if it has a role AND a fhir block.
    entered_in_error rows are skipped; empty values are skipped; row_time null stays null.
    A number is valueNumber only if typed as a number or plain digits ("2,5" stays text, never guessed).
-   A unit chosen per row comes from that row's own unit field ('-' if none). A code comes only from bindings. */
+   A unit chosen per row comes from that row's own unit field ('-' if none). A code comes only from bindings.
+   P2c: an element row carries codings:[{system,code}] (empty list when none), every binding of the field, in order, no repeats.
+   A field with a coding.allow list drops a binding whose system is not allowed: 'none' allows no code, 'local' allows the
+   systems named in args.localSystems (ids of kind local, passed by the caller), any other entry allows that system id.
+   A field with no coding block keeps all its bindings (legacy). */
 function isEmpty(v){ return v===undefined||v===null||(typeof v==='string'&&v.trim()===''); }
 function projectCase(args){
   var a=args||{}, rows=Array.isArray(a.rows)?a.rows:[], sets=Array.isArray(a.sets)?a.sets:[];
-  var byId={}, cache={}, out=[];
+  var byId={}, cache={}, fields={}, out=[];
+  var locals=Array.isArray(a.localSystems)?a.localSystems:[];
+  var binds=Array.isArray(a.bindings)?a.bindings:[];
   sets.forEach(function(s){ if(s&&s.setId) byId[s.setId]=s; });
+  function codingsFor(set,e){
+    var fl=fields[set.setId]; if(!fl){ fl=fields[set.setId]={};
+      (set.sections||[]).forEach(function(sec){ ((sec&&sec.fields)||[]).forEach(function(f){ if(f&&f.id) fl[f.id]=f; }); }); }
+    var f=fl[e.fieldId], allow=f&&f.coding&&Array.isArray(f.coding.allow)?f.coding.allow:null, seen={};
+    return codingsOf(binds.filter(function(b){ return b&&b.set_id===set.setId&&b.field_id===e.fieldId; }))
+      .filter(function(c){
+        if(allow&&!(allow.indexOf(c.system)>=0||(allow.indexOf('local')>=0&&locals.indexOf(c.system)>=0))) return false;
+        var k=c.system+'|'+c.code; if(seen[k]) return false; seen[k]=true; return true;
+      });
+  }
   rows.forEach(function(r){
     if(!r||r.status==='entered_in_error') return;
     var set=byId[r.set_id]; if(!set) return;
@@ -166,7 +182,7 @@ function projectCase(args){
       var unit=e.unit;
       if(e.unitField) unit=str(data[e.unitField])?data[e.unitField]:'-';
       out.push({patientId:a.patientId||null,encounterId:a.encounterId||null,caseId:a.caseId||null,
-        rowId:r.id||null,resource:e.resource,role:e.role,unit:unit,system:e.system,code:e.code,
+        rowId:r.id||null,resource:e.resource,role:e.role,unit:unit,codings:codingsFor(set,e),
         valueNumber:num,valueText:txt,time:r.row_time||null,status:'active',
         source:{setId:set.setId,setVersion:set.version===undefined?null:set.version,fieldId:e.fieldId}});
     });

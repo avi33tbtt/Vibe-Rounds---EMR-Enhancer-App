@@ -258,4 +258,52 @@ test('D5b1: rows without a usable time are flagged (none or bad), never given a 
   assert.equal(T.activeRows + T.enteredInErrorRows, T.rows, 'every row is active or entered in error');
   assert.equal(T.rowsWithoutTime, d.rows.filter((r) => r.timeKind !== 'ok').length);
 });
-test.todo('D5b2 (needs F4): D-08 appears once in projectCase and once in the export; D-09 error rows and missing-time rows are skipped or flagged in projectCase as designed');
+// ---- D5b2: projectCase checks on the generated data (F4). The export half waits for F7a and F7b and is covered by D7a. ----
+const { projectCase } = require('./elements.js');
+const asCaseRow = (r) => ({ id: r.id, set_id: r.setId, row: r.row, row_time: r.rowTime, status: r.status });
+// Project every chart of one persona the way the export route will: one call per chart, final patient id after merges.
+const projectPersona = (d, personaId) => {
+  const into = {}; for (const m of d.merges) into[m.from] = m.into;
+  const keep = (id) => { while (into[id]) id = into[id]; return id; };
+  const out = [];
+  for (const c of d.cases.filter((x) => x.personaId === personaId)) {
+    const rows = d.rows.filter((r) => r.case === c.id).map(asCaseRow);
+    out.push(...projectCase({ rows, sets: SETS, bindings: [], patientId: keep(c.patient), encounterId: c.encounter || null, caseId: c.id }));
+  }
+  return out;
+};
+
+test('D5b2: D-08 appears once in projectCase: every element row is on the kept record, none repeats, none comes from an error row', () => {
+  const d = demoOf(), e = expectedOf(d).events['D-08'];
+  const m = d.merges.find((x) => d.patients.find((p) => p.id === x.into).personaId === 'D-08');
+  const out = projectPersona(d, 'D-08'), mine = new Set(d.rows.filter((r) => r.personaId === 'D-08').map((r) => r.id));
+  assert.ok(out.length > 0, 'D-08 produced no element rows: its sets may have no fhir block');
+  assert.ok(out.every((x) => x.patientId === m.into), 'an element row is not on the kept record');
+  assert.ok(!out.some((x) => x.patientId === m.from), 'an element row is on the duplicate record');
+  assert.equal(new Set(out.map((x) => x.rowId + '|' + x.source.fieldId)).size, out.length, 'a row field is counted twice');
+  assert.ok(out.every((x) => mine.has(x.rowId)), 'an element row has no source row');
+  const errIds = new Set(d.rows.filter((r) => r.status === 'entered_in_error').map((r) => r.id));
+  assert.ok(!out.some((x) => errIds.has(x.rowId)), 'an entered-in-error row was projected');
+  const used = new Set(out.map((x) => x.rowId)).size;
+  assert.ok(used <= e.rowsOnDuplicate + e.rowsOnKept, 'more source rows than D-08 has');
+});
+test('D5b2: D-09 error rows are skipped; rows with no time keep no time and a bad time is never turned into a date; counts equal demo-expected.json', () => {
+  const d = demoOf(), n = JSON.parse(fs.readFileSync('./demo-expected.json', 'utf8')).personas['D-09'];
+  const rows = d.rows.filter((r) => r.personaId === 'D-09'), out = projectPersona(d, 'D-09'), byRow = {};
+  for (const x of out) (byRow[x.rowId] = byRow[x.rowId] || []).push(x);
+  const errors = rows.filter((r) => r.status === 'entered_in_error'), noTime = rows.filter((r) => r.timeKind !== 'ok');
+  assert.equal(errors.length, n.enteredInErrorRows, 'error rows');
+  assert.equal(noTime.length, n.rowsWithoutTime, 'rows without a usable time');
+  assert.ok(errors.every((r) => !byRow[r.id]), 'an entered-in-error row was projected');
+  assert.ok(out.every((x) => x.status === 'active'));
+  for (const r of noTime.filter((x) => x.status === 'active' && byRow[x.id])) for (const x of byRow[r.id]) {
+    if (r.timeKind === 'none') assert.equal(x.time, null, r.id + ': a missing time was given a value');
+    else assert.ok(!Number.isFinite(Date.parse(x.time)), r.id + ': a bad time became a date');
+  }
+  assert.ok(rows.some((r) => r.timeKind === 'none' && r.status === 'active' && byRow[r.id]), 'no projected D-09 row lacks a time: the check above proved nothing');
+});
+test('D5b2: projecting the same generated data twice gives identical element rows (pure, writes nothing)', () => {
+  const d = demoOf();
+  assert.equal(JSON.stringify(projectPersona(d, 'D-09')), JSON.stringify(projectPersona(d, 'D-09')));
+});
+test.todo('D5b2 export half (needs F7a and F7b, covered by D7a): D-08 appears once in the export bundle and its manifest counts equal demo-expected.json');

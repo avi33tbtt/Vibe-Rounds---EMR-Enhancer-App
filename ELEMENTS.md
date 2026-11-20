@@ -73,7 +73,7 @@ Rules that keep matching honest: no unit conversion; every match shows its basis
 1. One element row per active row per bound field. Rows with `status = entered_in_error` are skipped.
 2. Time comes from the row's `row_time`. If it is null the element row is kept with no time and counted by the completeness analytic; it still counts for V1 and V2, not for V4.
 3. Value as recorded. Units are never converted, doses are never parsed, free text stays text.
-4. A code appears on an element row only if `code_bindings` holds it for that field. Unverified codes never appear.
+4. A coding appears on an element row only if `code_bindings` holds it for that field and the field's `coding.allow` permits it. Unverified codes never appear.
 5. Patients are resolved through `mergedInto` by the caller; the function receives the final patient id.
 6. Viewing and projecting write nothing (rule E6).
 
@@ -81,10 +81,12 @@ Rules that keep matching honest: no unit conversion; every match shows its basis
 
 ```json
 {"patientId":"<uuid>","encounterId":"<uuid>","caseId":"<uuid>","rowId":"<uuid>",
- "resource":"Observation","role":"quantity","unit":"mL","system":null,"code":null,
+ "resource":"Observation","role":"quantity","unit":"mL","codings":[],
  "valueNumber":250,"valueText":null,"time":"2026-11-20T08:30:00Z","status":"active",
  "source":{"setId":"care.intake_output","setVersion":2,"fieldId":"io_volume"}}
 ```
+
+`codings` is a list of `{system, code}`, empty when the field has no code. It holds every binding of the field that the field's `coding.allow` permits (`none` allows no code; `local` allows the local systems the caller names), never a code the software made up. The older single `system` and `code` keys are gone.
 
 `source` is kept only so a person can trace a number back and so a "who uses this field?" check works. **No analytic definition may read `source`** (rule E9). `elements.js` names no seed set id or field id.
 
