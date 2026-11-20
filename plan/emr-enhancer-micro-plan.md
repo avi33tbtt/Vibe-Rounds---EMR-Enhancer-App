@@ -2,7 +2,7 @@
 
 *19 Nov 2026. Repo: github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App. Replaces the chunk list in `emr-enhancer-remaining-plan.md` from 37c onward. Chunks 1-37c are built. Data contracts v5-v7 stay in the old plan file as reference; each task below carries the few facts it needs, so you rarely paste a contract.*
 
-**Next up: 37d3**
+**Next up: 37d4**
 
 ---
 
@@ -108,7 +108,7 @@ Add handoverData(case, sinceMs) returning {narrative, pathways, latest:[{set, va
 Add a Handover view per patient rendering handoverData as simple sections. Display only.
 ```
 
-### [ ] 37d3. Handover: print layout
+### [x] 37d3. Handover: print layout
 **File:** enhancer.html (CSS only) | **Paste:** the Handover render block
 ```text
 Add @media print CSS: A4, one patient per page, hide nav, buttons and every interactive control. Keep the "Not for clinical use" banner visible when printing.
