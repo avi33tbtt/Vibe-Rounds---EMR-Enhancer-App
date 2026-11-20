@@ -15,7 +15,7 @@ Add sum-by-type.test.js, board-no-reading.test.js, handover-data.test.js, handov
 ```
 **Done when:** `npm test` runs them; write the new total in section 10.
 
-#### [ ] V0b. Hand-code inventory (no code)
+#### [x] V0b. Hand-code inventory (no code)
 **Run yourself, paste the output:**
 ```text
 grep -n "care\.intake_output\|io_time\|io_type\|io_volume" enhancer.html store.js api.js
@@ -195,6 +195,24 @@ Admin-only list in Settings: every EMR view pathway with a checkbox and its desc
 Test: read element-sets.js, collect every seed set id and every seed field id (skip generic ids shorter than 4 characters). Scan enhancer.html, store.js and api.js for those strings as quoted words or property names (r.<id>). Fail on any hit not on ALLOW (an array of "file:line-pattern" strings). Start ALLOW from the V0b table (ana() lines only). The test prints the ALLOW size so it can only shrink.
 ```
 **Done when:** the test passes and ALLOW holds only analytics lines.
+
+**Allow-list starting point (from V0b, 20 Nov 2026; line numbers are in enhancer.html and will move).** The scan showed nothing in store.js or api.js. Lines are cut at 200 characters, so a hit that sits later in a long line is marked "late in line".
+
+| Line | What it names | Removed by |
+|---|---|---|
+| 1524 `sumByType` | the I/O time field (`io_time`) and, past the cut, the type and volume fields | V4c deletes it; V4a adds `sumBy` with field names from data |
+| 1526 `ioSum` | `'care.intake_output'`, the hours 8, 12, 24, the `IOW` state | V4c replaces it with `renderSummaries` |
+| 1069 view dispatcher | calls `ioSum` (late in line); `fever` and `tempField` come from the set's view data | V3a2 (registry); the `ioSum` call goes in V4c |
+| 1870 `boardRow` | board cell builder; names no set, but gets its column list from pins | V5b, V5c |
+| 1912 board in `renderPatients` | `pinListFor` and `.direct` sets (late in line: `boardRow`) | V5b |
+| 204 tab button row | fixed Handover button (late in line) | V7c1, V7c2 |
+| 476 Handover pane | `id="ho"`, `id="hob"` | V7c2 |
+| 998 shell dispatcher | `if(id==='ho')handoverRender()` | V7c2 |
+| 1196 refresh | calls `handoverRender` (late in line) | V7c2 |
+| 1900 `handoverRender` | whole function | V6c, V7c2 |
+| 1903 click handler | `$('ho')`, `HOW.h`, hours 8, 12, 24 | V6c, V7c2 |
+
+No `ana()` lines appeared in this scan, so the V8a ALLOW list may start empty. Seed data (element-sets.js) and tests are outside the scan and stay.
 
 #### [ ] V8b. Safety tests for view data
 **File:** safety.test.js (new if missing) | **Paste:** nothing
