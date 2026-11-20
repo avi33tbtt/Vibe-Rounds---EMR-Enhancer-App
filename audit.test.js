@@ -70,6 +70,7 @@ test('every write route writes exactly one audit row, attributed to the logged-i
     ['POST /cases/:id/notes/:nid/sign', 'note.sign', 200, () => P(`${c()}/notes/${st.n.id}/sign`, { expectedVersion: 2 })],
     ['POST /cases/:id/notes/:nid/amend', 'note.amend', 201, () => P(`${c()}/notes/${st.n.id}/amend`, { reason: 'typo fix', text: 'amended' })],
     ['POST /element-sets', 'set.save', 201, () => P('/api/element-sets', { setId: 'user.t', kind: 'custom', body: {} })],
+    ['PUT /emr-views', 'emr_views.set', 200, () => api().put('/api/emr-views').send({ ids: [], expectedVersion: null })],   // V7a2: an empty list is a valid list (every view pathway off); no seed set is needed
     ['PUT /admin/ai', 'ai.setting', 200, () => api().put('/api/admin/ai').send({ enabled: true })],
     ['POST /llm/schema', 'ai.call', 200, () => P('/api/llm/schema', { diagnosis: 'Test disease' })],
     ['POST /llm/suggest', 'ai.call', 200, () => P('/api/llm/suggest', { narrative: 'Test narrative' })],

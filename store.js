@@ -76,6 +76,12 @@
   // The server stamps who approved, verified or signed; the screen only shows the session user. Demo mode has no session, so it keeps typed names.
   // Store.can() is for hiding controls only. The server checks every request, and a refused one still shows a plain message (see the 403 handling below).
   Store.who = () => (Store.mode === 'server' && Store.me && Store.me.name) || null;
+  // V7b: which EMR view pathways are switched on. Server mode: the list /me carried (an admin chooses it, V7a). Demo mode and an older server: the default list. An empty list means all off.
+  const EMR_VIEWS_DEFAULT = ['pathway.emr.ward_board', 'pathway.emr.handover'];
+  Store.emrViews = () => {
+    const v = Store.mode === 'server' && Store.me && Array.isArray(Store.me.emrViews) ? Store.me.emrViews.filter((x) => typeof x === 'string') : null;
+    return clone(v || EMR_VIEWS_DEFAULT);
+  };
   Store.can = (action) => { if (Store.mode !== 'server' || !Store.me || !Array.isArray(Store.me.allowed)) return true; return Store.me.allowed.includes(action); };
 
   // ---------------------------------------------------------------- status

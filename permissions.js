@@ -49,6 +49,7 @@ const ACTIONS = {
   'import.run': ['admin'],
   'migrate.run': ['admin'],                          // one-time turn of typed demo patients into real patient and encounter records (chunk 34c)
   'rules.inforce': CLIN,                             // GET /rules-in-force and its CSV: read-only list of approved rules and verified protocols (chunk 35c)
+  'views.admin': ['admin'],                          // PUT /emr-views: which EMR view pathways (ward board columns, Handover tab) are switched on (V7a2, decision 11)
   'ai.admin': ['admin'],                             // GET/PUT /admin/ai: the AI switch (chunk 36a). AI is off until an admin turns it on.
   'ai.schema': ['admin', 'doctor', 'informatician'], // POST /llm/schema: draft an element set (same people who author sets)
   'ai.suggest': CLIN,                                // POST /llm/suggest: suggest sets for a case narrative (same people who apply sets)
@@ -70,7 +71,7 @@ const ACTION_LABELS = {
   'row.add': 'add readings', 'row.amend_own': 'amend readings', 'row.amend_any': 'amend other people\'s readings', 'value.write': 'save these values',
   'note.write': 'write notes', 'note.sign': 'sign notes', 'set.write': 'edit element sets and pathways', 'code.write': 'edit verified codes', 'codesystem.write': 'create local code systems or add local codes', 'binding.write': 'edit code bindings',
   'rule.write': 'edit alert rules', 'rule.approve': 'approve alert rules', 'protocol.write': 'edit protocols', 'protocol.approve': 'verify protocols',
-  'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'migrate.run': 'migrate demo patients', 'audit.read': 'read the audit log', 'rules.inforce': 'see the rules in force', 'ai.admin': 'change the AI setting', 'ai.schema': 'draft an element set with AI', 'ai.suggest': 'get AI suggestions', 'ai.rule_draft': 'draft a rule with AI', 'user.manage': 'manage users', 'password.change': 'change this password',
+  'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'migrate.run': 'migrate demo patients', 'audit.read': 'read the audit log', 'rules.inforce': 'see the rules in force', 'ai.admin': 'change the AI setting', 'views.admin': 'choose which view pathways are on', 'ai.schema': 'draft an element set with AI', 'ai.suggest': 'get AI suggestions', 'ai.rule_draft': 'draft a rule with AI', 'user.manage': 'manage users', 'password.change': 'change this password',
   'content.review': 'review content', 'package.install': 'install packages',
   'patient.read': 'see patient records', 'patient.write': 'register or correct patients', 'patient.merge': 'merge patients', 'encounter.write': 'change encounters', 'case.link': 'link a case to a patient', 'case.export': 'export a patient record',
 };
@@ -81,7 +82,7 @@ const CARE_ONLY_ROLES = ['nurse'];
 
 /** Every route, keyed 'METHOD /path' exactly as registered in api.js. */
 const ROUTE_ACTIONS = {
-  'GET /me': 'session.read',
+  'GET /me': 'session.read', 'GET /emr-views': 'ref.read', 'PUT /emr-views': 'views.admin',
   'GET /cases': 'case.read', 'GET /cases/:id': 'case.read', 'GET /cases/:id/history': 'case.history', 'GET /cases/:id/changes': 'case.read', 'POST /cases': 'case.create', 'PATCH /cases/:id': 'case.patch',
   'POST /cases/:id/rows': 'row.add', 'PATCH /cases/:id/rows/:rowId': 'row.amend_own', 'POST /cases/:id/rows/:rowId/error': 'row.amend_own',
   'PUT /cases/:id/values': 'value.write',

@@ -1,6 +1,6 @@
 'use strict';
 // node --test emr-views.test.js  (no database)
-// Phase V, V5a and V6a: the seed EMR view pathways for the ward board and the Handover tab. Data only: it names no set or field, holds no rule, threshold,
+// Phase V, V5a, V6a, V7a1 and V7a2: the seed EMR view pathways for the ward board and the Handover tab, and the active-list read and write routes. Data only: it names no set or field, holds no rule, threshold,
 // band, dose, limit, target or default, and validates with validatePathwayViews. (Seeding read-only is checked in the same file once seed.js is read.)
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -156,4 +156,71 @@ test('V6a: saving, patching or deleting the handover pathway through the API is 
   assert.equal((await admin.delete('/api/element-sets/' + HO)).status, 403);
   const rows = await q();
   assert.equal(rows.length, 1); assert.equal(rows[0].content_hash, before); assert.equal(rows[0].body.title, 'Handover view');
+});
+
+// ---- V7a1: the active view pathways, read side (default list; stored list wins; /me carries the same list)
+test('V7a1: GET /emr-views returns the default list when nothing is stored', async () => {
+  const r = await admin.get('/api/emr-views');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { ids: ['pathway.emr.ward_board', 'pathway.emr.handover'], version: null });
+});
+test('V7a1: /me carries the same list', async () => {
+  const me = await admin.get('/api/me');
+  assert.equal(me.status, 200);
+  assert.deepEqual(me.body.emrViews, ['pathway.emr.ward_board', 'pathway.emr.handover']);
+});
+test('V7a1: a stored list wins, in both places; a stored value that is not a list of ids falls back to the default', async () => {
+  await owner.query("INSERT INTO app_settings (key,value) VALUES ('emr_views',$1)", [JSON.stringify({ ids: ['pathway.emr.handover'] })]);
+  assert.deepEqual((await admin.get('/api/emr-views')).body.ids, ['pathway.emr.handover']);
+  assert.deepEqual((await admin.get('/api/me')).body.emrViews, ['pathway.emr.handover']);
+  await owner.query("UPDATE app_settings SET value=$1 WHERE key='emr_views'", [JSON.stringify({ ids: 'nope' })]);
+  assert.deepEqual((await admin.get('/api/emr-views')).body.ids, ['pathway.emr.ward_board', 'pathway.emr.handover']);
+  await owner.query("DELETE FROM app_settings WHERE key='emr_views'");
+});
+
+// ---- V7a2: PUT /emr-views (admin only; ids must be EMR view pathways; version carried; one audit row)
+const WB = 'pathway.emr.ward_board';
+const asNurse = async () => {
+  await owner.query('INSERT INTO users (username,name,role,password_hash) VALUES ($1,$2,$3,$4)', ['a_nurse', 'Name nurse', 'nurse', await hashPassword(PW)]);
+  const n = request.agent(app);
+  assert.equal((await n.post('/api/login').send({ username: 'a_nurse', password: PW })).status, 200);
+  n.set('x-csrf-token', (await n.get('/api/csrf')).body.token);
+  return n;
+};
+const viewAudit = async () => (await owner.query("SELECT * FROM audit_log WHERE action='emr_views.set' ORDER BY id")).rows;
+test('V7a2: a nurse is refused (403) and nothing is stored or audited', async () => {
+  const n = await asNurse(), m = (await viewAudit()).length;
+  const r = await n.put('/api/emr-views').send({ ids: [WB], expectedVersion: null });
+  assert.equal(r.status, 403); assert.equal(r.body.error.action, 'views.admin');
+  assert.equal((await owner.query("SELECT 1 FROM app_settings WHERE key='emr_views'")).rowCount, 0);
+  assert.equal((await viewAudit()).length, m);
+  assert.equal((await n.get('/api/emr-views')).status, 200, 'every role may still read the list');
+});
+test('V7a2: a bad id is refused (400) and nothing changes: unknown, a care pathway, a care set, a repeat, a non-list', async () => {
+  const m = (await viewAudit()).length;
+  for (const ids of [['pathway.emr.nope'], [WB, 'pathway.dka'], ['care.vitals'], [WB, WB], 'x']) {
+    const r = await admin.put('/api/emr-views').send({ ids, expectedVersion: null });
+    assert.equal(r.status, 400, JSON.stringify(ids)); assert.equal(r.body.error.code, 'validation');
+  }
+  assert.equal((await admin.put('/api/emr-views').send({ ids: [WB] })).status, 400, 'a version is required (null for the first save)');
+  assert.equal((await owner.query("SELECT 1 FROM app_settings WHERE key='emr_views'")).rowCount, 0);
+  assert.equal((await viewAudit()).length, m);
+});
+test('V7a2: an admin saves a list; the version moves; a stale version is refused (409) with the current list; one audit row per save', async () => {
+  const m = (await viewAudit()).length;
+  const a = await admin.put('/api/emr-views').send({ ids: [WB], expectedVersion: null });
+  assert.equal(a.status, 200); assert.deepEqual(a.body.ids, [WB]); assert.ok(typeof a.body.version === 'string' && a.body.version);
+  assert.deepEqual((await admin.get('/api/emr-views')).body, { ids: [WB], version: a.body.version });
+  assert.deepEqual((await admin.get('/api/me')).body.emrViews, [WB]);
+  const stale = await admin.put('/api/emr-views').send({ ids: [WB, 'pathway.emr.handover'], expectedVersion: null });
+  assert.equal(stale.status, 409); assert.equal(stale.body.error.code, 'conflict'); assert.deepEqual(stale.body.error.current.ids, [WB]);
+  const b = await admin.put('/api/emr-views').send({ ids: [WB, 'pathway.emr.handover'], expectedVersion: a.body.version });
+  assert.equal(b.status, 200); assert.notEqual(b.body.version, a.body.version);
+  assert.equal((await admin.put('/api/emr-views').send({ ids: [], expectedVersion: a.body.version })).status, 409, 'the first version is now stale');
+  const rows = (await viewAudit()).slice(m);
+  assert.equal(rows.length, 2, 'two saves, two audit rows; the refused ones wrote none');
+  assert.equal(rows[0].entity, 'app_setting'); assert.equal(rows[0].entity_id, 'emr_views'); assert.equal(rows[0].role, 'admin');
+  assert.deepEqual(rows[0].before, { ids: ['pathway.emr.ward_board', 'pathway.emr.handover'] }, 'before is the default list');
+  assert.deepEqual(rows[0].after, { ids: [WB] }); assert.deepEqual(rows[1].before, { ids: [WB] });
+  assert.deepEqual((await admin.put('/api/emr-views').send({ ids: [], expectedVersion: b.body.version })).body.ids, [], 'an empty list is allowed: every view pathway off');
 });

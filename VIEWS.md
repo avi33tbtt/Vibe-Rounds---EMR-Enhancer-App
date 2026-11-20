@@ -8,29 +8,37 @@ Every EMR screen is a registered view, section or surface type plus data. Code n
 |---|---|---|
 | Sets | Fields, repeat groups, units (`care.vitals`, `care.intake_output`) | unchanged |
 | View blocks | Optional declarative blocks inside a set: how its rows are shown | `view.type` flowsheet / fever / dailygrid exist; new optional keys added in Phase V and 7 |
-| EMR view pathways | A pathway (`kind:'pathway'`, `contexts:['emr']`) with a `surface` (where it appears) and optional `sections` (what it lists) | new |
+| EMR view pathways | A pathway (`kind:'pathway'`, `contexts:['emr']`) with a `surface` (where it appears) and optional `sections` (what it lists). Seed: `pathway.emr.ward_board`, `pathway.emr.handover`. An admin switches them on or off in Settings (`GET`/`PUT /emr-views`, see API.md) | built (Phase V) |
 
 ## View block keys
 
-All keys refer to field ids declared in the same set.
+All keys refer to field ids declared in the same set. The closed list is `VIEW_KEYS` in `views.js`; `validateView` refuses an unknown key, an unknown `type`, any key named eval, function, threshold, band, dose, limit, target or default, and any `*Field` key (or `extra` entry) that is not a field of the set.
 
-| Key | Does | First used by |
+**View types (`view.type`):** `flowsheet`, `fever`, `dailygrid`.
+
+**Keys used by those types:** `type`, `timeField`, `tempField`, `unitField`, `thresholdField`, `thresholdUnitField`, `extra` (field ids), `slotField`, `glucoseField`, `doseField`, `byField`, `slots`. (`thresholdField` and `doseField` name a field where a clinician types a value; the view never holds a number.)
+
+**Blocks added in Phase V and later:**
+
+| Key | Does | Status |
 |---|---|---|
-| `summary:[{type:'sumBy', timeField, keyField, valueField, windowsHours, label}]` | plain sum of entered rows per key in a window; never compared to anything | I/O (V4) |
-| `board:{show:'latest'}` | what a ward-board cell shows (default latest value and its age) | V5 |
-| `banner:{chipField}` | active (not entered-in-error) values as a chip in the patient banner | allergies (49) |
-| `statusboard:{statusField, groups:[{label, values}]}` | read-only grouping of rows by status | orders (48) |
-| `actions:[{label, field, to, reasonField?, reasonRequired?}]` | one-click row patch of one field, through the existing row route | orders (48) |
-| `crosscheck:{against:{setId, field}, textField, message}` | non-blocking note when two typed texts match | MAR (49) |
-| `drives:{...}` | informational only, see decision 15 | ADT (50) |
+| `summary:[{type:'sumBy', timeField, keyField, valueField, windowsHours, label}]` | plain sum of entered rows per key in a window (up to 8 windows, positive whole hours); never compared to anything. `timeField` must be a datetime, `valueField` a number or integer, `keyField` text or select. Removing the key leaves the set usable. | built (V4, validated) |
+| `board:{show, fields?}` | what a ward-board cell shows: `show` `'latest'` (default, latest value and its age) or `'age'` (age only); optional `fields` keeps only those field ids. The "No reading for N min" text still comes only from an approved rule. | built (V5c, validated in V8b: only the keys `show` and `fields`; `show` in the closed list; `fields` a non-empty list of field ids of the set) |
+| `banner:{chipField}` | active (not entered-in-error) values as a chip in the patient banner | allowed key, not built (allergies, 49) |
+| `statusboard:{statusField, groups:[{label, values}]}` | read-only grouping of rows by status | allowed key, not built (orders, 48) |
+| `actions:[{label, field, to, reasonField?, reasonRequired?}]` | one-click row patch of one field, through the existing row route | allowed key, not built (orders, 48) |
+| `crosscheck:{against:{setId, field}, textField, message}` | non-blocking note when two typed texts match | allowed key, not built (MAR, 49) |
+| `drives:{...}` | informational only, see decision 15 | allowed key, not built (ADT, 50) |
+
+**Pure helpers in `views.js`:** `validateView`, `validatePathwayViews`, `fieldsById`, `rowsInWindow(rows, timeField, fromMs, toMs)` (skips entered-in-error rows and unreadable times), `sumBy(rows, spec, fromMs, toMs)`; coding helpers `validateCoding`, `validateSetCoding`, `codingAllow` (see CODING.md).
 
 ## Surface types (closed list)
 
-Adding one means a generic renderer plus a test.
+Adding one means a generic renderer plus a test. The closed list is `SURFACE_TYPES` in `views.js`; an unknown type is refused when the pathway is seeded or saved.
 
 | Surface | Where | Sections / content |
 |---|---|---|
-| `case_tab` | an extra tab in a patient's chart | `sections[]` |
+| `case_tab` | an extra tab in a patient's chart, after the fixed tabs. Needs `id` (lowercase letters, digits, `_` or `-`, up to 24, not already used on the page) and `label`; `print: true` marks a print layout. Built from `emrSurfaces('case_tab')`, so the tab is absent when its pathway is switched off | `sections[]` |
 | `patients_columns` | columns on the Patients ward board | members, or `columnsFrom:'pinned'` |
 | `patients_panel` | a panel on the Patients screen | one member set with an `upcoming` view |
 | `banner_chips` | chips in the patient banner | members with a `banner` block |
@@ -38,7 +46,7 @@ Adding one means a generic renderer plus a test.
 
 ## Section types for `case_tab`
 
-`narrative`, `activePathways`, `latestValues` (scope applied), `ackedAlerts` (hours), `newRows` (since `lastHandover`), `setTable` (a member set as a table), `statusboard`, `linkedgrid` (MAR).
+The closed list is `SECTION_TYPES` in `views.js`. Built (V6): `narrative`, `activePathways`, `latestValues` (scope applied), `ackedAlerts` (`hours`, a positive whole number; 24 if absent), `newRows` (`since: 'lastHandover'`; otherwise every stamped row). Sections are drawn in the listed order; an unknown type is skipped by the screen and refused by the validator. A section may also carry `windowsHours` (up to 8 positive whole numbers). Allowed but not built: `setTable` (a member set as a table), `statusboard`, `linkedgrid` (MAR). The `scope` value is not read by any code yet.
 
 ## Worked examples (data only, no clinical values)
 
@@ -58,10 +66,10 @@ Adding one means a generic renderer plus a test.
 
 ## Engine rules
 
-- **E1.** Code (`enhancer.html`, `store.js`, `api.js`) never names a clinical set id, field id or option text. Only seed data and tests do.
+- **E1.** Code (`enhancer.html`, `store.js`, `api.js`) never names a clinical set id, field id or option text. Only seed data and tests do. `no-handcode.test.js` enforces it by scanning the code for every seed set and field id; ids of EMR view pathways (configuration names) are exempt. Its ALLOW list holds the hand-coded lines still to be moved into data (tasks V8d1 to V8d8); it may only shrink and must be empty at the Phase V gate.
 - **E2.** Every screen is a registered view, section or surface type plus data.
 - **E3.** A new type needs one pure function, a test that uses a **made-up set** (proves it is generic), a validator entry, and one line in this file.
-- **E4.** View data holds ids, labels and display windows only. No doses, thresholds, bands or rules. Pathways stay `rules:[]` in seed.
+- **E4.** View data holds ids, labels and display windows only. No doses, thresholds, bands or rules. Pathways stay `rules:[]` in seed. `views-safety.test.js` checks this on every seed view, surface and section.
 - **E5.** View pathways are ordinary content: versioned, tiered, forkable, read-only when from the marketplace.
 - **E6.** Viewing writes nothing. Writes use the existing row routes with the existing permissions, versions (409) and audit.
 - **E7.** The fixed frame stays fixed: patient banner, Summary, Flowsheets, Notes, Pathway, Alerts, Export, Settings and Tools. Safety-critical screens (alerts, notes signing, audit) are not data-driven.

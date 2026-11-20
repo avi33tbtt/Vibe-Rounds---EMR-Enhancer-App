@@ -7,6 +7,8 @@ var VIEW_KEYS=['type','timeField','tempField','unitField','thresholdField','thre
   'summary','board','banner','statusboard','actions','crosscheck','drives'];
 var SUMMARY_TYPES=['sumBy'];
 var SUMMARY_KEYS=['type','timeField','keyField','valueField','windowsHours','label'];
+var BOARD_SHOW=['latest','age'];
+var BOARD_KEYS=['show','fields'];
 var BANNED=['eval','function','threshold','band','dose','limit','target','default'];
 
 function collectFields(set){
@@ -62,6 +64,21 @@ function validateSummary(entry,i,fields,errors,warnings){
   else if(typeof entry.label!=='string') errors.push(p+'.label must be text');
 }
 
+/* V8c2: view.board = {show:'latest'|'age', fields?:[field ids of the set]}. Display only; fields limits which values a ward-board cell shows. */
+function validateBoard(b,fields,errors){
+  var p='view.board';
+  if(!b||typeof b!=='object'||Array.isArray(b)){ errors.push(p+' must be an object'); return; }
+  Object.keys(b).forEach(function(k){ if(BOARD_KEYS.indexOf(k)<0) errors.push(p+' has unknown key "'+k+'"'); });
+  if(b.show!==undefined&&BOARD_SHOW.indexOf(b.show)<0) errors.push(p+'.show must be "latest" or "age", not "'+b.show+'"');
+  if(b.fields!==undefined){
+    if(!Array.isArray(b.fields)||!b.fields.length) errors.push(p+'.fields must be a non-empty list of field ids');
+    else b.fields.forEach(function(id){
+      if(typeof id!=='string'||!id) errors.push(p+'.fields has an entry that is not text');
+      else if(!fields[id]) errors.push(p+'.fields refers to field "'+id+'" which is not in the set');
+    });
+  }
+}
+
 function validateView(set){
   var errors=[],warnings=[];
   var v=set&&set.view;
@@ -77,6 +94,7 @@ function validateView(set){
     if(!Array.isArray(v.summary)) errors.push('view.summary must be a list');
     else v.summary.forEach(function(e,i){ validateSummary(e,i,fields,errors,warnings); });
   }
+  if(v.board!==undefined) validateBoard(v.board,fields,errors);
   return {errors:errors,warnings:warnings};
 }
 

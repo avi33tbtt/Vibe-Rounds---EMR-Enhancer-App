@@ -192,7 +192,7 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
     <div class="mu">Synthetic demo fields only. Do not enter real patient identifiers.</div>
   </div>
 </div>
-<div id="set" class="cd" style="margin:10px 16px"><div class="mu"><b>AI</b> <span id="aiNote">AI is off.</span> No API key is entered or stored in this browser: the server holds it.</div><div id="aiAdm" hidden class="cd" style="margin:6px 0"><b>Administrator: AI switch</b><div class="mu"><b>Data protection:</b> when AI is on, the server sends the text you confirm to an <b>external model provider</b>. The server removes identifiers by pattern matching, which is best effort and not a guarantee. Do not switch AI on for real patient data unless your organisation has a signed <b>data processing agreement</b> with the provider and has approved this use. Every call is logged (purpose, user, size) without its content.</div><div class="mu" id="aiSt"></div><button class="b sm" id="aiTog" type="button">Switch AI on</button></div><div hidden><select id="prov"><option value="or">OpenRouter</option></select><input id="model"><input type="checkbox" id="demo"></div>
+<div id="set" class="cd" style="margin:10px 16px"><div class="mu"><b>AI</b> <span id="aiNote">AI is off.</span> No API key is entered or stored in this browser: the server holds it.</div><div id="aiAdm" hidden class="cd" style="margin:6px 0"><b>Administrator: AI switch</b><div class="mu"><b>Data protection:</b> when AI is on, the server sends the text you confirm to an <b>external model provider</b>. The server removes identifiers by pattern matching, which is best effort and not a guarantee. Do not switch AI on for real patient data unless your organisation has a signed <b>data processing agreement</b> with the provider and has approved this use. Every call is logged (purpose, user, size) without its content.</div><div class="mu" id="aiSt"></div><button class="b sm" id="aiTog" type="button">Switch AI on</button></div><div id="evBox" class="cd" style="margin:6px 0"><b>EMR view pathways</b><div class="mu" id="evNote"></div><div id="evList"></div><button class="b sm" id="evSave" type="button" hidden>Save</button></div><div hidden><select id="prov"><option value="or">OpenRouter</option></select><input id="model"><input type="checkbox" id="demo"></div>
 <hr><button class="b" onclick="exp()">Export all data</button> <button class="b" onclick="resetRank()">Reset sidebar ranking</button> <label style="display:inline">Import <input type="file" id="imp" accept=".json" style="width:auto" onchange="imp(this.files[0])"></label> <button class="b" style="background:var(--r)" onclick="wipe()">Delete all data</button>
 <div class="mu">Export contains cases, generated sets, alert rules, your verified codes and set usage; the API key is never exported. Browser storage is not encrypted: use synthetic data only.</div>
 <hr><div id="ib"><b>Import from this browser</b>
@@ -201,7 +201,7 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 <div id="ibOut" aria-live="polite"></div></div></div>
 <nav id="oldnav" aria-hidden="true"></nav>
 <div id="shellnav" role="navigation" aria-label="Patient chart sections">
-  <button class="on" data-shell-t="ov" aria-current="page">Summary</button><button data-shell-t="flw">Flowsheets</button><button data-shell-t="nt">Notes</button><button data-shell-t="pw">Pathway</button><button data-shell-t="al">Alerts</button><button data-shell-t="ho">Handover</button><button data-shell-t="ex">Export</button>
+  <button class="on" data-shell-t="ov" aria-current="page">Summary</button><button data-shell-t="flw">Flowsheets</button><button data-shell-t="nt">Notes</button><button data-shell-t="pw">Pathway</button><button data-shell-t="al">Alerts</button><button data-shell-t="ex">Export</button>
   <details id="tools"><summary>Tools ▾</summary><div class="toolitems">
     <button data-shell-t="in">Set builder</button><button data-shell-t="fh">Codes</button>
     <button data-shell-t="an">Analytics</button><button data-shell-t="ab">About</button>
@@ -476,7 +476,6 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 <div id="lcmsg" class="mu"></div><div id="lcl"></div>
 <div id="lcNew" style="margin-top:8px"><input id="lcid" placeholder="id, e.g. ward-a" style="width:150px"> <input id="lcname" placeholder="name" style="width:220px"> <button class="b" onclick="lcAddSystem()">Create local system</button></div></div>
 </div>
-<div class="pane" id="ho"><div class="cd"><b>Handover</b> <span class="mu">Display only. Everything is shown as recorded; no assessment is made.</span><div id="hob"></div></div></div>
 <div class="pane" id="ex"><div class="cd"><b>FHIR R4 bundle</b> <span class="mu">(from the current case values; unverified codes are left out, text kept. In server mode each build is recorded in the audit log, and the chart must be linked to a patient.)</span><br>
 <button class="b" onclick="bundle()">Build bundle</button><button class="b" onclick="navigator.clipboard.writeText($('bj').textContent)">Copy</button><button class="b" onclick="dl()">Download</button>
 <div id="bchk" class="mu"></div><pre id="bj"></pre></div></div>
@@ -999,10 +998,31 @@ function showShellTab(id){
   const pane=$(id);if(pane)pane.classList.add('on');
   const tools=$('tools');if(tools&&['in','fh','an','ab'].includes(id))tools.open=false;
   if(id==='an')ana();if(id==='fh'){codesUI();lcLoad()}if(id==='ov')summaryWorkspace();
-  if(id==='cp')renderCase();if(id==='flw'){renderFlowsheets();renderCase()}if(id==='nt')renderNotes();if(id==='pw')pathwayWorkspace();if(id==='al'){cdsRender();alertsRender()}if(id==='ho')handoverRender();
+  if(id==='cp')renderCase();if(id==='flw'){renderFlowsheets();renderCase()}if(id==='nt')renderNotes();if(id==='pw')pathwayWorkspace();if(id==='al'){cdsRender();alertsRender()}if(document.querySelector('.pane[data-surface-pane]#'+id))surfaceRender(id);
 }
 document.querySelectorAll('[data-shell-t]').forEach(b=>b.addEventListener('click',()=>{if(!CASE_OPEN)return toast('Open or create a case first.');showShellTab(b.dataset.shellT)}));
-$('settingsTool').addEventListener('click',()=>{if($('tools'))$('tools').open=false;tg('set');aiPaint();aiAdmin()});
+// V7c1: extra tabs from the active EMR view pathways (surface type 'case_tab'). Ids already on the page (the fixed tabs) are skipped.
+function surfaceTabsBuild(){
+  const nav=$('shellnav'),after=$('ex');if(!nav||!after)return;
+  const list=emrSurfaces('case_tab').filter(s=>{const id=String((s.surface||{}).id||'');return /^[a-z][a-z0-9_-]{0,23}$/.test(id)&&!(document.getElementById(id)&&!document.getElementById(id).dataset.surfacePane)}),sig=list.map(s=>s.surface.id+'|'+s.surface.label+'|'+(s.surface.print===true)).join(',');
+  if(nav.dataset.surfaceSig===sig&&sig!=='')return;
+  nav.dataset.surfaceSig=sig;
+  nav.querySelectorAll('[data-surface-tab]').forEach(x=>x.remove());
+  document.querySelectorAll('.pane[data-surface-pane]').forEach(x=>x.remove());
+  let lastBtn=nav.querySelector('[data-shell-t="ex"]'),lastPane=after;
+  list.forEach(s=>{
+    const sf=s.surface,id=String(sf.id);
+    const b=document.createElement('button');b.type='button';b.dataset.shellT=id;b.dataset.surfaceTab=id;b.textContent=String(sf.label||id);
+    b.addEventListener('click',()=>{if(!CASE_OPEN)return toast('Open or create a case first.');showShellTab(id)});
+    if(lastBtn)lastBtn.insertAdjacentElement('afterend',b);else nav.appendChild(b);
+    lastBtn=b;
+    const p=document.createElement('div');p.className='pane';p.id=id;p.dataset.surfacePane=id;if(sf.print===true)p.dataset.surfacePrint='1';
+    p.innerHTML='<div class="cd"><b></b> <span class="mu">Display only. Everything is shown as recorded; no assessment is made.</span><div data-surface-body></div></div>';p.querySelector('b').textContent=String(sf.label||id);
+    lastPane.insertAdjacentElement('afterend',p);lastPane=p;
+  });
+}
+try{surfaceTabsBuild()}catch(e){/* registry not ready at load; built again when the chart opens */}
+$('settingsTool').addEventListener('click',()=>{if($('tools'))$('tools').open=false;tg('set');aiPaint();aiAdmin();evPaint()});
 
 // Chunk 25G: a local presentation preference; it never changes clinical data.
 function setDensity(compact){document.body.classList.toggle('compact',!!compact);const b=$('densityToggle');if(b){b.setAttribute('aria-pressed',compact?'true':'false');b.textContent=compact?'Comfortable view':'Compact view'}try{localStorage.setItem('emrDensity',compact?'compact':'comfortable')}catch(e){}}
@@ -1206,7 +1226,7 @@ if(Store.mode==='server'&&r.__id)Store.reasons[r.__id]=why.trim();rows.splice(i,
 function persist(msg){if(!CUR)return;clearTimeout(PT);const c=getC(),i=c.findIndex(x=>x.id==CUR.id),p=CUR.patient||{},hasPatient=!!(p.name||p.ageSex||p.bed||p.mrn||CUR.patientId),empty=!(CUR.narrative||'').trim()&&!CUR.applied.length&&!(CUR.pathways||[]).length&&!hasPatient;
 if(empty){if(i>=0){c.splice(i,1);setC(c)}picker();return}
 CUR.updatedAt=new Date().toISOString();patientOf(CUR);ensureRowIds(CUR);const cp=JSON.parse(JSON.stringify(CUR));if(i<0)c.push(cp);else c[i]=cp;if(!setC(c)){$('sv').textContent='NOT SAVED';return}
-$('sv').textContent=Store.status().text;if(msg)toast('Saved ('+c.length+' cases)');picker();pwRefresh();alertsRender();if($('ov')&&$('ov').classList.contains('on'))summaryWorkspace();if($('ho')&&$('ho').classList.contains('on'))handoverRender();renderPatientBanner();if(!CASE_OPEN)renderPatients()}
+$('sv').textContent=Store.status().text;if(msg)toast('Saved ('+c.length+' cases)');picker();pwRefresh();alertsRender();if($('ov')&&$('ov').classList.contains('on'))summaryWorkspace();{const sp=document.querySelector('.pane[data-surface-pane].on');if(sp)surfaceRender(sp.id)}renderPatientBanner();if(!CASE_OPEN)renderPatients()}
 const persistSoon=()=>{clearTimeout(PT);PT=setTimeout(()=>persist(),400);today();alertsRender()};
 function save(){persist(true)}
 function openCase(){const id=$('cpick').value;if(!id)return;persist();const x=getC().find(y=>y.id==id);if(x)enterCase(JSON.parse(JSON.stringify(x)),'ov')}
@@ -1808,8 +1828,8 @@ const r=o[fid]||{low:null,high:null};r[w]=t.value===''?null:fnum(t.value);o[fid]
 /* ---- Phase 3, chunk 23: pathways. A pathway is a kind:'pathway' set that only lists member sets. Additive: applying never deletes values; removing a pathway record never removes sets or values. No doses, bands or thresholds live here. ---- */
 const isPw=s=>!!s&&s.kind=='pathway';
 const isEmrView=s=>!!s&&Array.isArray(s.contexts)&&s.contexts.includes('emr');
-const EMR_ACTIVE_TEMP=['pathway.emr.ward_board','pathway.emr.handover']; /* V5b temporary rule; V7b replaces it with the active list */
-function emrSurfaces(type){return registry().filter(s=>isPw(s)&&isEmrView(s)&&EMR_ACTIVE_TEMP.includes(s.setId)&&s.surface&&s.surface.type===type)}
+/* V7b: the active list comes from Store.emrViews() (the admin's choice from /me; Demo mode: the default list). With no Store (a test that loads only these functions) every EMR view pathway in the registry counts as active. */
+function emrSurfaces(type){const act=typeof Store!=='undefined'&&Store.emrViews?Store.emrViews():null;return registry().filter(s=>isPw(s)&&isEmrView(s)&&(!act||act.includes(s.setId))&&s.surface&&s.surface.type===type)}
 function boardColumnIds(c){const sf=emrSurfaces('patients_columns')[0];if(!sf||sf.surface.columnsFrom==='pinned')return pinListFor(c);return pwMembers(sf).map(m=>m.setId)}
 const pwMembers=p=>(Array.isArray(p&&p.members)?p.members:[]).filter(m=>m&&typeof m.setId=='string'&&m.setId);
 function applyPathway(c,id){const p=getSet(id);if(!isPw(p))return null;const added=[],had=[],missing=[];
@@ -1961,29 +1981,41 @@ const SECTIONS={
 /* V6b2: sectionsData runs the listed sections in order and returns {sectionType: result}. Unknown section types are skipped (no renderer yet).
    handoverData keeps the 37d1 shape for the Handover view; its sections come from the active case_tab view pathway. The fallback list is used only when that pathway is not in the registry (V7 removes it). */
 const HANDOVER_FALLBACK=[{type:'narrative'},{type:'activePathways'},{type:'latestValues',scope:'applied'},{type:'ackedAlerts',hours:24},{type:'newRows',since:'lastHandover'}];
+function handoverSections(){const ps=emrSurfaces('case_tab')[0];return ps&&Array.isArray(ps.sections)?ps.sections:HANDOVER_FALLBACK}
 function sectionsData(c,sections,ctx){const out={};(Array.isArray(sections)?sections:[]).forEach(sec=>{const f=sec&&SECTIONS[sec.type];if(f)out[sec.type]=f(c||{},sec,ctx||{})});return out}
 function handoverData(c,sinceMs,nowMs){
-  const ps=emrSurfaces('case_tab')[0],secs=ps&&Array.isArray(ps.sections)?ps.sections:HANDOVER_FALLBACK,
+  const secs=handoverSections(),
     d=sectionsData(c,secs,{now:Number.isFinite(nowMs)?nowMs:Date.now(),since:sinceMs});
   return{narrative:d.narrative||'',pathways:d.activePathways||[],latest:d.latestValues||[],acks24h:d.ackedAlerts||[],newRows:d.newRows||[]}
 }
 /* chunk 37d2: Handover view. Display only: sections from handoverData, no colours, no flags, no judgement text. */
 const HOW={h:12};
-function handoverHtml(d,hrs,ruleText){
+/* V6c: each handover section is drawn by type from SECTION_HTML, in the order the case_tab view pathway lists them. (d, spec, x) -> html. Display only: no colours, flags or judgement text. */
+const SECTION_HTML={
+  narrative:(d,sp,x)=>x.sec('Narrative',d.narrative?`<div style="white-space:pre-wrap">${esc(d.narrative)}</div>`:'<div class="mu">No narrative entered.</div>'),
+  activePathways:(d,sp,x)=>x.sec('Pathways',d.pathways.length?d.pathways.map(y=>`<div>${esc(y.title)}${y.startedAt?' <span class="mu">started '+esc(String(y.startedAt).slice(0,10))+'</span>':''}</div>`).join(''):x.none),
+  latestValues:(d,sp,x)=>x.sec('Latest readings',d.latest.length?x.tbl(['Set','Latest value','Recorded'],d.latest.map(y=>[y.set,y.value,y.ageText])):'<div class="mu">No timed readings.</div>'),
+  newRows:(d,sp,x)=>x.sec('Entered in the last '+x.hrs+' h',d.newRows.length?x.tbl(['Set','Entered','Reading time','Value'],d.newRows.map(y=>[y.set,x.tm(y.enteredAt),x.tm(y.readingAt),y.value])):'<div class="mu">None. Rows without a recorded entry time are not listed.</div>'),
+  ackedAlerts:(d,sp,x)=>x.sec('Alerts acknowledged in the last '+(sp&&Number.isFinite(+sp.hours)&&+sp.hours>0?+sp.hours:24)+' h',d.acks24h.length?d.acks24h.map(y=>`<div>${esc(x.ruleText(y.ruleId,y.setId))} <span class="mu">acknowledged ${esc(x.tm(y.ackedAt))}</span></div>`).join(''):x.none)
+};
+function handoverHtml(d,hrs,ruleText,secs){
   const tm=t=>{const x=new Date(t);return isNaN(x)?'':x.toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})},none='<div class="mu">None.</div>',
   sec=(t,b)=>`<div class="kh">${esc(t)}</div>${b}`,
   tbl=(hd,rows)=>`<div style="overflow-x:auto;max-width:100%"><table class="pt"><tr>${hd.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>${rows.map(r=>'<tr>'+r.map(x=>`<td>${esc(x)}</td>`).join('')+'</tr>').join('')}</table></div>`;
+  const x={tm,none,sec,tbl,hrs,ruleText};
   return'<div class="tj">Entries from the last '+[8,12,24].map(n=>`<button class="b sm" type="button" data-how="${n}" style="${hrs==n?'border:1px solid var(--ac)':'opacity:.6'}">${n} h</button>`).join(' ')+'</div>'
-  +sec('Narrative',d.narrative?`<div style="white-space:pre-wrap">${esc(d.narrative)}</div>`:'<div class="mu">No narrative entered.</div>')
-  +sec('Pathways',d.pathways.length?d.pathways.map(x=>`<div>${esc(x.title)}${x.startedAt?' <span class="mu">started '+esc(String(x.startedAt).slice(0,10))+'</span>':''}</div>`).join(''):none)
-  +sec('Latest readings',d.latest.length?tbl(['Set','Latest value','Recorded'],d.latest.map(x=>[x.set,x.value,x.ageText])):'<div class="mu">No timed readings.</div>')
-  +sec('Entered in the last '+hrs+' h',d.newRows.length?tbl(['Set','Entered','Reading time','Value'],d.newRows.map(x=>[x.set,tm(x.enteredAt),tm(x.readingAt),x.value])):'<div class="mu">None. Rows without a recorded entry time are not listed.</div>')
-  +sec('Alerts acknowledged in the last 24 h',d.acks24h.length?d.acks24h.map(x=>`<div>${esc(ruleText(x.ruleId,x.setId))} <span class="mu">acknowledged ${esc(tm(x.ackedAt))}</span></div>`).join(''):none)
+  +(Array.isArray(secs)?secs:handoverSections()).map(sp=>{const f=sp&&SECTION_HTML[sp.type];return f?f(d,sp,x):''}).join('')
 }
-function handoverRender(){const el=$('hob');if(!el||!CUR)return;
+function handoverRender(el,secs){if(!el||!CUR)return;
   try{const rs=ruleReg().flatMap(x=>Array.isArray(x.rules)?x.rules:[]),rt=(rid,sid)=>{const r=rs.find(x=>x&&x.ruleId===rid),q=getSet(sid);return(r&&r.summary?r.summary:rid)+(q?' ('+shortOf(q)+')':'')};
-    el.innerHTML=handoverHtml(handoverData(CUR,Date.now()-HOW.h*36e5),HOW.h,rt)}catch(e){el.innerHTML='<div class="mu">Handover could not be drawn.</div>'}}
-$('ho').addEventListener('click',e=>{const b=e.target.closest('[data-how]');if(!b)return;HOW.h=[8,12,24].includes(+b.dataset.how)?+b.dataset.how:12;handoverRender()});
+    el.innerHTML=handoverHtml(handoverData(CUR,Date.now()-HOW.h*36e5),HOW.h,rt,secs)}catch(e){el.innerHTML='<div class="mu">Handover could not be drawn.</div>'}}
+// V7c2: a surface tab is drawn by its pathway's sections; the 8/12/24 h buttons live inside the pane.
+function surfaceRender(id){
+  const ps=emrSurfaces('case_tab').find(x=>x.surface&&x.surface.id===id),pane=$(id),body=pane&&pane.querySelector('[data-surface-body]');
+  if(!ps||!body||!CUR)return;
+  handoverRender(body,ps.sections);
+}
+document.addEventListener('click',e=>{const b=e.target.closest('.pane[data-surface-pane] [data-how]');if(!b)return;HOW.h=[8,12,24].includes(+b.dataset.how)?+b.dataset.how:12;surfaceRender(b.closest('.pane').id)});
 /* chunk 37c5: minutes from an APPROVED, enabled minutes_since_gt rule that is true now (evalRules already skips unapproved rules); null when there is none. N is the recorded age, never invented. */
 function boardNoReading(alerts,setId){const a=(Array.isArray(alerts)?alerts:[]).find(x=>x&&x.op==='minutes_since_gt'&&x.setId===setId&&Number.isFinite(x.value));return a?Math.round(a.value):null}
 function renderPatientRow(m){
@@ -2164,6 +2196,29 @@ $('pfClose').addEventListener('click',pfClose);
 $('aiSend').addEventListener('click',()=>aiClose(true));$('aiNo').addEventListener('click',()=>aiClose(false));
 $('aiCfm').addEventListener('mousedown',e=>{if(e.target===$('aiCfm'))aiClose(false)});
 $('aiCfm').addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();aiClose(false);return}if(e.key!=='Tab')return;const f=[...$('aiBox').querySelectorAll('button')];if(!f.length)return;const a=document.activeElement;if(e.shiftKey&&a===f[0]){e.preventDefault();f[f.length-1].focus()}else if(!e.shiftKey&&a===f[f.length-1]){e.preventDefault();f[0].focus()}});
+/* V7d: choose EMR view pathways (admin edits, everyone else reads) */
+const EV={version:null};
+async function evPaint(){
+  const box=$('evList');if(!box)return;
+  const all=registry().filter(s=>isPw(s)&&isEmrView(s)),adm=SRV()&&mayDo('views.admin');
+  let ids=Store.emrViews?Store.emrViews():[],err='';
+  if(SRV()){try{const r=await Store.api('GET','/emr-views');if(Array.isArray(r.ids))ids=r.ids;EV.version=r.version==null?null:String(r.version)}catch(e){err=' Could not read the saved list: '+e.message}}
+  box.innerHTML='';
+  all.forEach(s=>{const l=document.createElement('label'),cb=document.createElement('input'),t=document.createElement('b'),d=document.createElement('span');
+    l.style.display='block';cb.type='checkbox';cb.value=s.setId;cb.checked=ids.includes(s.setId);cb.disabled=!adm;
+    t.textContent=s.title||s.name||s.setId;d.className='mu';d.textContent=s.description?' '+s.description:'';
+    l.append(cb,' ',t,d);box.appendChild(l)});
+  $('evSave').hidden=!adm;
+  $('evNote').textContent=(adm?'Choose which EMR views are on for everyone. Display only; no clinical content changes.':'These EMR views are on or off for everyone. Only an administrator can change them.')+(all.length?'':' No view pathways are loaded.')+err}
+$('evSave').addEventListener('click',async()=>{
+  const b=$('evSave'),ids=[...$('evList').querySelectorAll('input:checked')].map(x=>x.value);b.disabled=true;
+  try{await Store.api('PUT','/emr-views',{ids,expectedVersion:EV.version});
+    if(Store.me)Store.me.emrViews=ids.slice();
+    toast('View pathways saved.');surfaceTabsBuild();
+    if(CASE_OPEN&&!document.querySelector('.pane.on'))showShellTab('ov');
+    if(typeof renderPatients==='function')renderPatients()}
+  catch(e){toast(e.status===409?'Someone else changed this list. It has been reloaded; check it and save again.':e.status===403?'Only an administrator can change this.':'Could not save: '+e.message)}
+  b.disabled=false;await evPaint()});
 /* admin switch (Settings) */
 async function aiAdmin(){const box=$('aiAdm');if(!box)return;if(!SRV()||!mayDo('ai.admin')){box.hidden=true;return}box.hidden=false;
 try{const a=await Store.ai.status();$('aiSt').textContent=(a.configured?'Model: '+a.provider+' / '+a.model+'. ':'No model is configured on the server (LLM_API_KEY, LLM_MODEL). ')+'AI is '+(a.enabled?'ON':'OFF')+(a.updatedBy?' (last changed by '+a.updatedBy+')':'')+'. Limits per user: '+a.limits.perMinute+'/minute, '+a.limits.perHour+'/hour.';
@@ -2186,7 +2241,7 @@ function showNoCase(){
 }
 function enterCase(c,tab){
   histClose();CUR=c;cleanRows(CUR);cleanPw(CUR);patientOf(CUR);CASE_OPEN=true;
-  $('noCase').classList.remove('show');$('shellnav').style.display='flex';$('chartbar').classList.add('open');
+  $('noCase').classList.remove('show');$('shellnav').style.display='flex';surfaceTabsBuild();$('chartbar').classList.add('open');
   renderPatientBanner();renderCase();renderChartBar();showShellTab(tab||'ov');if((tab||'ov')==='nt')renderNotes();picker();liveStart();
 }
 $('ptEditBtn').addEventListener('click',()=>{if(CASE_OPEN)$('patientedit').classList.toggle('open')});

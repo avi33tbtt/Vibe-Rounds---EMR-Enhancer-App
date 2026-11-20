@@ -61,6 +61,24 @@ test('summary without label gives a warning, not an error',()=>{
   assert.ok(r.warnings.length>0);
 });
 
+/* ---- V8c2: view.board (made-up set) ---- */
+const withBoard=(b)=>{const v=good();v.board=b;return madeUp(v);};
+test('board: {show:latest}, {show:age} and {fields:[...]} pass',()=>{
+  assert.deepStrictEqual(validateView(withBoard({show:'latest'})).errors,[]);
+  assert.deepStrictEqual(validateView(withBoard({show:'age'})).errors,[]);
+  assert.deepStrictEqual(validateView(withBoard({fields:['t_amt','t_kind']})).errors,[]);
+  assert.deepStrictEqual(validateView(withBoard({show:'latest',fields:['t_amt']})).errors,[]);
+});
+test('board: must be an object',()=>{hasErr(withBoard('latest'),/board must be an object/);hasErr(withBoard([]),/board must be an object/);});
+test('board: unknown key',()=>hasErr(withBoard({colour:'red'}),/board has unknown key "colour"/));
+test('board: show must be in the closed list',()=>hasErr(withBoard({show:'trend'}),/show must be "latest" or "age"/));
+test('board: fields must be a non-empty list of text',()=>{
+  hasErr(withBoard({fields:'t_amt'}),/fields must be a non-empty list/);
+  hasErr(withBoard({fields:[]}),/fields must be a non-empty list/);
+  hasErr(withBoard({fields:[5]}),/not text/);});
+test('board: fields must be fields of the set',()=>hasErr(withBoard({fields:['t_amt','nope']}),/"nope".*not in the set/));
+test('board: a banned key inside it is caught',()=>hasErr(withBoard({show:'latest',limit:3}),/limit.*not allowed/));
+
 /* ---- V2c: validatePathwayViews (made-up pathways; the two examples come from VIEWS.md) ---- */
 const {validatePathwayViews}=require('./views.js');
 const board=()=>({setId:'pathway.emr.ward_board',kind:'pathway',contexts:['emr'],members:[],rules:[],surface:{type:'patients_columns',columnsFrom:'pinned'}});

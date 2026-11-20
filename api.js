@@ -90,6 +90,7 @@ const S = {
   ruleAct: z.object({ expectedVersion: ver }).strict(),
   protoPut: z.object({ body: z.record(z.string(), z.any()).refine(jsonSize(50000), 'protocol too large'), expectedVersion: z.number().int().min(0) }).strict(),
   prefPut: z.object({ value: anyJson(20000) }).strict(),
+  emrViewsPut: z.object({ ids: z.array(ident).max(20).refine((a) => new Set(a).size === a.length, 'ids must not repeat'), expectedVersion: z.string().max(40).nullable() }).strict(),
 };
 function parse(schema, data) {
   const r = schema.safeParse(data);
@@ -441,12 +442,43 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   r.use(auditContext);                                // who/role/ip for audit(); every write below runs inside it
   const setKindOf = async (setId) => ((await db.query('SELECT kind FROM element_sets_latest WHERE set_id=$1', [setId])).rows[0] || {}).kind || null;
 
+  // ================= V7a1: which EMR view pathways are switched on (stored in app_settings key 'emr_views' as {ids:[...]}; V7a2 writes it) =================
+  const EMR_VIEWS_DEFAULT = ['pathway.emr.ward_board', 'pathway.emr.handover'];
+  // state: the effective ids (default when nothing valid is stored), the version (updated_at to the microsecond, as text; null until first saved) and whether a row exists.
+  const emrViewsState = async (q, lock) => {
+    const row = (await q.query(`SELECT value, to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS v FROM app_settings WHERE key='emr_views'${lock ? ' FOR UPDATE' : ''}`)).rows[0];
+    const ids = row && row.value && Array.isArray(row.value.ids) ? row.value.ids.filter((x) => typeof x === 'string') : null;
+    return { ids: ids || EMR_VIEWS_DEFAULT.slice(), version: row ? row.v : null, stored: !!row };
+  };
+  const emrViewsActive = async () => (await emrViewsState(db)).ids;
+
   // ================= who am I (the session user) =================
   r.get('/me', wrap(async (req, res) => {
     const u = (await db.query('SELECT id,name,role,must_change_password FROM users WHERE id=$1', [req.actor.id])).rows[0];
     if (!u) throw new ApiError(401, 'unauthorized', 'No such user');
     res.json({ id: u.id, name: u.name, role: u.role, mode: 'session', mustChangePassword: !!u.must_change_password, allowed: allowedActions(u),
-      ai: !!aiProvider && !!((await db.query("SELECT value FROM app_settings WHERE key='ai'")).rows[0] || { value: {} }).value.enabled });   // chunk 36b: true only when an admin switched AI on AND a model is configured; buttons mirror it, the routes still check   // allowed: for hiding controls only (chunk 32d2); the server still checks every request
+      ai: !!aiProvider && !!((await db.query("SELECT value FROM app_settings WHERE key='ai'")).rows[0] || { value: {} }).value.enabled,
+      emrViews: await emrViewsActive() });   // chunk 36b: true only when an admin switched AI on AND a model is configured; buttons mirror it, the routes still check   // allowed: for hiding controls only (chunk 32d2); the server still checks every request
+  }));
+
+  r.get('/emr-views', wrap(async (req, res) => { const s = await emrViewsState(db); res.json({ ids: s.ids, version: s.version }); }));   // V7a1: read-only, every role (ref.read); the screen builds its tabs and columns from these ids
+  r.put('/emr-views', wrap(async (req, res) => {                  // V7a2: admin only (views.admin). Every id must be an existing pathway for the EMR; the version is the one last read (409 if it moved).
+    const b = parse(S.emrViewsPut, req.body);
+    const out = await db.withTx(async (c) => {
+      const ok = new Set((await c.query(`SELECT set_id FROM element_sets_latest WHERE set_id = ANY($1) AND kind='pathway' AND (body->'contexts')::jsonb @> '"emr"'::jsonb`, [b.ids])).rows.map((x) => x.set_id));
+      const bad = b.ids.filter((id) => !ok.has(id));
+      if (bad.length) throw new ApiError(400, 'validation', 'Not an existing EMR view pathway: ' + bad.join(', ').slice(0, 300));
+      const old = await emrViewsState(c, true), val = JSON.stringify({ ids: b.ids });
+      const conflict = async () => { throw new ApiError(409, 'conflict', 'The view pathway list was changed by someone else', { current: await emrViewsState(c) }); };
+      if (b.expectedVersion !== old.version) await conflict();
+      const q = old.stored
+        ? await c.query(`UPDATE app_settings SET value=$1, updated_by=$2, updated_at=now() WHERE key='emr_views' RETURNING to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS v`, [val, req.actor.id])
+        : await c.query(`INSERT INTO app_settings (key, value, updated_by) VALUES ('emr_views', $1, $2) ON CONFLICT DO NOTHING RETURNING to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS v`, [val, req.actor.id]);
+      if (!q.rows.length) await conflict();
+      await audit(c, { action: 'emr_views.set', entity: 'app_setting', entity_id: 'emr_views', before: { ids: old.ids }, after: { ids: b.ids } });
+      return { ids: b.ids, version: q.rows[0].v };
+    });
+    res.json(out);
   }));
 
   // ================= cases =================

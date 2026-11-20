@@ -108,6 +108,7 @@ Every route that changes data writes **one** `audit_log` row on the same databas
 | `PUT /rules/:owner/:ruleId` / `POST …/approve` / `POST …/disable` / `DELETE …` | `rule.save` / `rule.approve` / `rule.disable` / `rule.delete` |
 | `PUT /protocols/:setId` / `POST …/approve` | `protocol.save` / `protocol.approve` |
 | `PUT /prefs/:key` | `pref.set` |
+| `PUT /emr-views` | `emr_views.set` |
 | `POST /import` | `import.commit` (or `import.failed`, for the 422 attempt record) |
 | `POST /users` / `…/deactivate` / `…/reactivate` / `…/reset-password` / `…/role` | `user.create` / `user.deactivate` / `user.reactivate` / `user.reset_password` / `user.role` |
 | `POST /password` | `password.change` |
@@ -206,6 +207,8 @@ One table, `permissions.js`: action -> roles. Each route maps to exactly one act
 | `POST /protocols/:setId/approve` | `protocol.approve` | admin, doctor |
 | `GET /prefs` | `ref.read` | all |
 | `PUT /prefs/:key` | `pref.write` | all |
+| `GET /emr-views` | `ref.read` | all |
+| `PUT /emr-views` | `views.admin` | admin |
 | `POST /import/dry-run` | `import.run` | admin |
 | `POST /import` | `import.run` | admin |
 | `GET /audit`, `GET /audit.csv` | `audit.read` | admin |
@@ -340,3 +343,17 @@ Rules:
 - `008_changes.sql` adds `case_notes.updated_at` (set on create, edit and sign; existing notes are filled from `created_at` and `signed_at`) and indexes for the three lookups.
 - 37b: every repeat row in `GET /cases/:id` carries `__byName` (the name of the user who ENTERED it, from `case_rows.entered_by`; a later amender does not replace it), and each row in `/changes` carries `enteredByName` next to `byName` (who last changed it). The Flowsheets table shows the initials; the full name is the hover text.
 - Browser: `Store.live.start(caseId, {live, editing, onMerged})`, `Store.live.stop()`, `Store.live.now(caseId)`, `Store.applyChanges(caseId, changes, live, opts)`. Polls every 10 to 15 seconds, not while the tab is hidden (it polls at once when the tab is shown again), and never while a conflict is open. **Nothing the person has typed is overwritten**: an item whose working copy differs from what the server last confirmed, or that `editing(kind, ref)` reports as open, is skipped and the confirmed version is not advanced, so their own save meets the usual `409` and the conflict screen. `enhancer.html` merges into the screen's copy and the cache together, holds all merging while a field has focus or a new reading is being typed, and redraws the open tab only after a merge that changed something.
+
+## EMR view pathways: which are switched on (Phase V, V7a)
+EMR view pathways are seed pathways with `contexts: ['emr']` (ward board, Handover). They say where a screen appears and what it lists; they hold no rules and no clinical values (see `VIEWS.md`). An administrator chooses which are on for everyone.
+
+| Route | Does |
+|---|---|
+| `GET /emr-views` | `200 {ids, version}`. `ids` is the active list of pathway ids. Nothing stored (or a stored value that is not a list of text ids) gives the default `["pathway.emr.ward_board","pathway.emr.handover"]` and `version: null`. Every role may read. No audit row. |
+| `PUT /emr-views` `{ids, expectedVersion}` | Admin only (action `views.admin`). `ids`: at most 20, no repeats, each an existing pathway whose contexts include `emr` (else `400 validation`, naming the bad ids). `expectedVersion` is the text version last read, or `null` for the first save, and is required (missing: 400). A stale version gives `409 conflict` with `error.current` (the stored `{ids}`). An empty list is allowed (every view pathway off). Success: `200 {ids, version}`. |
+
+- **Storage.** `app_settings` key `emr_views`, value `{ids:[...]}`. There is no version column, so the version is the row's `updated_at` to the microsecond, as text. No migration was added.
+- **Audit.** One row per successful save, written in the same transaction: action `emr_views.set`, entity `app_setting`, entity id `emr_views`; `before` and `after` hold the id lists (`before` is the default list on the first save). Refused requests (403, 400, 409) write none.
+- **`GET /me`** carries `emrViews` (the same ids, no version). The browser reads it at load (`Store.emrViews()`; Demo mode and older servers use the default list; an empty list means all off). After a save the Settings screen updates `Store.me.emrViews` and rebuilds the tabs.
+- **Effect.** A surface of type `case_tab` appears as a tab only while its pathway is on; switching the Handover pathway off removes the Handover tab. The ward board falls back to the pinned columns when its pathway is off.
+- **Not data-driven (stays fixed):** patient banner, Summary, Flowsheets, Notes, Pathway, Alerts, Export, Settings and Tools.
