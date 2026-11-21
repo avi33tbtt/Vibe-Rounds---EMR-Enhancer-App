@@ -26,7 +26,7 @@ async function getActor(req) {
 const llm = { name: 'mock', model: 'mock-1', complete: async () => '{}' };
 const ACC = { view: ["admin"], enter: ["admin"], amend: ["admin"], approve: ["admin"], configure: ["admin"], export: ["admin"] };
 const post = (u, b, role) => { const q = request(app).post(u); if (role) q.set('x-test-role', role); return q.send(b); };
-const save = (setId, body) => post('/api/element-sets', { setId, kind: 'custom', body });
+const save = (setId, body, expectedVersion) => post('/api/element-sets', { setId, kind: 'custom', body, ...(expectedVersion ? { expectedVersion } : {}) });   // a re-save must name the version it saw (409 otherwise)
 const reqs = async (id) => (await owner.query('SELECT * FROM review_requests WHERE set_id=$1 ORDER BY set_version', [id])).rows;
 
 test.before(async () => {
@@ -49,7 +49,7 @@ test('43b4: saving a new version withdraws the waiting request on the older vers
   assert.equal((await save('user.w1', { title: 'One', access: ACC })).status, 201);
   const s = await post('/api/review-requests', { setId: 'user.w1', version: 1 }, 'doctor');
   assert.equal(s.status, 201, JSON.stringify(s.body));
-  const r2 = await save('user.w1', { title: 'One edited', access: ACC });
+  const r2 = await save('user.w1', { title: 'One edited', access: ACC }, 1);
   assert.equal(r2.status, 201); assert.equal(r2.body.version, 2);
   const rows = await reqs('user.w1');
   assert.equal(rows.length, 1); assert.equal(rows[0].status, 'withdrawn');
@@ -60,13 +60,13 @@ test('43b4: the new version can be submitted again; a decided or in-review reque
   const again = await post('/api/review-requests', { setId: 'user.w1', version: 2 }, 'doctor');
   assert.equal(again.status, 201, JSON.stringify(again.body));
   await owner.query("UPDATE review_requests SET status='in_review' WHERE set_id='user.w1' AND set_version=2");
-  assert.equal((await save('user.w1', { title: 'One again', access: ACC })).status, 201);
+  assert.equal((await save('user.w1', { title: 'One again', access: ACC }, 2)).status, 201);
   const rows = await reqs('user.w1');
   assert.deepEqual(rows.map((x) => x.status), ['withdrawn', 'in_review']);
 });
 test('43b4: a first save, or a set with no request, withdraws nothing and adds no key to the audit row', async () => {
   assert.equal((await save('user.w2', { title: 'Two', access: ACC })).status, 201);
-  assert.equal((await save('user.w2', { title: 'Two b', access: ACC })).status, 201);
+  assert.equal((await save('user.w2', { title: 'Two b', access: ACC }, 1)).status, 201);
   const a = (await owner.query("SELECT * FROM audit_log WHERE action='set.save' AND entity_id='user.w2' ORDER BY id DESC LIMIT 1")).rows[0];
   assert.equal('withdrawnRequests' in a.after, false);
 });

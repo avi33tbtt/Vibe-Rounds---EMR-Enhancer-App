@@ -93,7 +93,7 @@ const ROUTE_ACTIONS = {
   'PUT /cases/:id/values': 'value.write',
   'POST /cases/:id/notes': 'note.write', 'PATCH /cases/:id/notes/:nid': 'note.write', 'POST /cases/:id/notes/:nid/sign': 'note.sign', 'POST /cases/:id/notes/:nid/amend': 'note.write',
   'GET /element-sets': 'ref.read', 'GET /element-sets/:setId': 'ref.read', 'GET /element-sets/:setId/versions': 'ref.read', 'GET /element-sets/:setId/versions/:n': 'ref.read',
-  'POST /review-requests': 'content.submit', 'GET /review-requests': 'content.review', 'GET /review-requests/:id': 'content.review', 'POST /review-requests/:id/approve': 'content.review', 'POST /element-sets': 'set.write', 'PATCH /element-sets/:setId': 'set.write', 'DELETE /element-sets/:setId': 'set.write',
+  'POST /review-requests': 'content.submit', 'GET /review-requests': 'content.review', 'GET /review-requests/:id': 'content.review', 'POST /review-requests/:id/approve': 'content.review', 'POST /review-requests/:id/request-changes': 'content.review', 'POST /review-requests/:id/reject': 'content.review','POST /element-sets': 'set.write', 'PATCH /element-sets/:setId': 'set.write', 'DELETE /element-sets/:setId': 'set.write',
   'GET /usage': 'ref.read', 'POST /usage/:setId': 'usage.write', 'DELETE /usage': 'usage.write',
   'GET /codes': 'ref.read', 'POST /codes': 'code.write', 'POST /codes/:system/:code/live': 'code.write',
   'GET /code-systems': 'ref.read', 'POST /code-systems': 'codesystem.write',

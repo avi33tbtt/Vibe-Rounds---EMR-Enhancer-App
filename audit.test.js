@@ -104,6 +104,20 @@ test('every write route writes exactly one audit row, attributed to the logged-i
       const id = (await owner.query("INSERT INTO review_requests (set_id,set_version,author_id,status,content_hash,submitted_at) VALUES ('user.apr',1,$1,'submitted',$2,now()) RETURNING id", [a, h])).rows[0].id;
       return P(`/api/review-requests/${id}/approve`, {});
     }],
+    ['POST /element-sets', 'set.save', 201, () => P('/api/element-sets', { setId: 'user.rc', kind: 'custom', body: { title: 'Rc', access: ALLOW_ADMIN } })],   // 44a2c: two sets for the request-changes and reject entries below
+    ['POST /element-sets', 'set.save', 201, () => P('/api/element-sets', { setId: 'user.rj', kind: 'custom', body: { title: 'Rj', access: ALLOW_ADMIN } })],
+    ['POST /review-requests/:id/request-changes', 'review.request_changes', 200, async () => {   // requests written by another user straight in the database, as for approve above
+      const a = (await owner.query("SELECT id FROM users WHERE username='aud-author'")).rows[0].id;
+      const h = (await owner.query("SELECT content_hash FROM element_sets WHERE set_id='user.rc' AND version=1")).rows[0].content_hash;
+      const id = (await owner.query("INSERT INTO review_requests (set_id,set_version,author_id,status,content_hash,submitted_at) VALUES ('user.rc',1,$1,'submitted',$2,now()) RETURNING id", [a, h])).rows[0].id;
+      return P(`/api/review-requests/${id}/request-changes`, { comment: 'Please add a unit to the first field' });
+    }],
+    ['POST /review-requests/:id/reject', 'review.reject', 200, async () => {
+      const a = (await owner.query("SELECT id FROM users WHERE username='aud-author'")).rows[0].id;
+      const h = (await owner.query("SELECT content_hash FROM element_sets WHERE set_id='user.rj' AND version=1")).rows[0].content_hash;
+      const id = (await owner.query("INSERT INTO review_requests (set_id,set_version,author_id,status,content_hash,submitted_at) VALUES ('user.rj',1,$1,'submitted',$2,now()) RETURNING id", [a, h])).rows[0].id;
+      return P(`/api/review-requests/${id}/reject`, { comment: 'Not suitable for the library' });
+    }],
     ['POST /patients/:id/encounters', 'encounter.create', 201, async () => { const r = await P(`/api/patients/${st.p.id}/encounters`, { type: 'admission' }); st.enc = r.body; return r; }],
     ['PATCH /encounters/:id', 'encounter.update', 200, () => api().patch(`/api/encounters/${st.enc.id}`).send({ expectedVersion: 1, ward: 'W1', bed: 'B1' })],
     ['POST /cases/:id/alert-acks', 'alert.ack', 201, () => P(c() + '/alert-acks', { ruleId: 'r1', setId: 'care.t', sig: 'r1|>=|38|C|2026-11-19T08:00:00.000Z|1' })],

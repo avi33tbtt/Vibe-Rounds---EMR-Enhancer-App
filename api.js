@@ -83,6 +83,7 @@ const S = {
   noteAmend: z.object({ reason: z.string().trim().min(3).max(1000), text: z.string().max(200000) }).strict(),
   reviewPost: z.object({ setId: ident, version: z.number().int().min(1) }).strict(),   // 43b3: submit one saved version for review
   reviewApprove: z.object({ comment: z.string().trim().max(2000).optional() }).strict(),   // 44a2a: the reviewer is the session, never the body
+  reviewDecide: z.object({ comment: z.string().trim().min(1, 'a comment is required').max(2000) }).strict(),   // 44a2c: request changes / reject; the reason is always required, the reviewer is the session
   reviewQueue: z.object({ status: z.enum(['submitted', 'in_review', 'changes_requested']).optional() }).strict(),   // 44a1b: the review queue, open requests only
   setPost: z.object({ setId: ident, kind: z.enum(['care', 'template', 'disease', 'custom', 'pathway']), body: z.record(z.string(), z.any()).refine(jsonSize(500000), 'set too large'),
     expectedVersion: ver.optional(), forkedFrom: z.object({ setId: ident, version: ver }).strict().optional() }).strict(),
@@ -1057,6 +1058,30 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
       ? { id: o.id, setId: o.set_id, version: o.set_version, status: o.status, tier: 'local-reviewed', reviewerId: o.reviewer_id, decidedAt: iso(o.decided_at), finalized: true, approvals: out.approvals }
       : { id: o.id, setId: o.set_id, version: o.set_version, status: o.status, tier: 'local-draft', finalized: false, approvals: out.approvals, required: out.required });
   }));
+
+  // 44a2c: request changes, or reject. Same rules as approve: action content.review, the reviewer is the session (a reviewerId key is 400), the author can never review (403 own_request, the CHECK in 001_core.sql is the second wall),
+  // only a request that is waiting or in review can be decided (409 bad_status). A comment is always required (400 validation). The request row, one review_events row and one audit row are written in ONE transaction.
+  // Request changes: status 'changes_requested' (still an open request in the queue, decided_at stays empty because it is not final); the author saves a new version, which withdraws it (43b4), then submits that version again.
+  // Reject: status 'rejected' with decided_at (final). Neither changes the stored version (the tier stays local-draft; body, hash and version never change). Approvals already recorded for a two-reviewer request stay in review_events as history.
+  // The comment is kept in review_requests.comment and in the review_events detail; the audit row holds ids, versions, hash and statuses only (same as approve).
+  const decideReview = (d) => wrap(async (req, res) => {
+    const id = idParam(req.params.id), b = parse(S.reviewDecide, req.body || {});
+    const row = await db.withTx(async (c) => {
+      const first = (await c.query('SELECT set_id FROM review_requests WHERE id=$1', [id])).rows[0];
+      if (!first) throw new ApiError(404, 'not_found', 'Review request not found');
+      await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['set|' + first.set_id]);
+      const rr = (await c.query('SELECT * FROM review_requests WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!['submitted', 'in_review'].includes(rr.status)) throw new ApiError(409, 'bad_status', 'Only a request that is waiting or in review can be ' + d.words, { status: rr.status });
+      if (rr.author_id === req.actor.id) throw new ApiError(403, 'own_request', 'You cannot review your own request');
+      const done = (await c.query(`UPDATE review_requests SET status=$2, reviewer_id=$3, comment=$4${d.final ? ', decided_at=now()' : ''} WHERE id=$1 RETURNING *`, [id, d.status, req.actor.id, b.comment])).rows[0];
+      await c.query(`INSERT INTO review_events (request_id, user_id, event, detail) VALUES ($1,$2,$3,$4)`, [id, req.actor.id, d.status, JSON.stringify({ setId: rr.set_id, version: rr.set_version, contentHash: rr.content_hash, comment: b.comment })]);
+      await audit(c, { action: d.action, entity: 'review_request', entity_id: id, before: { status: rr.status }, after: { status: d.status, setId: rr.set_id, version: rr.set_version, contentHash: rr.content_hash } });
+      return done;
+    });
+    res.json({ id: row.id, setId: row.set_id, version: row.set_version, status: row.status, reviewerId: row.reviewer_id, decidedAt: iso(row.decided_at), comment: row.comment });
+  });
+  r.post('/review-requests/:id/request-changes', decideReview({ status: 'changes_requested', action: 'review.request_changes', final: false, words: 'sent back for changes' }));
+  r.post('/review-requests/:id/reject', decideReview({ status: 'rejected', action: 'review.reject', final: true, words: 'rejected' }));
 
   // ================= usage (per user) =================
   r.get('/usage', wrap(async (req, res) => {
