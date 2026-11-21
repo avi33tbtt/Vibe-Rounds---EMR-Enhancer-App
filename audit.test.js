@@ -97,6 +97,13 @@ test('every write route writes exactly one audit row, attributed to the logged-i
     ['PUT /prefs/:key', 'pref.set', 200, () => api().put('/api/prefs/theme').send({ value: 'dark' })],
     ['POST /patients', 'patient.create', 201, async () => { const r = await P('/api/patients', { name: 'Aud Patient', sex: 'female', dateOfBirth: '1990-01-01' }); st.p = r.body; return r; }],
     ['PATCH /patients/:id', 'patient.update', 200, () => api().patch(`/api/patients/${st.p.id}`).send({ expectedVersion: 1, reason: 'phone added', phone: '+91 98200 11111' })],
+    ['POST /element-sets', 'set.save', 201, () => P('/api/element-sets', { setId: 'user.apr', kind: 'custom', body: { title: 'Apr', access: ALLOW_ADMIN } })],   // 44a2a: a set for the approve entry below
+    ['POST /review-requests/:id/approve', 'review.approve', 200, async () => {                 // a request written by another user, made straight in the database (the submit route would make the admin the author), then approved through the route
+      const a = (await owner.query("INSERT INTO users (username,name,role) VALUES ('aud-author','Aud Author','doctor') ON CONFLICT (lower(username)) DO UPDATE SET name=users.name RETURNING id")).rows[0].id;
+      const h = (await owner.query("SELECT content_hash FROM element_sets WHERE set_id='user.apr' AND version=1")).rows[0].content_hash;
+      const id = (await owner.query("INSERT INTO review_requests (set_id,set_version,author_id,status,content_hash,submitted_at) VALUES ('user.apr',1,$1,'submitted',$2,now()) RETURNING id", [a, h])).rows[0].id;
+      return P(`/api/review-requests/${id}/approve`, {});
+    }],
     ['POST /patients/:id/encounters', 'encounter.create', 201, async () => { const r = await P(`/api/patients/${st.p.id}/encounters`, { type: 'admission' }); st.enc = r.body; return r; }],
     ['PATCH /encounters/:id', 'encounter.update', 200, () => api().patch(`/api/encounters/${st.enc.id}`).send({ expectedVersion: 1, ward: 'W1', bed: 'B1' })],
     ['POST /cases/:id/alert-acks', 'alert.ack', 201, () => P(c() + '/alert-acks', { ruleId: 'r1', setId: 'care.t', sig: 'r1|>=|38|C|2026-11-19T08:00:00.000Z|1' })],

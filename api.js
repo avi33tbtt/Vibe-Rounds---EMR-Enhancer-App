@@ -1000,13 +1000,21 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
 
   // 44a2a: approve one request. The reviewer is the session; the author can never approve (403, and the CHECK in 001_core.sql is the second wall).
   // The request, the version's tier ('local-reviewed': the body and hash never change), one review_events row and one audit row are written in ONE transaction.
-  // A version with rules or bands needs two distinct approving reviewers (44a2b): until that is built the route refuses it (409 needs_two_reviewers) rather than approve it on one signature.
+  // 44a2b: a version with rules, bands or dose-like text needs several DISTINCT approving reviewers (default 2, set by REVIEW_REQUIRED_APPROVALS; a value below 2 or not a whole number up to 5 is ignored, so the rule never gets weaker than two).
+  // Each approval before the last is stored as a review_events row 'approval_recorded' (the request stays in_review and the version stays local-draft); the last one freezes the version as in 44a2a. The same person cannot approve twice and the author cannot approve at all.
+  // The dose-like test is the same pattern the lint uses (PackageLint.DOSE_LIKE); the references list is skipped, as in the lint. It decides only that more than one person must look, never that the text is right or wrong.
   const needsTwoReviewers = (body) => {
     let hit = Array.isArray(body && body.rules) && body.rules.length > 0;
-    const walk = (v, d) => { if (hit || d > 64 || !v || typeof v !== 'object') return; for (const k of Object.keys(v)) { if (k.toLowerCase() === 'bands') { hit = true; return; } walk(v[k], d + 1); } };
+    const walk = (v, d) => {
+      if (hit || d > 64) return;
+      if (typeof v === 'string') { if (PackageLint.DOSE_LIKE.test(v)) hit = true; return; }
+      if (!v || typeof v !== 'object') return;
+      for (const k of Object.keys(v)) { if (k.toLowerCase() === 'bands') { hit = true; return; } if (d === 0 && k === 'references') continue; walk(v[k], d + 1); }
+    };
     walk(body, 0);
     return hit;
   };
+  const requiredApprovals = () => { const n = Number(process.env.REVIEW_REQUIRED_APPROVALS); return Number.isInteger(n) && n >= 2 && n <= 5 ? n : 2; };
   r.post('/review-requests/:id/approve', wrap(async (req, res) => {
     const id = idParam(req.params.id), b = parse(S.reviewApprove, req.body || {});
     const out = await db.withTx(async (c) => {
@@ -1023,16 +1031,31 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
       if (latest !== rr.set_version) throw new ApiError(409, 'conflict', 'This set has a newer version; the request is for an older one', { latestVersion: latest });
       if (!rr.content_hash || rr.content_hash !== cur.content_hash) throw new ApiError(409, 'hash_mismatch', 'The stored version no longer matches the version that was submitted');
       if (cur.tier !== 'local-draft') throw new ApiError(409, 'already_reviewed', 'This version is already reviewed');
-      if (needsTwoReviewers(cur.body)) throw new ApiError(409, 'needs_two_reviewers', 'Rules and bands need two different approving reviewers (not built yet)');
       const lint = await lintStoredSet(c, cur);
       if (lint.errors.length) throw new ApiError(422, 'lint_failed', 'This version has problems and cannot be approved', { errors: lint.errors, warnings: lint.warnings });
+      let approvers = [req.actor.id];
+      if (needsTwoReviewers(cur.body)) {
+        const need = requiredApprovals();
+        const prior = (await c.query("SELECT DISTINCT user_id FROM review_events WHERE request_id=$1 AND event='approval_recorded' AND user_id IS NOT NULL", [id])).rows.map((x) => x.user_id);
+        if (prior.includes(req.actor.id)) throw new ApiError(409, 'already_approved_by_you', 'You have already approved this request; a different reviewer must give the next approval', { approvals: prior.length, required: need });
+        approvers = [...prior, req.actor.id];
+        if (approvers.length < need) {
+          const part = (await c.query("UPDATE review_requests SET status='in_review' WHERE id=$1 RETURNING *", [id])).rows[0];
+          await c.query(`INSERT INTO review_events (request_id, user_id, event, detail) VALUES ($1,$2,'approval_recorded',$3)`, [id, req.actor.id, JSON.stringify({ setId: rr.set_id, version: rr.set_version, contentHash: rr.content_hash, approvals: approvers.length, required: need, ...(b.comment ? { comment: b.comment } : {}) })]);
+          await audit(c, { action: 'review.approve', entity: 'review_request', entity_id: id, before: { status: rr.status, tier: cur.tier }, after: { status: 'in_review', tier: cur.tier, finalized: false, approvals: approvers.length, required: need, setId: rr.set_id, version: rr.set_version, contentHash: rr.content_hash, warnings: lint.warnings.length } });
+          return { row: part, finalized: false, approvals: approvers.length, required: need };
+        }
+      }
       await c.query("UPDATE element_sets SET tier='local-reviewed' WHERE set_id=$1 AND version=$2 AND tier='local-draft'", [rr.set_id, rr.set_version]);
       const row = (await c.query("UPDATE review_requests SET status='approved', reviewer_id=$2, decided_at=now(), comment=$3 WHERE id=$1 RETURNING *", [id, req.actor.id, b.comment || null])).rows[0];
-      await c.query(`INSERT INTO review_events (request_id, user_id, event, detail) VALUES ($1,$2,'approved',$3)`, [id, req.actor.id, JSON.stringify({ setId: rr.set_id, version: rr.set_version, contentHash: rr.content_hash, ...(b.comment ? { comment: b.comment } : {}) })]);
-      await audit(c, { action: 'review.approve', entity: 'review_request', entity_id: id, before: { status: rr.status, tier: cur.tier }, after: { status: 'approved', tier: 'local-reviewed', setId: rr.set_id, version: rr.set_version, contentHash: rr.content_hash, warnings: lint.warnings.length } });
-      return row;
+      await c.query(`INSERT INTO review_events (request_id, user_id, event, detail) VALUES ($1,$2,'approved',$3)`, [id, req.actor.id, JSON.stringify({ setId: rr.set_id, version: rr.set_version, contentHash: rr.content_hash, ...(approvers.length > 1 ? { approverIds: approvers } : {}), ...(b.comment ? { comment: b.comment } : {}) })]);
+      await audit(c, { action: 'review.approve', entity: 'review_request', entity_id: id, before: { status: rr.status, tier: cur.tier }, after: { status: 'approved', tier: 'local-reviewed', finalized: true, approvals: approvers.length, setId: rr.set_id, version: rr.set_version, contentHash: rr.content_hash, warnings: lint.warnings.length } });
+      return { row, finalized: true, approvals: approvers.length };
     });
-    res.json({ id: out.id, setId: out.set_id, version: out.set_version, status: out.status, tier: 'local-reviewed', reviewerId: out.reviewer_id, decidedAt: iso(out.decided_at) });
+    const o = out.row;
+    res.json(out.finalized
+      ? { id: o.id, setId: o.set_id, version: o.set_version, status: o.status, tier: 'local-reviewed', reviewerId: o.reviewer_id, decidedAt: iso(o.decided_at), finalized: true, approvals: out.approvals }
+      : { id: o.id, setId: o.set_id, version: o.set_version, status: o.status, tier: 'local-draft', finalized: false, approvals: out.approvals, required: out.required });
   }));
 
   // ================= usage (per user) =================

@@ -154,14 +154,99 @@ test('an old version is refused (409 conflict) when a newer one exists', async (
   await untouched(id, 'user.v', 'in_review');
 });
 
-test('rules or bands need two reviewers: refused for now (409 needs_two_reviewers) and nothing changes', async () => {
-  assert.equal((await save('user.r1', { title: 'R', access: ACC, rules: [{ id: 'x' }] })).status, 201);
-  assert.equal((await save('user.r2', { title: 'B', access: ACC, sections: [{ bands: [{ label: 'x' }] }] })).status, 201);
-  for (const setId of ['user.r1', 'user.r2']) {
+// 44a2b: rules, bands and dose-like text need two DISTINCT approving reviewers (REVIEW_REQUIRED_APPROVALS, default 2). Valid sets: the lint runs first, and they carry a references entry.
+const REFS = [{ id: 'r1', citation: 'Local protocol (made-up test reference)' }];
+const twoSets = {
+  'user.r1': { title: 'R', access: ACC, rules: [{ op: '>', threshold: 38 }], references: REFS },
+  'user.r2': { title: 'B', access: ACC, sections: [{ bands: { low: 1 } }], references: REFS },
+  'user.r3': { title: 'Take 5 mg of something', access: ACC, references: REFS },
+};
+const partials = async (id) => (await evs(id)).filter((x) => x.event === 'approval_recorded');
+
+test('rules, bands or dose-like text: one approval is not enough (200, finalized false, request in_review, version still local-draft); a different second reviewer finishes it', async () => {
+  for (const [setId, body] of Object.entries(twoSets)) {
+    assert.equal((await save(setId, body)).status, 201, setId);
     const id = await direct(setId);
-    const r = await approve(id); assert.equal(r.status, 409, setId); assert.equal(r.body.error.code, 'needs_two_reviewers', setId);
-    await untouched(id, setId);
+    const one = await approve(id, 'informatician', { comment: 'first look' });
+    assert.equal(one.status, 200, setId + JSON.stringify(one.body));
+    assert.equal(one.body.finalized, false); assert.equal(one.body.status, 'in_review'); assert.equal(one.body.tier, 'local-draft');
+    assert.equal(one.body.approvals, 1); assert.equal(one.body.required, 2);
+    assert.equal((await rr(id)).status, 'in_review'); assert.equal((await rr(id)).reviewer_id, null); assert.equal((await rr(id)).decided_at, null);
+    assert.equal(await tier(setId), 'local-draft');
+    assert.equal((await partials(id)).length, 1); assert.equal((await partials(id))[0].user_id, actors.informatician.id);
+    assert.ok(!(await evs(id)).some((e) => e.event === 'approved'));
+    const a1 = await audits(id); assert.equal(a1.length, 1); assert.equal(a1[0].after.finalized, false); assert.equal(a1[0].after.approvals, 1);
+    // the same person again: refused, nothing added
+    const again = await approve(id, 'informatician');
+    assert.equal(again.status, 409, setId); assert.equal(again.body.error.code, 'already_approved_by_you');
+    assert.equal((await partials(id)).length, 1); assert.equal((await audits(id)).length, 1); assert.equal(await tier(setId), 'local-draft');
+    // a different reviewer finishes it
+    const two = await approve(id, 'admin');
+    assert.equal(two.status, 200, JSON.stringify(two.body));
+    assert.equal(two.body.finalized, true); assert.equal(two.body.status, 'approved'); assert.equal(two.body.tier, 'local-reviewed'); assert.equal(two.body.approvals, 2);
+    assert.equal(two.body.reviewerId, actors.admin.id);
+    assert.equal(await tier(setId), 'local-reviewed');
+    const fin = (await evs(id)).filter((e) => e.event === 'approved');
+    assert.equal(fin.length, 1); assert.deepEqual([...fin[0].detail.approverIds].sort(), [actors.informatician.id, actors.admin.id].sort());
+    assert.equal((await audits(id)).length, 2); assert.equal((await audits(id))[1].after.finalized, true);
   }
+});
+
+test('the author still cannot approve a rules set, and a lint error stops a rules set before any approval is recorded', async () => {
+  assert.equal((await save('user.r4', twoSets['user.r1'])).status, 201);
+  const sub = await post('/api/review-requests', { setId: 'user.r4', version: 1 }, 'informatician');   // an informatician may submit their own set
+  assert.equal(sub.status, 201, JSON.stringify(sub.body));
+  const own = await approve(sub.body.id, 'informatician');
+  assert.equal(own.status, 403); assert.equal(own.body.error.code, 'own_request');
+  assert.equal((await partials(sub.body.id)).length, 0);
+  assert.equal((await save('user.r5', { title: 'Bad rule', access: ACC, rules: [{ op: '~~', threshold: 1 }], references: REFS })).status, 201);
+  const bad = await direct('user.r5'), r = await approve(bad);
+  assert.equal(r.status, 422); assert.equal(r.body.error.code, 'lint_failed');
+  await untouched(bad, 'user.r5'); assert.equal((await partials(bad)).length, 0);
+});
+
+test('a plain set (no rules, bands or dose-like text) still needs only one approval', async () => {
+  const id = await submit('user.plain'); const r = await approve(id);
+  assert.equal(r.status, 200); assert.equal(r.body.finalized, true); assert.equal(r.body.approvals, 1);
+  assert.equal((await partials(id)).length, 0);
+});
+
+test('REVIEW_REQUIRED_APPROVALS: 3 asks for three reviewers; a value below 2 or not a number leaves the default of 2', async () => {
+  const keep = process.env.REVIEW_REQUIRED_APPROVALS;
+  try {
+    for (const bad of ['1', '0', 'abc', '2.5', '9']) {
+      process.env.REVIEW_REQUIRED_APPROVALS = bad;
+      const setId = 'user.cfg' + bad.replace(/\W/g, 'x');
+      assert.equal((await save(setId, twoSets['user.r1'])).status, 201);
+      const id = await direct(setId);
+      const one = await approve(id, 'informatician'); assert.equal(one.status, 200, bad);
+      assert.equal(one.body.required, 2, bad); assert.equal(one.body.finalized, false, bad);
+    }
+    process.env.REVIEW_REQUIRED_APPROVALS = '3';
+    assert.equal((await save('user.cfg3', twoSets['user.r1'])).status, 201);
+    const id = await direct('user.cfg3');
+    assert.equal((await approve(id, 'informatician')).body.required, 3);
+    const second = await approve(id, 'admin'); assert.equal(second.status, 200); assert.equal(second.body.finalized, false); assert.equal(second.body.approvals, 2);
+    assert.equal(await tier('user.cfg3'), 'local-draft');
+  } finally { if (keep === undefined) delete process.env.REVIEW_REQUIRED_APPROVALS; else process.env.REVIEW_REQUIRED_APPROVALS = keep; }
+});
+
+test('a failed final approval leaves no half rows: if the audit insert fails, the second approval changes nothing', async () => {
+  assert.equal((await save('user.tx', twoSets['user.r1'])).status, 201);
+  const id = await direct('user.tx');
+  assert.equal((await approve(id, 'informatician')).status, 200);
+  await owner.query(`CREATE FUNCTION fail_audit_ap() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit down'; END $$`);
+  await owner.query('CREATE TRIGGER fail_audit_ap_t BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION fail_audit_ap()');
+  const log = console.error; console.error = () => {};
+  try {
+    assert.equal((await approve(id, 'admin')).status, 500);
+  } finally {
+    console.error = log;
+    await owner.query('DROP TRIGGER fail_audit_ap_t ON audit_log'); await owner.query('DROP FUNCTION fail_audit_ap()');
+  }
+  assert.equal((await rr(id)).status, 'in_review'); assert.equal(await tier('user.tx'), 'local-draft');
+  assert.ok(!(await evs(id)).some((e) => e.event === 'approved')); assert.equal((await partials(id)).length, 1);
+  assert.equal((await approve(id, 'admin')).status, 200);   // the trigger was the cause
 });
 
 test('an approved version cannot be submitted again (409 already_reviewed); a new version can', async () => {
