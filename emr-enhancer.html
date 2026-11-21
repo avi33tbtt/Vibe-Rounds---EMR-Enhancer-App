@@ -61,6 +61,9 @@ button.b:disabled{opacity:.55;cursor:not-allowed}
 h3{margin:0 0 8px;font-size:15px}
 .applied-list{display:flex;flex-wrap:wrap;gap:4px;min-height:28px}
 pre.raw{font-size:11px;background:var(--side);padding:8px;border-radius:6px;overflow:auto;max-height:260px}
+dialog#aiDlg{max-width:720px;width:92%;background:var(--cd);color:var(--fg);border:1px solid var(--bd);border-radius:8px}
+dialog#aiDlg pre.raw{white-space:pre-wrap;word-break:break-all;max-height:50vh}
+button:disabled{opacity:.5;cursor:not-allowed}
 .rep-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
 .rep-table th,.rep-table td{border:1px solid var(--bd);padding:4px 8px;text-align:left}
 .rep-table th{background:var(--side)}
@@ -98,7 +101,21 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 </header>
 <div id="pbanner" class="pb"></div>
 
+<dialog id="aiDlg">
+  <b>Review before sending to the AI provider</b>
+  <div class="mu" style="margin:4px 0">Exactly this request will be sent, and nothing else. Your API key is added as a header and is not shown. Synthetic data only.</div>
+  <pre class="raw" id="aiDlgBody"></pre>
+  <form method="dialog" class="flex" style="justify-content:flex-end;margin-top:8px">
+    <button class="b sec sm" value="cancel">Cancel</button>
+    <button class="b sm" value="send">Send</button>
+  </form>
+</dialog>
+
 <div id="setPanel" class="cd">
+  <label style="display:flex;align-items:center;gap:8px;font-weight:600">
+    <input type="checkbox" id="aiOn" style="width:auto"> Enable AI (off by default)
+  </label>
+  <div class="note">When off, nothing is ever sent to an AI provider and the AI buttons are disabled. When on, every call shows the exact payload first and is sent only after you click Send. The payload holds only: primary diagnosis, titles/ids of applied element sets and pathways, and your optional instructions. Never patient name, MRN, age, sex, dates, entered values, narrative or notes.</div>
   <label>Provider</label>
   <select id="prov"><option value="or">OpenRouter</option><option value="an">Anthropic</option></select>
   <label>Model</label>
@@ -108,6 +125,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
   <label style="display:flex;align-items:center;gap:8px;font-weight:500">
     <input type="checkbox" id="demo" style="width:auto"> Demo mode (no key — snake / DKA only)
   </label>
+  <div class="note">The key is stored in this browser only and can be read by anyone who uses this browser. Use your own key. Synthetic data only.</div>
   <button class="b" onclick="saveSet()">Save settings</button>
 </div>
 
@@ -129,6 +147,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     </div>
     <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--bd)">
       <button class="b" style="width:100%" onclick="suggest()">✦ Suggest</button>
+      <button class="b sec sm" style="width:100%;margin-top:6px" data-ai onclick="aiRank()">✦ AI rank</button>
     </div>
   </aside>
 
@@ -148,6 +167,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <textarea class="narrative" id="narrative" placeholder="e.g. 62M with T2DM, CKD 3b, new plantar ulcer…" oninput="saveCase()"></textarea>
         <div class="flex" style="margin-top:8px">
           <button class="b sec sm" onclick="suggest()">Suggest</button>
+          <button class="b sec sm" data-ai onclick="aiRank()">AI rank</button>
           <button class="b sec sm" onclick="archiveCase()">Archive case</button>
         </div>
       </div>
@@ -176,12 +196,10 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
           <a href="#" onclick="return fillDx(this)">Diabetic ketoacidosis</a> ·
           <a href="#" onclick="return fillDx(this)">Sepsis</a>
         </div>
-        <label>Vignette (optional)</label>
-        <textarea id="gen_vg"></textarea>
-        <label>Instructions (optional)</label>
+        <label>Instructions (optional — do not enter patient details)</label>
         <textarea id="gen_ins" placeholder="e.g. focus on time-critical intervals"></textarea>
         <div class="flex" style="margin-top:10px">
-          <button class="b" id="genBtn" onclick="generate()">Generate element set</button>
+          <button class="b" id="genBtn" data-ai onclick="generate()">Generate element set</button>
           <span class="mu" id="genStatus"></span>
         </div>
         <div id="genPreview" style="display:none;margin-top:12px">
@@ -295,8 +313,8 @@ const toast=m=>{ $('toast').textContent=m; setTimeout(()=>{if($('toast').textCon
 const tg=id=>{const e=$(id);e.style.display=e.style.display==='block'?'none':'block'};
 
 /* Settings */
-function loadSet(){try{const s=JSON.parse(localStorage.getItem('vr_set')||'{}');$('prov').value=s.p||'or';$('model').value=s.m||'';$('key').value=s.k||'';$('demo').checked=s.d!==false&&!s.k}catch(e){}}
-function saveSet(){try{localStorage.setItem('vr_set',JSON.stringify({p:$('prov').value,m:$('model').value,k:$('key').value,d:$('demo').checked}))}catch(e){}tg('setPanel');toast('Settings saved')}
+function loadSet(){try{const s=JSON.parse(localStorage.getItem('vr_set')||'{}');$('prov').value=s.p||'or';$('model').value=s.m||'';$('key').value=s.k||'';$('demo').checked=s.d!==false&&!s.k;$('aiOn').checked=s.a===true}catch(e){}}
+function saveSet(){try{localStorage.setItem('vr_set',JSON.stringify({p:$('prov').value,m:$('model').value,k:$('key').value,d:$('demo').checked,a:$('aiOn').checked}))}catch(e){}applyAiState();tg('setPanel');toast('Settings saved')}
 
 /* Systems */
 const SYSU={snomed:'http://snomed.info/sct',loinc:'http://loinc.org'};
@@ -577,20 +595,78 @@ function renderNotes(){
 
 /* LLM generate */
 function fillDx(a){$('gen_dx').value=a.textContent;return false}
-async function callLLM(u){
-  const s=JSON.parse(localStorage.getItem('vr_set')||'{}');
-  if(!s.k||!s.m)throw Error('Set provider, model and key in Settings (or Demo mode for snake/DKA).');
-  let r;
-  if(s.p==='an'){
-    r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:AbortSignal.timeout(60000),
-      headers:{'content-type':'application/json','x-api-key':s.k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:s.m,max_tokens:3000,system:SYS,messages:[{role:'user',content:u}]})});
-    const j=await r.json();if(!r.ok)throw Error(j.error?.message||r.status);return j.content[0].text;
+/* AI: off by default; whitelist payload; exact preview before every call */
+const SYS_RANK=`You rank EXISTING library items for relevance to a diagnosis. Return ONLY valid JSON: {"ranked":["id","id"]}. Use only ids from "candidates", at most 8, most relevant first. Do not include doses, thresholds or protocol text.`;
+const savedSettings=()=>{try{return JSON.parse(localStorage.getItem('vr_set')||'{}')}catch(e){return{}}};
+const aiEnabled=()=>savedSettings().a===true;
+function applyAiState(){
+  const on=aiEnabled();
+  document.querySelectorAll('[data-ai]').forEach(b=>{b.disabled=!on;b.title=on?'':'AI is off — enable it in Settings'});
+}
+/* Whitelist: every key is picked explicitly. Never spreads or reads patient, narrative, values or notes. */
+function appliedForPayload(){
+  const sets=[],pw=new Map();
+  CASE.applied.forEach(a=>{
+    const s=getSet(a.setId);if(s)sets.push({id:s.id,title:s.title});
+    if(a.fromPathway&&!pw.has(a.fromPathway)){const p=PATHWAYS.find(x=>x.id===a.fromPathway);if(p)pw.set(p.id,{id:p.id,title:p.title})}
+  });
+  return{applied_sets:sets,applied_pathways:[...pw.values()]};
+}
+function aiPayload(kind,diagnosis,instructions){
+  const p={diagnosis:String(diagnosis||'').trim()};
+  const ins=String(instructions||'').trim();if(ins)p.instructions=ins;
+  if(kind==='rank'){
+    const a=appliedForPayload();p.applied_sets=a.applied_sets;p.applied_pathways=a.applied_pathways;
+    p.candidates=[
+      ...REGISTRY.filter(s=>!isApplied(s.id)).map(s=>({type:'element',id:s.id,title:s.title})),
+      ...PATHWAYS.filter(x=>!(x.members||[]).every(m=>isApplied(m))).map(x=>({type:'pathway',id:x.id,title:x.title}))
+    ].slice(0,80);
   }
-  r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',signal:AbortSignal.timeout(60000),
-    headers:{'content-type':'application/json',Authorization:'Bearer '+s.k},
-    body:JSON.stringify({model:s.m,max_tokens:3000,messages:[{role:'system',content:SYS},{role:'user',content:u}]})});
-  const j=await r.json();if(!r.ok)throw Error(j.error?.message||r.status);return j.choices[0].message.content;
+  return p;
+}
+function buildAiRequest(kind,payload,s){
+  const sys=kind==='rank'?SYS_RANK:SYS;
+  const user=kind==='rank'?JSON.stringify(payload):`Diagnosis: ${payload.diagnosis}`+(payload.instructions?`\nExtra: ${payload.instructions}`:'');
+  if(s.p==='an')return{url:'https://api.anthropic.com/v1/messages',
+    headers:{'content-type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    authName:'x-api-key',authValue:s.k,
+    body:JSON.stringify({model:s.m,max_tokens:3000,system:sys,messages:[{role:'user',content:user}]})};
+  return{url:'https://openrouter.ai/api/v1/chat/completions',
+    headers:{'content-type':'application/json'},authName:'Authorization',authValue:'Bearer '+s.k,
+    body:JSON.stringify({model:s.m,max_tokens:3000,messages:[{role:'system',content:sys},{role:'user',content:user}]})};
+}
+function confirmSend(req){
+  return new Promise(res=>{
+    const d=$('aiDlg');
+    $('aiDlgBody').textContent=`POST ${req.url}\n`+Object.entries(req.headers).map(([k,v])=>`${k}: ${v}`).join('\n')+`\n${req.authName}: (your key — not shown)\n\n`+req.body;
+    d.returnValue='';
+    d.addEventListener('close',()=>res(d.returnValue==='send'),{once:true});
+    d.showModal();
+  });
+}
+async function callAI(kind,payload){
+  if(!aiEnabled())throw Error('AI is off. Enable it in Settings.');
+  const s=savedSettings();
+  if(!s.k||!s.m)throw Error('Set provider, model and key in Settings (or Demo mode for snake/DKA).');
+  const req=buildAiRequest(kind,payload,s);
+  if(!await confirmSend(req)){const e=Error('Cancelled — nothing was sent.');e.name='AiCancel';throw e}
+  const r=await fetch(req.url,{method:'POST',signal:AbortSignal.timeout(60000),headers:{...req.headers,[req.authName]:req.authValue},body:req.body});
+  const j=await r.json();if(!r.ok)throw Error(j.error?.message||r.status);
+  return s.p==='an'?j.content[0].text:j.choices[0].message.content;
+}
+async function aiRank(){
+  if(!aiEnabled())return toast('AI is off — enable it in Settings.');
+  const dx=(prompt('Primary diagnosis for ranking (no patient details):')||'').trim();if(!dx)return;
+  try{
+    const payload=aiPayload('rank',dx,'');
+    const t=await callAI('rank',payload);
+    let ids;try{ids=parseJSON(t).ranked}catch(e){throw Error('Model reply was not valid JSON — try again.')}
+    const byId=new Map(payload.candidates.map(c=>[c.id,c]));
+    const ranked=(Array.isArray(ids)?ids:[]).map(String).filter(id=>byId.has(id)).slice(0,8).map(id=>byId.get(id));
+    if(!ranked.length)return toast('No usable ranking returned.');
+    const n=parseInt(prompt('AI-ranked suggestions:\n\n'+ranked.map((c,i)=>`${i+1}. [${c.type}] ${c.title}`).join('\n')),10);
+    if(n>=1&&n<=ranked.length)applySet(ranked[n-1].id);
+  }catch(e){toast(e.name==='AiCancel'?e.message:'Error: '+(e.name==='TimeoutError'?'LLM timed out (60s)':e.message))}
 }
 function parseJSON(t){return JSON.parse(String(t).replace(/```json|```/g,'').trim())}
 const DOSE_RE=/\d+(\.\d+)?\s*(mg|mcg|µg|ml|units?|iu)\b|[≥≤<>]=?\s*\d/i;
@@ -617,6 +693,7 @@ function normaliseGenerated(raw,dx){
   return{id,kind:raw.kind==='care'?'care':'disease',title:String(raw.title||dx||'Generated'),desc:String(raw.desc||raw.description||'LLM-generated — review before use'),fields,generated:true,custom:true,provenance:{by:'llm',at:new Date().toISOString(),reviewed:false}};
 }
 async function generate(){
+  if(!aiEnabled())return toast('AI is off — enable it in Settings.');
   const dx=$('gen_dx').value.trim();if(!dx)return toast('Enter a diagnosis');
   const btn=$('genBtn');btn.disabled=true;btn.textContent='Generating…';$('genStatus').textContent='';$('genPreview').style.display='none';LAST_GENERATED=null;
   try{
@@ -629,9 +706,8 @@ async function generate(){
       else throw Error('Demo mode only has Snake envenomation and DKA. Add a model key for other diagnoses.');
     }
     if(!set){
-      const u=`Diagnosis: ${dx}\nVignette: ${$('gen_vg').value}\nExtra: ${$('gen_ins').value}`;
-      let t=await callLLM(u);
-      try{set=normaliseGenerated(parseJSON(t),dx)}catch(e){t=await callLLM(u+'\nReturn ONLY JSON.');set=normaliseGenerated(parseJSON(t),dx)}
+      const t=await callAI('gen',aiPayload('gen',dx,$('gen_ins').value));
+      try{set=normaliseGenerated(parseJSON(t),dx)}catch(e){throw Error('Model reply was not usable JSON. Click Generate to retry (you will see the preview again).')}
     }else{set=normaliseGenerated(set,dx);set.provenance.by='demo'}
     LAST_GENERATED=set;
     $('genSummary').textContent=`${set.title} · ${set.kind} · ${set.fields.length} fields`;
@@ -639,8 +715,8 @@ async function generate(){
     renderGenPreview();
     $('genPreview').style.display='block';
     $('genStatus').textContent='Draft ready — review then apply or save.';
-  }catch(e){toast('Error: '+(e.name==='TimeoutError'?'LLM timed out (60s)':e.message))}
-  btn.disabled=false;btn.textContent='Generate element set';
+  }catch(e){toast(e.name==='AiCancel'?e.message:'Error: '+(e.name==='TimeoutError'?'LLM timed out (60s)':e.message))}
+  btn.disabled=!aiEnabled();btn.textContent='Generate element set';
 }
 function renderGenPreview(){
   const set=LAST_GENERATED;if(!set)return;
@@ -1141,7 +1217,7 @@ document.querySelectorAll('nav button').forEach(b=>{
 });
 
 /* Init */
-loadSet();load();$('narrative').value=CASE.narrative||'';fillPatient();$('n_user').value=localStorage.getItem('vr_user')||'';
+loadSet();applyAiState();load();$('narrative').value=CASE.narrative||'';fillPatient();$('n_user').value=localStorage.getItem('vr_user')||'';
 if(!$('c_fields').children.length)addFieldRow();
 renderAll();
 </script>
