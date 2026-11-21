@@ -3,507 +3,333 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>EMR Enhancer — Plan &amp; Progress</title>
+<title>EMR Enhancer — Plan</title>
 <style>
-:root{--bg:#f7f9fc;--fg:#1a2332;--mu:#5c6b7e;--cd:#fff;--bd:#d8e0ec;--ac:#0b6e5f;--r:#c0392b;--a:#d68910;--g:#1e8449}
-@media(prefers-color-scheme:dark){:root{--bg:#0f1419;--fg:#e6eaf2;--mu:#94a3b8;--cd:#1a2130;--bd:#2c364b;--ac:#2dd4bf;--r:#f87171;--a:#fbbf24;--g:#4ade80}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,sans-serif}
-main{max-width:880px;margin:auto;padding:24px 18px 60px}
-h1{font-size:1.6rem;margin:0 0 .3em;letter-spacing:-.02em}
-h2{font-size:1.15rem;margin:1.8em 0 .5em;padding-bottom:.35em;border-bottom:1px solid var(--bd)}
+:root{--bg:#f7f9fc;--fg:#1a2332;--mu:#5c6b7e;--cd:#fff;--bd:#d8e0ec;--ac:#0b6e5f;--g:#1e8449;--a:#d68910}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1419;--fg:#e6eaf2;--mu:#94a3b8;--cd:#1a2130;--bd:#2c364b;--ac:#2dd4bf;--g:#4ade80;--a:#fbbf24}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,sans-serif}
+main{max-width:860px;margin:auto;padding:24px 16px 60px}
+h1{font-size:1.6rem;margin:0 0 .2em;letter-spacing:-.02em}
+h2{font-size:1.15rem;margin:2em 0 .6em;padding-bottom:.3em;border-bottom:1px solid var(--bd)}
+h3{font-size:.95rem;margin:1em 0 .2em}
+p{margin:.4em 0}ul{margin:.3em 0;padding-left:1.25em}li{margin:.2em 0}
 .mu{color:var(--mu);font-size:.9rem}
-.ban{background:#fff3cd;color:#664d03;padding:10px 14px;border-radius:8px;font-size:.9rem;margin:14px 0}
-@media(prefers-color-scheme:dark){.ban{background:#422006;color:#fcd34d}}
-.card{background:var(--cd);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin:12px 0}
-.bar{height:10px;background:var(--bd);border-radius:99px;overflow:hidden;margin:8px 0}
-.bar i{display:block;height:100%;background:var(--ac);width:0;transition:width .3s}
-.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--bd);color:var(--mu);margin-right:4px}
+.card{background:var(--cd);border:1px solid var(--bd);border-radius:10px;padding:12px 16px;margin:10px 0}
+.warn{background:#fff3cd;color:#664d03;border-radius:8px;padding:10px 14px;font-size:.9rem;margin:12px 0}
+@media(prefers-color-scheme:dark){.warn{background:#422006;color:#fcd34d}}
+.tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid var(--bd);color:var(--mu);margin-left:4px}
 .tag.done{border-color:var(--g);color:var(--g)}.tag.next{border-color:var(--ac);color:var(--ac)}
-.phase{border-left:3px solid var(--ac);padding:2px 0 6px 14px;margin:18px 0 8px}
-.phase h3{margin:0 0 2px;font-size:1rem}
-.item{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--bd)}
-.item:last-child{border-bottom:0}
-.item input{margin-top:3px;flex-shrink:0}
-.item .body{flex:1}.item .body b{display:block}
-.item.done .body b{text-decoration:line-through;opacity:.75}
-.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin:8px 0 14px}
-.legend span{display:inline-flex;align-items:center;gap:5px}
-.dot{width:10px;height:10px;border-radius:50%}
-ul{margin:.4em 0;padding-left:1.3em}li{margin:.25em 0}
-a{color:var(--ac)}
-footer{margin-top:36px;padding-top:14px;border-top:1px solid var(--bd);color:var(--mu);font-size:.88rem}
-button{background:var(--ac);color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font:inherit;font-size:13px}
-button.sec{background:transparent;color:var(--ac);border:1px solid var(--ac)}
-table{width:100%;border-collapse:collapse;font-size:.88rem;margin:8px 0}
+.bar{height:10px;background:var(--bd);border-radius:99px;overflow:hidden;margin:6px 0}
+.bar i{display:block;height:100%;background:var(--ac);width:0}
+.item{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--bd)}
+.item:last-child{border-bottom:0}.item input{margin-top:4px;flex-shrink:0}
+.item.done b{text-decoration:line-through;opacity:.7}
+.ph{margin:16px 0 4px;font-weight:600;border-left:3px solid var(--ac);padding-left:10px}
+table{width:100%;border-collapse:collapse;font-size:.87rem;margin:8px 0}
 th,td{border:1px solid var(--bd);padding:6px 9px;text-align:left;vertical-align:top}
-th{background:var(--bg)}
-.pick{border-color:var(--ac);border-width:2px}
-.adr h3{font-size:.95rem;margin:14px 0 4px}
-.adr .st{display:inline-block;background:var(--ac);color:#fff;border-radius:99px;padding:1px 10px;font-size:12px}
-.tbl{overflow-x:auto}
+th{background:var(--bg)}.tbl{overflow-x:auto}
+.dec{font-weight:600}
+a{color:var(--ac)}code{font-size:.88em}
+button{background:transparent;color:var(--ac);border:1px solid var(--ac);border-radius:6px;padding:4px 10px;cursor:pointer;font:inherit;font-size:13px}
+footer{margin-top:30px;padding-top:12px;border-top:1px solid var(--bd)}
 </style>
 </head>
 <body>
 <main>
-  <div class="mu">Experimental prototype · synthetic data only</div>
-  <h1>EMR Enhancer — Plan &amp; Progress</h1>
-  <p class="mu">Context-aware, composable, trajectory-oriented clinical documentation with multi-system code verification, optional FHIR SDC authoring, FHIR R4 export, and a curated GitHub marketplace organised by patient journey.</p>
+<h1>EMR Enhancer — Plan</h1>
+<p class="mu">Context-aware, composable clinical documentation with verified coding, FHIR export and a curated content marketplace. Updated 21 Nov 2026. Demo: <code>emr-enhancer.html</code>. Build detail (chunks, prompts, log): <code>emr-enhancer-build-plan.html</code>.</p>
+<div class="warn"><b>Not for clinical use.</b> Synthetic data only. Generated fields, codes and pathways are drafts until independently reviewed.</div>
 
-  <div class="ban"><b>Not for clinical use.</b> Codes, pathways and generated fields are drafts until independently reviewed. No pre-filled doses or therapeutic thresholds from an LLM. LLM-proposed codes are candidates only until verified (code exists <i>and</i> display matches).</div>
+<div class="card">
+  <b>Progress</b> <span id="pc" class="mu"></span>
+  <div class="bar"><i id="pb"></i></div>
+  <div id="nx" class="mu"></div>
+</div>
 
-  <div class="card">
-    <b>Progress</b> <span id="pc" class="mu"></span>
-    <div class="bar"><i id="pb"></i></div>
-    <div id="nx" class="mu" style="margin-top:6px"></div>
-    <div style="margin-top:10px">
-      <button onclick="resetTicks()">Reset checkboxes</button>
-      <button class="sec" onclick="markBuilt()">Mark all “in demo” as done</button>
-    </div>
-  </div>
+<h2>1 · What we are building</h2>
+<div class="card">
+  <p>A documentation and trajectory layer, not a general hospital EMR. A chart starts blank with a narrative and grows by <b>adding element sets and pathways</b> (disease, care, template). Repeating observations form the patient's trajectory. Codes are verified, notes are signed and amended, and the chart exports as FHIR R4.</p>
+  <p class="mu"><b>Future scope (full EMR direction):</b> patient identity and MRN (p4-5), orders and tests (p5-13), medication administration, ADT and billing (p5-3). Built only after the core proof, in the roadmap order.</p>
+  <p class="mu">Patient journey: <b>1 Registration</b> (EMR-local) → <b>2 Clinical recording</b> (marketplace content) → <b>3 Analytics</b> (marketplace content).</p>
+</div>
 
-  <div class="card">
-    <b>Working demo</b>
-    <p class="mu" style="margin:6px 0 0"><a href="emr-enhancer.html">emr-enhancer.html</a> — single-file browser prototype (localStorage). Open in a modern browser.</p>
-  </div>
+<h2>2 · Decisions</h2>
+<div class="tbl"><table>
+<tr><th>ADR</th><th>Decision</th><th>Status</th></tr>
+<tr><td>001</td><td>Own composable model is the system of record. SNOMED CT/LOINC are bound inside it. FHIR R4 is the boundary (export now, API later), not the form engine.</td><td>Accepted</td></tr>
+<tr><td>002</td><td>Element sets can also be imported/exported as FHIR SDC Questionnaires; they normalise into the same internal model.</td><td>Accepted, in demo</td></tr>
+<tr><td>003</td><td>One create/generate screen: optional SDC output; pick code systems or skip coding. Registry of systems, several bindings per field.</td><td>Accepted (design)</td></tr>
+<tr><td>004</td><td>Element sets, pathways and analytics are shared via a GitHub-backed, signed marketplace organised by patient journey. Registration is never shared.</td><td>Accepted (design)</td></tr>
+</table></div>
 
-  <div class="card" id="rel">
-    <b>How this file relates to the build plan</b>
-    <p class="mu" style="margin:6px 0">This file holds the <b>decisions (ADRs), invariants and roadmap</b>. <code>emr-enhancer-build-plan.html</code> holds the chunk-by-chunk prompts and build log for the standalone server-backed app (flat root, Node + PostgreSQL). Keep this one short and decision-focused; do not copy chunk detail into it. The demo is called <code>emr-enhancer.html</code> here and <code>enhancer.html</code> in the build plan: pick one name.</p>
-    <details><summary>Status refresh: items now marked “in repo”</summary>
-    <p class="mu" style="margin:6px 0">Taken from the build plan's own notes (not independently checked). Rules engine, alert log and Alerts tab, flowsheets, PostgreSQL with versioned rows, login and roles, append-only audit, and the patient conflict screen are built there. Patient registration is built on the server only (screens next).</p></details>
-    <details><summary>Plan item → build-plan chunk</summary>
-    <div class="tbl"><table>
-      <tr><th>This plan</th><th>Build-plan chunks</th></tr>
-      <tr><td>p0, p1-1 to p1-10</td><td>1–25 (prototype)</td></tr>
-      <tr><td>p2-1, p2-2, p2-3</td><td>23–25, 35a–c, 25C, 37b–d</td></tr>
-      <tr><td>p2-4, p5-1, p5-2</td><td>42–46 (package lint, review, registry, install, composites)</td></tr>
-      <tr><td>p3-4</td><td>38a–b (server aggregates, small-count masking)</td></tr>
-      <tr><td>p4-1 to p4-4</td><td>26–33</td></tr>
-      <tr><td>p4-5</td><td>34a done; 34b–d next</td></tr>
-      <tr><td>p4-6 to p4-9</td><td>36, 39, 40, 41</td></tr>
-      <tr><td>p5-3</td><td>48–52</td></tr>
-      <tr><td class="mu">p1-11, p1-12, p3-1 (marketplace-aware), p3-2, p3-3, p5-4 to p5-6, p5-7 to p5-12 (journey marketplace, analytics packages)</td><td class="mu"><b>no chunk yet</b>; write chunks when picked up</td></tr>
-    </table></div></details>
-    <details><summary>What the build plan showed this plan was missing (now added)</summary>
-    <ul class="mu"><li>A <b>go-live gate</b>: security, tested restore, safety-test pack, AI on the server, regulatory and licence checks.</li>
-    <li>The <b>content trust model</b> (signed index, pinned hashes, read-only installs, forks, composition, withdrawal, two reviewers for rules). GitHub alone does not give immutability or signatures.</li>
-    <li><b>Roles</b> (informatician, nurse limits), data governance, and a rule that server-side checks, not the UI, enforce read-only and permissions.</li>
-    <li><b>Conflicts</b> between the ADRs and the build plan (egress, browse vs install, CPT licence, SDC import vs “nothing imported”), resolved inside ADR-003 and ADR-004.</li></ul></details>
-  </div>
+<h3>ADR-001 · Internal model + FHIR at the edge</h3>
+<div class="card">
+  <p><span class="dec">Why.</span> Composition, partial pathways, repeating observations and fast UX are first-class in our model and awkward in SDC or openEHR. Mature systems (OpenMRS, Epic) also keep a rich internal model with standards at the edges.</p>
+  <p><span class="dec">Rejected.</span> FHIR-native SDC (heavy, poor composition); openEHR archetypes (steep tooling curve).</p>
+  <p><span class="dec">Consequences.</span> Bindings are <code>{system, code, display}</code> on each field. Verified = code exists on the terminology server <b>and</b> display matches; otherwise it stays text. LLM codes are candidates (<code>source:"llm"</code>); empty is better than wrong. DDI, registries and other EMRs are mapped at the boundary.</p>
+  <p><span class="dec">Revisit if.</span> A funder or regulator requires Questionnaire as the stored model; cross-vendor content governance becomes the main goal; scope grows to orders, billing and ADT (consider contributing to OpenMRS).</p>
+</div>
 
-  <div class="card">
-    <b>Go-live gate</b> <span class="mu">— nothing is used with real patients until all of these are true</span>
-    <ul style="margin:6px 0 0">
-      <li>A named clinician has signed the safety review.</li>
-      <li>A restore from an encrypted backup has been tested.</li>
-      <li>Security hardening is done (content-security policy, restricted database role, cookies, rate limits) and the safety-test pack passes in CI.</li>
-      <li>Manual two-browser checks are done in real browsers (conflict screen, unsent reading kept across re-login, import report).</li>
-      <li>AI is off by default, runs on the server only, and sends de-identified text after showing exactly what will be sent.</li>
-      <li>Medical-device-software and health-data rules are checked for the place of use; a data-processing agreement exists for any external model provider.</li>
-      <li>Licences are checked for any SNOMED CT, ICD, RxNorm or CPT content shipped.</li>
-    </ul>
-  </div>
+<h3>ADR-002 · SDC as an extra authoring format</h3>
+<div class="card">
+  <p><span class="dec">Does.</span> Import a Questionnaire (paste, file, URL) to an element set; export any set back (original if unmodified); add QuestionnaireResponse to the bundle; re-import of the same URL creates a new version; curation label on imports.</p>
+  <p><span class="dec">Limits (flagged on import).</span> enableWhen, calculated expressions, value-set options, multi-answer, attachments. Other-system codes are kept but not verified or exported.</p>
+  <p><span class="dec">ABDM.</span> The ABDM IG defines <b>output</b> profiles (Composition-based records, DocumentBundle), not forms. A form pack can be labelled “ABDM-aligned” but the label is informational; we never emit <code>meta.profile</code> without validation. Real ABDM output is item p5-5 (IG 6.0.0 is the published release; check the current version when started).</p>
+</div>
 
-  <h2>Architecture decision record · ADR-001</h2>
-  <div class="card adr">
-    <span class="st">Accepted</span> <span class="mu">21 Nov 2026</span>
-    <p style="margin:8px 0 0"><b>Decision.</b> EMR Enhancer is a context-aware clinical documentation and trajectory system. Its <b>system of record is a proprietary composable model</b> (element sets · pathways · applied composition · repeating observations · narrative). <b>SNOMED CT and LOINC are bound and verified inside that model.</b> <b>FHIR R4 is the interoperability boundary</b> (export now; API/import later), not the internal form engine. Integrations (drug–drug interaction, other EMRs, national registries) are done by mapping at the boundary.</p>
-
-    <h3>Context</h3>
-    <p class="mu" style="margin:0">The first idea was a full contextual EMR built on FHIR SDC (every form a Questionnaire, every save a QuestionnaireResponse). In practice that fought the product's core ideas: additive composition of small modules, partially applied/removable pathways, longitudinal repeating observations, and fast clinician UX.</p>
-
-    <h3>Options considered</h3>
-    <div class="tbl"><table>
-      <tr><th></th><th>A · FHIR-native (SDC)</th><th class="pick">B · Proprietary model + FHIR export ✔</th><th>C · openEHR archetypes</th></tr>
-      <tr><td><b>Idea</b></td><td>Forms = Questionnaires; storage = FHIR resources</td><td>Own element sets, pathways, repeating rows, rules; FHIR generated on the way out</td><td>Reference model + governed clinical archetypes</td></tr>
-      <tr><td><b>Strength</b></td><td>Interop by construction</td><td>Fast iteration; clean composition/trajectory; full UX control</td><td>Excellent longitudinal, versioned content</td></tr>
-      <tr><td><b>Cost</b></td><td>Heavy forms; composition and pathways awkward</td><td>We own the mapping and must prove export quality</td><td>Steep learning curve; different tooling/ecosystem</td></tr>
-    </table></div>
-
-    <h3>Reasons</h3>
-    <ul>
-      <li><b>Fit.</b> Composition, pathways-as-bundles and trajectory are first-class in B and awkward in SDC.</li>
-      <li><b>Standard practice.</b> Mature systems keep a rich internal model with standards at the edges. OpenMRS keeps its own concept dictionary mapped to SNOMED/LOINC; Epic/Cerner are not “FHIR all the way down”. openEHR itself is a purpose-built internal model, so this choice follows the same pattern rather than contradicting it.</li>
-      <li><b>Niche.</b> The product is a documentation + trajectory layer, not a general EHR clone. It can sit beside or feed OpenMRS/openEHR via FHIR.</li>
-      <li><b>Reversible at low cost.</b> Adding a real interface later changes the boundary, not the core.</li>
-    </ul>
-
-    <h3>Misconceptions this decision rests on correcting</h3>
-    <ul>
-      <li><b>“Only FHIR lets me use SNOMED/LOINC.”</b> False. They are independent terminologies; FHIR is one carrier. Bindings live on each field as <code>{system, code, display}</code>.</li>
-      <li><b>“Only FHIR enables drug–drug interaction checks.”</b> False. DDI engines take drug codes (RxNorm/ATC/local) plus patient factors. Map active meds outbound at call time; store the resulting alert in our model.</li>
-      <li><b>“Only FHIR gives interoperability with EMRs and registries.”</b> False. Interoperability is about interfaces and payloads at the boundary (FHIR, HL7 v2, CDA, custom) — not internal storage.</li>
-      <li><b>“Proprietary means reinventing openEHR/OpenMRS.”</b> Only if we try to become a general EHR platform. We are not.</li>
-    </ul>
-
-    <h3>What this changes in the build</h3>
-    <ul>
-      <li><b>Build-by-hand creator:</b> each field now has an optional terminology binding (system · code · display) with a live <i>Verify</i> button. Editing/saving a set preserves bindings, rationale and required flags (previously dropped on edit). Changing a code drops its verified status automatically.</li>
-      <li><b>LLM generator:</b> the model only <i>proposes</i> candidate bindings, tagged <code>source:"llm"</code> and element-set provenance <code>{by, at, reviewed:false}</code>. The prompt tells it to leave a binding empty when unsure and forbids doses, target ranges and protocol thresholds. A preview table shows each proposed binding and a <i>Verify bindings</i> step before apply/save. Dose/threshold-like text is flagged for review.</li>
-      <li><b>Verification rule (stricter than before):</b> verified = code found on the terminology server <b>and</b> the LLM/user display matches the server display. A real code with the wrong meaning is flagged as <i>display mismatch</i> and stays unverified, so a hallucinated-but-existing code cannot reach FHIR as a <code>Coding</code>.</li>
-      <li><b>FHIR export:</b> unchanged in behaviour (verified codes only) and now explicitly the boundary — see the mapping below.</li>
-    </ul>
-
-    <h3>Revisit this decision if</h3>
-    <ul>
-      <li>A funder, hospital or regulator requires Questionnaire/QuestionnaireResponse as the <i>stored</i> form model.</li>
-      <li>Content governance across vendors becomes the main goal (then evaluate openEHR archetypes).</li>
-      <li>The scope grows toward orders, billing and ADT as a full hospital EMR (then evaluate contributing to OpenMRS rather than building).</li>
-    </ul>
-  </div>
-
-  <h2>Architecture decision record · ADR-002</h2>
-  <div class="card adr">
-    <span class="st">Accepted</span> <span class="mu">21 Nov 2026</span> <span class="mu">· refines ADR-001, does not reverse it</span>
-    <p style="margin:8px 0 0"><b>Decision.</b> Element sets can be authored two ways: the simple proprietary builder / LLM generator, <b>or imported as FHIR SDC Questionnaires</b> (standards-based or curated packs). Both normalise into the <i>same</i> internal element-set model, so they can be mixed in one case, versioned, bound to codes and exported. The internal model stays the system of record; SDC is an additional authoring and exchange format, and QuestionnaireResponse an additional export.</p>
-
-    <h3>Why this is compatible with ADR-001</h3>
-    <p class="mu" style="margin:0">ADR-001 warned against making Questionnaire the <i>only</i> way to define a form or the stored form model. This keeps both: SDC content is converted on import, so composition, pathways and repeating observations keep working on it.</p>
-
-    <h3>What is enabled in the demo</h3>
-    <ul>
-      <li><b>Import</b> a Questionnaire (paste, file or URL) → element set. Groups, string/text/integer/decimal/quantity/boolean/date/dateTime, choice with inline options, units, item codes (SNOMED/LOINC become field bindings, still unverified until checked).</li>
-      <li><b>Export</b> any set as a Questionnaire: the original unchanged if untouched, otherwise one generated from the internal model (verified codes only).</li>
-      <li><b>QuestionnaireResponse</b> in the FHIR Bundle (for SDC-sourced sets, all sets, or none), nested to match the group structure, referencing the Questionnaire canonical + version. Observations are still exported as before.</li>
-      <li><b>Re-importing</b> the same Questionnaire URL creates a new set version (history kept); editing an imported set marks it “modified” so export no longer claims the original.</li>
-      <li><b>Curation label</b> on imported sets (publisher / pack name, “unreviewed” until a human reviews it).</li>
-    </ul>
-
-    <h3>Known limits (flagged on import, not silently dropped)</h3>
-    <ul>
-      <li>Conditional display (enableWhen), calculated/initial expressions, value-set options (answerValueSet is not expanded; captured as text), multi-answer (repeats), attachments/references.</li>
-      <li>Date-only items are stored as date-times and exported back as dates. Codes from systems other than SNOMED/LOINC are kept on the field but not verified or exported as bindings (to be lifted by ADR-003).</li>
-      <li>SDC has no trajectory concept: any timestamped repeating series is an internal feature; in a QuestionnaireResponse the values collapse into plain answers (timestamps live on the Observations).</li>
-    </ul>
-
-    <h3>ABDM (India): what this does and does not give you</h3>
-    <ul>
-      <li>The ABDM FHIR Implementation Guide (NRCeS for NHA) defines profiles on <b>output</b>: Composition-based clinical artifacts (e.g. OPConsultRecord, DiagnosticReportRecord, DischargeSummaryRecord, PrescriptionRecord, WellnessRecord), DocumentBundle, and resource profiles (Observation, ObservationBP, Encounter, MedicationRequest …). The pages reviewed list no Questionnaires.</li>
-      <li>So compliance is an <b>export-profile</b> concern, not a form-definition one. A curated, ABDM-aligned form pack can be imported and labelled, but the label is <b>informational</b>: the app never emits <code>meta.profile</code> or claims conformance without validation.</li>
-      <li>Genuine ABDM output needs a Document Bundle with the right Composition type and sections, Practitioner/Organization/Encounter, ABHA-related identifiers, and validation against a chosen IG version (6.0.0 is the published release; 6.5.0 is draft and 7.0.0 is in development as of this review). That is its own work item (p5-5), done against a real HIP/HIU need.</li>
-    </ul>
-  </div>
-
-  <h2>Architecture decision record · ADR-003</h2>
-  <div class="card adr">
-    <span class="st">Accepted (design)</span> <span class="mu">21 Nov 2026</span> <span class="mu">· refines ADR-002 · revives “more code systems” from the parked list</span>
-    <p style="margin:8px 0 0"><b>Decision.</b> The <b>same create / generate screen</b> serves both authoring modes and makes two independent choices. <b>(1) Output:</b> by default the result is an internal element set (as today); with the checkbox <i>“Also author as FHIR SDC Questionnaire”</i> ticked, the Questionnaire is the authored artifact and is normalised into the same internal element set (ADR-002), so it still composes, versions, joins pathways and exports. <b>(2) Coding:</b> the author picks which code systems to bind (SNOMED CT, LOINC, RxNorm, ICD, …) or <b>skips coding entirely</b> — in either output mode, globally or per field. The picker and the verification are identical in both modes; only the carrier differs (internal <code>bindings[]</code> vs <code>item.code[]</code>).</p>
-
-    <h3>Code-system registry (replaces “one SNOMED or LOINC binding per field”)</h3>
-    <div class="tbl"><table>
-      <tr><th>System</th><th>Typical role</th><th>Verification</th><th>Notes</th></tr>
-      <tr><td><b>SNOMED CT</b></td><td>Findings, conditions, procedures, coded answers</td><td>Terminology server lookup (tx.fhir.org today)</td><td>Licence terms differ by country/affiliate — confirm before publishing content packs.</td></tr>
-      <tr><td><b>LOINC</b></td><td>Measurements, lab and panel items</td><td>Terminology server</td><td>Free licence with attribution.</td></tr>
-      <tr><td><b>RxNorm</b></td><td>Medications (US-centric)</td><td>Terminology server / NLM RxNav</td><td>Outside the US, ATC or a local drug table may be the practical choice; confirm against the target registry.</td></tr>
-      <tr><td><b>ICD-10 / ICD-10-CM / ICD-11</b></td><td>Diagnosis classification, reporting, billing</td><td>ICD-11: WHO ICD API. ICD-10 variants: server if hosted, else local table</td><td>Separate systems; never mixed under one label. Mainly bound at <i>disease-set</i> level, not on observation fields.</td></tr>
-      <tr><td><b>ATC</b></td><td>Drug class</td><td>Server if hosted, else local table</td><td>Classification, not a concept dictionary.</td></tr>
-      <tr><td><b>UCUM</b></td><td>Units</td><td>Existing known-safe map</td><td>Already used by the exporter.</td></tr>
-      <tr><td><b>CPT</b></td><td>Procedure billing (US)</td><td>Local table</td><td><b>Proprietary (AMA licence).</b> Off by default; confirm licensing before enabling or shipping any content.</td></tr>
-      <tr><td><b>Local</b></td><td>Site-specific codes</td><td>Local table</td><td>Never exported as a standard <code>Coding</code> system.</td></tr>
-    </table></div>
-    <p class="mu" style="margin:0">Each registry entry is configuration: <code>{uri, label, roles, verifier, licenceNote}</code>. A system with no available verifier can still be bound but stays <i>unverified</i>, and unverified codes are never emitted as <code>Coding</code> (invariant unchanged).</p>
-
-    <h3>Rules</h3>
-    <ul>
-      <li><b>Skipping is a first-class choice.</b> An uncoded element set is fully usable in the EMR. It is flagged “uncoded” in the marketplace and can only be matched by analytics through its exact element id (ADR-004).</li>
-      <li><b>Several bindings per field</b> (e.g. LOINC and SNOMED for one concept), each verified separately; export puts every verified one in <code>code.coding[]</code>.</li>
-      <li><b>Role guard.</b> The picker warns when a system does not fit the field (e.g. ICD on a numeric observation, LOINC on a diagnosis). Warning only; the author decides.</li>
-      <li><b>ICD, yes — as a classification.</b> It is optional, bound to the diagnosis a set is about, and verified like the others. No automatic SNOMED→ICD derivation unless via a published map, shown as “mapped (source, version)”, never as “equivalent”.</li>
-      <li><b>LLM generation</b> proposes bindings only for the systems the author ticked, tagged <code>source:"llm"</code>, empty when unsure, then the same verify step.</li>
-      <li><b>SDC mode</b> shows, before generation, what SDC cannot yet express here (enableWhen, calculated expressions, answerValueSet expansion — see ADR-002 limits) so the author knows what will not be honoured.</li>
-    </ul>
-
-    <h3>What this changes in the build</h3>
-    <ul>
-      <li>Field model: <code>binding</code> → <code>bindings[] = {system, code, display, source, verified}</code>; existing single bindings migrate to a one-item list.</li>
-      <li>One create screen: [ ] Also as SDC Questionnaire · Code systems: [SNOMED] [LOINC] [RxNorm] [ICD-10/11] [ATC] [Local] [None]. Per-field override and “skip this field”.</li>
-      <li>Verifier is chosen per system from the registry; the existing display-match rule applies to all.</li>
-      <li><b>Order matters.</b> Do this migration before the marketplace package format is frozen; changing the binding shape after content is published means migrating published packages. Ship it as a new migration, never by editing applied ones.</li>
-      <li><b>Terminology host.</b> A server that only talks to the registry must also be allowed to reach the terminology server: two named hosts from configuration, nothing else. Public terminology servers are best-effort and intended for testing; production should use a configured or licensed server, with verified results cached.</li>
-    </ul>
-  </div>
-
-  <h2>Architecture decision record · ADR-004</h2>
-  <div class="card adr">
-    <span class="st">Accepted (design)</span> <span class="mu">21 Nov 2026</span> <span class="mu">· extends the content lifecycle in the build plan (Phase 6)</span>
-    <p style="margin:8px 0 0"><b>Decision.</b> Reusable <b>contextual elements (element sets), pathways and analytics</b> are published to a <b>marketplace backed by a public GitHub registry</b>, organised by <b>patient journey</b>. Content is submitted, checked, tested, peer reviewed and released; EMR users browse and install released versions and the <b>Suggest</b> buttons recommend them from case context. The internal model stays the system of record (ADR-001); packages are installed <i>into</i> it. Patient data never travels this way.</p>
-
-    <h3>Marketplace by patient journey</h3>
-    <div class="tbl"><table>
-      <tr><th>Stage</th><th>In marketplace?</th><th>Content</th><th>Why</th></tr>
-      <tr><td><b>1 · Registration</b></td><td><b>No.</b> EMR-local</td><td>Patients, MRN, encounters (p4-5)</td><td>Site-specific identifiers and personal data. Package lint refuses a registration kind and identity-like keys.</td></tr>
-      <tr><td><b>2 · Clinical data recording</b></td><td><b>Yes</b></td><td>Element sets (disease · care · template), pathways, rules</td><td>Reusable clinical structure; browsed by specialty, condition, code system, uncoded flag.</td></tr>
-      <tr><td><b>3 · Clinical analytics</b></td><td><b>Yes</b></td><td>Analytic definitions</td><td>An analytic depends on <i>elements</i>, not on a pathway, so one analytic works on every pathway carrying those elements.</td></tr>
-    </table></div>
-    <p class="mu" style="margin:6px 0 0">Orders, MAR, ADT and charge capture (p5-3) are <b>not</b> marketplace content by default: operational and site-specific, like registration. Revisit if a real need appears.</p>
-
-    <h3>Analytics compatibility</h3>
-    <ul>
-      <li>An analytic declares <code>requires</code>: elements by <code>setId + field</code>, or by <b>verified code</b> with expected type and UCUM unit.</li>
-      <li>CI builds a compatibility index. Pick an element set or pathway → all compatible analytics; pick an analytic → all compatible sets and pathways. A pathway satisfies the union of its pinned members.</li>
-      <li>Match kinds are always shown: <b>exact</b> · <b>via code</b> (same verified code, same type and unit) · <b>partial</b> (missing fields listed). Units are <b>never converted</b>: a unit mismatch is reported, not matched. Uncoded elements match by exact id only.</li>
-      <li>Analytics are <b>declarative definitions run by the EMR's own evaluator</b>; the marketplace ships no executable code. Thresholds inside an analytic are parameters that <b>ship blank</b> (“needs local setting”) and need a citation to pass lint. Results use the same small-count masking as other analytics.</li>
-    </ul>
-
-    <h3>Content rules (adopted from the build plan)</h3>
-    <ul>
-      <li><b>Local content is free:</b> a facility can create and edit its own.</li>
-      <li><b>Installed marketplace content is read-only,</b> enforced by the server (not only hidden in the UI). It changes only by a newer published version.</li>
-      <li><b>Extension is by composition:</b> add other components beside it, or build a local composite pathway of pinned references. To change content, <b>fork</b> it: new id, labelled local draft, link to the original kept.</li>
-      <li><b>Rules and protocol bands in any package arrive disabled;</b> a local doctor enables them (server stamps who and when). Seed sets ship with zero rules.</li>
-      <li><b>Installs never auto-upgrade cases;</b> a case keeps the version it started with. A <b>withdrawn</b> version shows a warning on cases using it and blocks new use; nothing is deleted.</li>
-      <li>An unapproved draft is never applied to a real patient's case.</li>
-    </ul>
-
-    <h3>Trust model</h3>
-    <div class="tbl"><table>
-      <tr><th>Tier shown in the app</th><th>Meaning</th><th>Editable?</th></tr>
-      <tr><td><b>Marketplace-verified</b></td><td>Installed from the registry; signature and hash checked at install</td><td>No (fork instead)</td></tr>
-      <tr><td><b>Local reviewed</b></td><td>Approved by an informatician at this facility; version frozen</td><td>Editing makes a new draft version</td></tr>
-      <tr><td><b>Local draft</b></td><td>Anything else, including AI drafts, imports and forks</td><td>Yes</td></tr>
-    </table></div>
-    <ul>
-      <li><b>Index metadata beside the tier</b> (not extra tiers): automated checks passed, synthetic tests passed, number of independent reviewers, evidence link when one exists. “Verified” means peer-reviewed, never approved by a regulator.</li>
-      <li><b>Automated checks (CI and local lint, one shared script):</b> schema, SDC structure, every bound code verified (exists and display matches), no dose / threshold-like text without a citation, no executable content, no patient-like strings, licence present, hash computed.</li>
-      <li><b>Review:</b> an informatician who is never the author; <b>two reviewers</b> for anything with rules, bands or dose-like text; reviewer and time stamped by the server, not typed.</li>
-      <li><b>What GitHub does and does not give.</b> It gives hosting, history, pull-request review, CODEOWNERS and CI. It does not by itself give immutability or signatures. So trust does not rest on GitHub: every package version is pinned by SHA-256 in a signed index, the public key is pinned in the server config, and the server verifies signature, hash and lint at install. Protect the main branch and check GitHub's current documentation on tag protection and immutable releases.</li>
-    </ul>
-
-    <h3>Using it inside the EMR</h3>
-    <ul>
-      <li><b>Roles:</b> browse is open to clinical roles; <b>install</b> is for informatician and admin; a doctor can <b>request</b> an install (audited). A site setting sets the minimum installable tier.</li>
-      <li><b>Install:</b> fetch from the one allow-listed registry address, verify, lint, store read-only and pinned. Hospitals without internet install from a package file that passes the same checks. Installed copies keep working offline.</li>
-      <li><b>Suggest buttons:</b> deterministic eligibility from each package's <code>appliesWhen</code> (applied sets, diagnosis codes, narrative terms matched locally) with redundancy suppression; labelled installed or in marketplace, with tier badge. Nothing is applied or installed without a click. An LLM may only rank or explain, de-identified and off by default. Compatible analytics are suggested the same way.</li>
-    </ul>
-
-    <h3>Risks and limits</h3>
-    <ul>
-      <li><b>Public repo = no patient data, ever;</b> fixtures are synthetic and lint rejects identifier-like strings.</li>
-      <li><b>Licensing:</b> SNOMED CT, ICD, RxNorm and CPT terms must be checked before codes and displays go into a public repository. Each package declares its content licence.</li>
-      <li><b>Regulation:</b> distributing decision-support rules to many facilities may make the publisher responsible under medical-device-software rules. Peer review is not regulatory approval. Check before the first public release.</li>
-      <li><b>Governance is the real work:</b> who reviews, conflicts of interest, recall response time, key rotation and key loss. The repo enforces the process but cannot supply reviewers.</li>
-      <li>The index is a static file that can be mirrored, including by a private hospital mirror.</li>
-    </ul>
-  </div>
-
-  <h2>Internal model ↔ FHIR R4 mapping (v0)</h2>
-  <div class="card tbl">
-    <table>
-      <tr><th>Internal</th><th>FHIR R4 (export)</th><th>Rule</th></tr>
-      <tr><td>Case narrative</td><td>Composition (section “Narrative”)</td><td>status <code>preliminary</code>; text escaped</td></tr>
-      <tr><td>Applied <i>disease</i> set</td><td>Condition</td><td>code = first verified bound field, else text only; clinicalStatus <code>active</code></td></tr>
-      <tr><td>Field value (scalar)</td><td>Observation</td><td>value[x] by type: number→Quantity, integer, boolean, datetime, else string</td></tr>
-      <tr><td>Repeating field row <code>{ts,value}</code></td><td>One Observation per row</td><td>effectiveDateTime = row timestamp</td></tr>
-      <tr><td>Field binding <code>{system,code,display}</code></td><td>Observation.code.coding</td><td><b>Only if verified</b> (exists + display match); otherwise <code>code.text</code> only</td></tr>
-      <tr><td>Applied sets / pathways / versions</td><td>Composition section “Applied context sets”</td><td>Text: title, set id, pinned version, pathway</td></tr>
-      <tr><td>Signed notes</td><td>Composition sections</td><td>Latest amended text + signer + amendment count; drafts and discarded notes are not exported</td></tr>
-      <tr><td>Export author / who</td><td>Composition.author, Provenance.agent</td><td>“Signing as” name, else “unsigned draft”</td></tr>
-      <tr><td>Applied SDC-sourced (or any) set values</td><td>QuestionnaireResponse</td><td>status <code>in-progress</code>; items nested like the Questionnaire; questionnaire = original canonical|version, or <code>urn:emr-enhancer:questionnaire:id|version</code> if modified/internal</td></tr>
-      <tr><td>Element set</td><td>Questionnaire (separate download)</td><td>Original if unmodified; else generated, with verified codes only</td></tr>
-      <tr><td>Whole export</td><td>Provenance</td><td>targets every other entry; <code>recorded</code> = export time</td></tr>
-      <tr><td>Several bindings per field (ADR-003)</td><td>Observation.code.coding[]</td><td>Every <b>verified</b> binding, each with its own system; unverified or local codes stay in <code>code.text</code> only</td></tr>
-      <tr><td>Disease-set ICD binding (ADR-003)</td><td>Condition.code.coding</td><td>Only if verified; ICD-10 variants and ICD-11 are distinct systems</td></tr>
-      <tr><td>Units</td><td>Quantity</td><td>UCUM system+code only when the unit is in a known-safe map; otherwise unit text only</td></tr>
-      <tr><td>Patient (name, MRN, sex)</td><td>Patient</td><td>Synthetic identity; real registration arrives in Phase 4</td></tr>
-    </table>
-  </div>
-
-  <div class="legend">
-    <span><span class="dot" style="background:var(--g)"></span> Done / in current demo</span>
-    <span><span class="dot" style="background:var(--ac)"></span> Next recommended</span>
-    <span><span class="dot" style="background:var(--bd)"></span> Later</span>
-  </div>
-
-  <div id="list"></div>
-
-  <h2>Considered and parked · 21 Nov 2026</h2>
-  <div class="card">
-    <p class="mu" style="margin:0 0 6px">Evaluated and deliberately <b>not</b> in the plan. Revisit only when a real use case or partner appears.</p>
-    <ul>
-      <li><b>More code systems</b> — <i>un-parked 21 Nov 2026, now ADR-003</i> (items p1-11, p1-12): registry with verifier per system, several bindings per field, ICD as an optional diagnosis classification, local codes against a local table.</li>
-      <li><b>LIS integration</b> (HL7 v2 orders/results). Skipped. Doctors view lab results in the LIS directly.</li>
-      <li><b>DICOM storage.</b> Will not be stored. Imaging is viewed in the PACS.</li>
-      <li><b>Add-on mode inside another EMR (SMART on FHIR launch, Send-to-EMR).</b> Decided against in the build plan: it forces double entry or a fragile mapping. Revisit only for a specific hospital integration, as a separate project.</li>
-      <li><b>Live AI “second look” at the narrative.</b> Not planned; AI only drafts for human approval or ranks deterministic results.</li>
-      <li><b>Read-only FHIR import / “External results”</b> (paste a Bundle → pull from a configured FHIR server → subscriptions). Parked. This is about <i>patient data</i>; importing content definitions (Questionnaires, marketplace packages) is allowed. If revived: store raw resources as immutable JSONB with source and version; never merge them into element-set fields; a clinician links patients, with no auto-matching; show imaging as links only.</li>
-    </ul>
-  </div>
-
-  <h2>Backend stack</h2>
-  <div class="card">
-    <p style="margin:0">Node.js + PostgreSQL, flat repository root, numbered SQL migrations that are never edited once applied. Built per the build plan: versioned rows with optimistic concurrency, append-only observations and audit log, element-set versions as immutable rows, scrypt password hashes, server-side sessions, CSRF tokens, one permission table enforced on every route, and a restricted database role. Browser keeps a cache-first Store with an ordered write queue; localStorage is for Demo mode with synthetic data only.</p>
-  </div>
-
-  <h2>Design invariants (never relax)</h2>
-  <ul class="mu">
-    <li>Not for clinical use until independently reviewed and validated.</li>
-    <li>No pre-filled doses, therapeutic thresholds or protocol bands from an LLM.</li>
-    <li>Deterministic logic decides eligibility; AI may only rank or explain.</li>
-    <li>Codes are verified before they become <code>Coding</code> in FHIR exports.</li>
-    <li>Clinical data is never hard-deleted (use entered-in-error + reason later).</li>
-    <li>A pathway or set is a starting structure, not a lock-in.</li>
-    <li>FHIR R4 patient data is export-only for now (not a live SMART/EMR integration). Questionnaire <i>definitions</i> may be imported (ADR-002).</li>
-    <li>The internal element-set / pathway model is the system of record; FHIR is the boundary, never the form engine (ADR-001).</li>
-    <li>Terminology bindings live in the model; a binding is verified only if the code exists and its display matches.</li>
-    <li>LLM-proposed codes are candidates (<code>source:"llm"</code>); an empty binding is better than a wrong one.</li>
-    <li>Integrations (DDI, registries, other EMRs) are mapped at the boundary and must not reshape the core.</li>
-    <li>SDC Questionnaires are an additional authoring/exchange format; they normalise into the internal model, which stays the system of record.</li>
-    <li>Curation or profile labels (e.g. “ABDM-aligned”) are informational until validated; never emit <code>meta.profile</code> or claim conformance without validation.</li>
-    <li>Signed notes are immutable; changes are amendments with a reason. Cases are archived, never deleted.</li>
-    <li>A case pins the version of each element set it applied; updating is an explicit clinician action.</li>
-    <li>Coding is optional in every authoring mode; skipping it never blocks use of an element set. Unverified codes are never emitted as <code>Coding</code>, whichever system they belong to (ADR-003).</li>
-    <li>Registration and other site-specific identity data are never in the marketplace (ADR-004).</li>
-    <li>Marketplace packages are declarative data only — no executable code. Analytics run on the EMR's own engine.</li>
-    <li>Marketplace trust levels are separate, evidence-based labels (checked, tested, reviewed, verified, validated); none implies clinical approval for a given site. The repo never holds patient data.</li>
-    <li>Analytics compatibility is shown with its match kind (exact / via verified code / partial); it is never silently assumed.</li>
-    <li>Suggestions come from deterministic manifest rules; an LLM may only rank or explain, with minimal context.</li>
-    <li>Local content is free; installed marketplace content is read-only, enforced by the server, and extended only by composition or replaced by a newer version. A fork gets a new id and is a local draft.</li>
-    <li>Rules and protocol bands inside any package arrive disabled until a local doctor enables them; seed sets ship with zero rules. An unapproved draft is never applied to a real patient's case.</li>
-    <li>In server mode the signer, approver, reviewer and author always come from the session, never from typed names or request bodies.</li>
-    <li>Every latest value is shown with its age. Summary and lists show data presence, never a judgement on adequacy of care.</li>
-    <li>The AI key lives on the server. AI is off by default and shows exactly what will be sent.</li>
-    <li>Peer review is not regulatory approval; no real patients until the go-live gate is passed.</li>
+<h3>ADR-003 · Code-system registry and unified create screen</h3>
+<div class="card">
+  <p><span class="dec">Decision.</span> Two independent choices on one screen: <b>output</b> (internal set, or also an SDC Questionnaire) and <b>coding</b> (pick systems, or skip). Same picker and verification either way.</p>
+  <div class="tbl"><table>
+  <tr><th>System</th><th>Role</th><th>Verifier</th><th>Note</th></tr>
+  <tr><td>SNOMED CT</td><td>Findings, conditions, procedures</td><td>Terminology server</td><td>Licence varies by country</td></tr>
+  <tr><td>LOINC</td><td>Labs, measurements</td><td>Terminology server</td><td>Free with attribution</td></tr>
+  <tr><td>RxNorm / ATC</td><td>Drugs (ATC = class)</td><td>Server or local table</td><td>Outside US, ATC/local often practical</td></tr>
+  <tr><td>ICD-10 / 10-CM / 11</td><td>Diagnosis classification</td><td>WHO API or local table</td><td>Distinct systems; bind at disease-set level; no auto SNOMED→ICD except via published map</td></tr>
+  <tr><td>UCUM</td><td>Units</td><td>Known-safe map</td><td>Already in exporter</td></tr>
+  <tr><td>CPT</td><td>US procedure billing</td><td>Local table</td><td>AMA licence; off by default</td></tr>
+  <tr><td>Local</td><td>Site codes</td><td>Local table</td><td>Never exported as standard <code>Coding</code></td></tr>
+  </table></div>
+  <ul>
+    <li>Skipping coding is first-class: uncoded sets work fully, are flagged “uncoded”, and match analytics by exact id only.</li>
+    <li>Several bindings per field, each verified separately; every verified one goes in <code>code.coding[]</code>.</li>
+    <li>Role guard warns on mismatched system (e.g. ICD on a numeric observation); author decides.</li>
+    <li>LLM proposes bindings only for ticked systems. SDC mode lists what SDC cannot yet express before generating.</li>
+    <li>Field model changes <code>binding</code> → <code>bindings[]</code> via a <b>new</b> migration. <b>Do this before the package format is frozen.</b></li>
+    <li>Terminology host is one allow-listed address from config; public servers are test-only, production needs a configured server with cached results.</li>
   </ul>
+</div>
 
-  <h2>Recommended MVP vertical slice</h2>
-  <div class="card">
-    <p style="margin:0">One synthetic patient with <b>T2DM + CKD 3b + diabetic foot ulcer</b> → blank narrative → apply “DM + CKD + Foot Ulcer” pathway → add/remove individual contexts → enter repeating vitals/glucose → verify a few LOINC/SNOMED codes → export FHIR Bundle that only codes verified concepts → confirm the case still knows which sets were applied.</p>
-  </div>
-
-  <h2>Source concepts</h2>
-  <ul class="mu">
-    <li><a href="https://classworkdecjan.blogspot.com/2026/11/beyond-static-emrs-introducing-context.html" target="_blank" rel="noopener">Beyond Static EMRs</a> — diagnosis as schema modifier</li>
-    <li><a href="https://classworkdecjan.blogspot.com/2026/11/from-diagnosis-to-trajectory-pathways.html" target="_blank" rel="noopener">From Diagnosis to Trajectory &amp; Pathways</a> — composable element sets</li>
-    <li>ADR-001 (FHIR SDC vs proprietary model vs openEHR) and ADR-002 (dual authoring), above.</li>
-    <li><a href="https://nrces.in/ndhm/fhir/r4/" target="_blank" rel="noopener">FHIR Implementation Guide for ABDM</a> (NRCeS) — profile list and versions.</li>
-    <li><a href="https://classworkdecjan.blogspot.com/2026/11/from-composable-forms-to-clinical.html" target="_blank" rel="noopener">From Composable Forms to a Clinical Flywheel</a> — recommender &amp; monitoring</li>
+<h3>ADR-004 · Marketplace by patient journey</h3>
+<div class="card">
+  <div class="tbl"><table>
+  <tr><th>Stage</th><th>Marketplace?</th><th>Reason</th></tr>
+  <tr><td>Registration</td><td>No</td><td>Site-specific identity data; lint rejects it</td></tr>
+  <tr><td>Clinical recording</td><td>Yes</td><td>Element sets, pathways, rules</td></tr>
+  <tr><td>Analytics</td><td>Yes</td><td>Analytics depend on elements, not pathways</td></tr>
+  </table></div>
+  <p class="mu">Orders, MAR, ADT and billing are operational and site-specific: not marketplace content by default.</p>
+  <h3>Content rules</h3>
+  <ul>
+    <li>Local content is free to edit. Installed content is <b>read-only, enforced by the server</b>; extend by composition or <b>fork</b> (new id, local draft, link to original).</li>
+    <li>Rules and protocol bands arrive <b>disabled</b>; a local doctor enables them (server stamps who/when). Seed sets ship with zero rules.</li>
+    <li>No auto-upgrades; cases keep their pinned version. A withdrawn version warns on existing cases and blocks new use. Nothing is deleted.</li>
+    <li>Unapproved drafts are never applied to real patients.</li>
+    <li>Packages are declarative data only. Analytics run on the EMR's own evaluator; thresholds ship blank with a citation.</li>
   </ul>
+  <h3>Analytics compatibility</h3>
+  <ul>
+    <li>An analytic declares <code>requires</code> by set+field or by verified code with type and UCUM unit. CI builds an index both ways.</li>
+    <li>Match kinds always shown: <b>exact</b>, <b>via code</b>, <b>partial</b> (missing listed). Units are never converted.</li>
+  </ul>
+  <h3>Trust</h3>
+  <div class="tbl"><table>
+  <tr><th>Tier</th><th>Meaning</th><th>Editable</th></tr>
+  <tr><td>Marketplace-verified</td><td>Signature and hash checked at install</td><td>No (fork)</td></tr>
+  <tr><td>Local reviewed</td><td>Approved by facility informatician; frozen</td><td>New draft version</td></tr>
+  <tr><td>Local draft</td><td>AI drafts, imports, forks, anything else</td><td>Yes</td></tr>
+  </table></div>
+  <ul>
+    <li>Index shows checks passed, tests passed, reviewer count and evidence link. “Verified” means peer-reviewed, not regulator-approved.</li>
+    <li>One shared lint script (CI, app, server): schema, SDC structure, bound codes verified, no dose/threshold text without citation, no executable content, no patient-like strings, licence present, hash.</li>
+    <li>Reviewer is never the author; two reviewers for rules, bands or dose-like text; stamped by the server.</li>
+    <li>GitHub gives hosting, history, PR review and CI, not signatures. Each version is pinned by SHA-256 in a signed index; public key pinned in server config; server verifies at install. Protect main; check GitHub's current tag/release protection.</li>
+  </ul>
+  <h3>In the EMR</h3>
+  <ul>
+    <li>Browse: clinical roles. Install: informatician/admin. Doctors request (audited). Site sets minimum tier. File install and private mirror for offline sites.</li>
+    <li>Suggest: deterministic from <code>appliesWhen</code> with redundancy suppression; nothing applied or installed without a click. An LLM may only rank or explain, de-identified, off by default.</li>
+  </ul>
+  <p><span class="dec">Risks.</span> Public repo means no patient data ever. Check SNOMED/ICD/RxNorm/CPT redistribution terms. Distributing decision-support rules may bring medical-device-software duties. Governance (reviewers, conflicts, recall, key rotation) is the real work.</p>
+</div>
 
-  <footer>
-    EMR Enhancer · plan &amp; progress tracker · ticks saved in this browser only<br>
-    Updated 21 Nov 2026: ADR-003 (SDC checkbox + code systems), ADR-004 (marketplace by patient journey, with the build plan's trust model), status refresh, go-live gate.<br>
-    Demo file: <code>emr-enhancer.html</code>
-  </footer>
+<h2>3 · Go-live gate</h2>
+<div class="card">
+  <p class="mu">No real patients until all are true.</p>
+  <ul>
+    <li>A named clinician has signed the safety review.</li>
+    <li>A restore from encrypted backup has been tested.</li>
+    <li>Security hardening done (CSP, restricted DB role, cookies, rate limits); safety-test pack passes in CI.</li>
+    <li>Two-browser checks done in real browsers (conflict screen, unsent reading kept across re-login, import report).</li>
+    <li>AI is off by default, server-side only, de-identified, showing exactly what is sent.</li>
+    <li>Device-software and health-data rules checked for the place of use; data-processing agreement for any external model provider.</li>
+    <li>Licences checked for any SNOMED CT, ICD, RxNorm or CPT content shipped.</li>
+  </ul>
+</div>
+
+<h2>4 · Roadmap</h2>
+<p class="mu">Tick boxes are saved in this browser only. <span class="tag done">done</span> built in demo or repo · <span class="tag next">next</span> recommended next · <span class="tag">later</span></p>
+<div id="list"></div>
+
+<h2>5 · Invariants</h2>
+<div class="card">
+<h3>Safety</h3>
+<ul>
+  <li>Not for clinical use until reviewed and validated; peer review is not regulatory approval.</li>
+  <li>No LLM-supplied doses, therapeutic thresholds or protocol bands. Doses elsewhere are free text, never calculated.</li>
+  <li>Deterministic logic decides eligibility; AI only ranks, explains or drafts for human approval. AI is off by default; key lives on the server.</li>
+  <li>Latest values show their age; lists show data presence, never a judgement on care.</li>
+</ul>
+<h3>Data and model</h3>
+<ul>
+  <li>Internal element-set/pathway model is the system of record; FHIR is the boundary. Patient-data FHIR is export-only for now; Questionnaire definitions may be imported.</li>
+  <li>Clinical data is never hard-deleted. Signed notes are immutable (amend with reason). Cases are archived, not deleted.</li>
+  <li>A case pins each set's version; updating is an explicit clinician action. A pathway is a starting structure, not a lock-in.</li>
+  <li><b>Removing a set must not hide recorded data.</b> Values stay stored, but the demo hides them and skips them in the FHIR export. Rule to decide and implement: show a read-only “previously recorded” section and keep it in the export, or block removal once a set has values and require a reason.</li>
+  <li>Signer, approver, reviewer and author come from the session, never typed or sent in a request.</li>
+</ul>
+<h3>Terminology</h3>
+<ul>
+  <li>Verified = exists and display matches. Unverified codes are never emitted as <code>Coding</code>, in any system.</li>
+  <li>Coding is optional everywhere and never blocks use.</li>
+  <li>Profile labels (e.g. “ABDM-aligned”) are informational; no <code>meta.profile</code> without validation.</li>
+</ul>
+<h3>Content</h3>
+<ul>
+  <li>Registration data is never in the marketplace. The repo never holds patient data.</li>
+  <li>Marketplace packages are data only. Installed content is read-only (server-enforced).</li>
+  <li>Rules and bands arrive disabled until a local doctor enables them.</li>
+  <li>Trust labels are separate and evidence-based; none implies approval for a given site. Analytics matches always show their kind.</li>
+</ul>
+</div>
+
+<h2>6 · Internal model → FHIR R4 (v0)</h2>
+<div class="tbl"><table>
+<tr><th>Internal</th><th>FHIR R4</th><th>Rule</th></tr>
+<tr><td>Narrative</td><td>Composition section</td><td>status <code>preliminary</code>; text escaped</td></tr>
+<tr><td>Disease set</td><td>Condition</td><td>Code from first verified binding, else text; <code>active</code></td></tr>
+<tr><td>Field value / repeating row</td><td>Observation (one per row)</td><td>value[x] by type; row timestamp → effectiveDateTime</td></tr>
+<tr><td>Bindings</td><td>Observation.code.coding[]</td><td>Verified only; else <code>code.text</code></td></tr>
+<tr><td>Units</td><td>Quantity</td><td>UCUM only when in the known-safe map</td></tr>
+<tr><td>Applied sets / versions</td><td>Composition section</td><td>Title, id, pinned version, pathway</td></tr>
+<tr><td>Signed notes</td><td>Composition sections</td><td>Latest text, signer, amendment count; drafts excluded</td></tr>
+<tr><td>Set values (SDC or all)</td><td>QuestionnaireResponse</td><td><code>in-progress</code>; nested like the Questionnaire</td></tr>
+<tr><td>Element set</td><td>Questionnaire download</td><td>Original if unmodified; else generated, verified codes only</td></tr>
+<tr><td>Whole export</td><td>Provenance</td><td>Targets all entries</td></tr>
+<tr><td>Patient</td><td>Patient</td><td>Synthetic until registration (p4-5)</td></tr>
+</table></div>
+
+<h2>7 · Stack and MVP slice</h2>
+<div class="card">
+  <p><b>Stack.</b> Node.js + PostgreSQL, flat repo root, numbered migrations never edited once applied. Versioned rows with optimistic concurrency, append-only observations and audit, immutable set versions, scrypt hashes, server sessions, CSRF, one permission table on every route, restricted DB role. Browser uses a cache-first store; localStorage only for demo mode.</p>
+  <p><b>MVP slice.</b> Synthetic patient with T2DM + CKD 3b + foot ulcer → blank narrative → apply “DM + CKD + Foot Ulcer” → add/remove sets → enter repeating vitals/glucose → verify a few codes → export a bundle coding only verified concepts → case still knows which sets were applied.</p>
+</div>
+
+<h2>8 · Parked</h2>
+<div class="card">
+  <p class="mu">Revisit only with a real use case or partner.</p>
+  <ul>
+    <li><b>LIS integration (HL7 v2).</b> Doctors use the LIS directly.</li>
+    <li><b>DICOM storage.</b> Imaging stays in PACS.</li>
+    <li><b>Add-on mode inside another EMR (SMART on FHIR).</b> Forces double entry or fragile mapping; separate project if ever.</li>
+    <li><b>Live AI “second look” at the narrative.</b> AI only drafts or ranks.</li>
+    <li><b>FHIR patient-data import.</b> If revived: immutable raw JSONB with source, never merged into fields, clinician links patients, imaging as links only.</li>
+  </ul>
+</div>
+
+<h2>Sources</h2>
+<ul class="mu">
+  <li><a href="https://classworkdecjan.blogspot.com/2026/11/beyond-static-emrs-introducing-context.html" target="_blank" rel="noopener">Beyond Static EMRs</a></li>
+  <li><a href="https://classworkdecjan.blogspot.com/2026/11/from-diagnosis-to-trajectory-pathways.html" target="_blank" rel="noopener">From Diagnosis to Trajectory &amp; Pathways</a></li>
+  <li><a href="https://classworkdecjan.blogspot.com/2026/11/from-composable-forms-to-clinical.html" target="_blank" rel="noopener">From Composable Forms to a Clinical Flywheel</a></li>
+  <li><a href="https://nrces.in/ndhm/fhir/r4/" target="_blank" rel="noopener">FHIR IG for ABDM (NRCeS)</a></li>
+</ul>
+
+<footer class="mu">
+  <button onclick="resetTicks()">Reset ticks</button>
+</footer>
 </main>
 
 <script>
-const ITEMS = [
-  { phase: 'Phase 0 — Foundation', items: [
-    { id: 'p0-1', title: 'Blank case + narrative root', desc: 'Case starts empty; free-text narrative is the root of the chart.', built: true },
-    { id: 'p0-2', title: 'Element-set registry (disease · care · template · custom)', desc: 'Reusable modules with id, kind, title, fields.', built: true },
-    { id: 'p0-3', title: 'Apply / remove element sets (additive composition)', desc: 'Chart is always the union of currently applied sets.', built: true },
-    { id: 'p0-4', title: 'Pathways as ordered bundles', desc: 'One-click apply of several sets; still free to add/remove members.', built: true },
-    { id: 'p0-5', title: 'Dynamic form rendering from applied sets', desc: 'Form engine walks the applied list and renders fields.', built: true },
-    { id: 'p0-6', title: 'Create custom element sets by hand', desc: 'Manual field builder with per-field SNOMED/LOINC binding and live verification. Bindings live in the model, not in FHIR.', built: true },
-    { id: 'p0-7', title: 'LLM / demo generation of element sets from diagnosis', desc: 'Diagnosis → draft context → apply or save. Codes are proposals only (source:llm), flagged if dose/threshold-like, verified before apply/save is trusted.', built: true },
-    { id: 'p0-8', title: 'Context-based suggest button', desc: 'Rule-based suggestions from narrative + applied sets.', built: true },
-  ]},
-  { phase: 'Phase 1 — Trajectory, coding & FHIR', items: [
-    { id: 'p1-1', title: 'Repeating fields / timestamped observations', desc: 'repeat:true → mini-tables of {ts, value}. Core of trajectory.', built: true },
-    { id: 'p1-2', title: 'SNOMED CT / LOINC binding + verification', desc: 'Live tx.fhir.org lookup or manual add. Verified = code exists AND display matches; mismatches stay unverified. Only verified codes become Coding.', built: true },
-    { id: 'p1-3', title: 'FHIR R4 Bundle export (verified codes only)', desc: 'Patient, Condition, Observation, Composition. Unverified stay text. Export-only; internal model is system of record (ADR-001).', built: true },
-    { id: 'p1-7', title: 'Terminology layer inside the model (ADR-001)', desc: 'Field bindings {system, code, display, source}, verification table, LLM provenance. Independent of FHIR; feeds UI, analytics and export.', built: true },
-    { id: 'p1-8', title: 'Internal ↔ FHIR mapping page (v0)', desc: 'One-page field → resource mapping (above). Update whenever export changes.', built: true },
-    { id: 'p1-10', title: 'Dual authoring: SDC Questionnaire ⇄ element set (ADR-002)', desc: 'Import Questionnaire → element set; export Questionnaire; QuestionnaireResponse in bundle; versioned on re-import; curation labels; unsupported features flagged.', built: true },
-    { id: 'p1-11', title: 'Code-system registry & multiple bindings per field (ADR-003)', desc: 'Registry {uri, roles, verifier, licenceNote} for SNOMED CT, LOINC, RxNorm, ICD-10/11, ATC, UCUM, local (CPT off by default). bindings[] per field with migration, as a NEW migration. Verifier per system through an allow-listed terminology host; cache results. Unverified never exported as Coding. Do before the package format is frozen (p5-1). No build chunk yet.', built: false },
-    { id: 'p1-12', title: 'Unified create / generate screen: SDC checkbox + code-system picker (ADR-003)', desc: 'One screen, both authoring modes (hand-built and AI). Checkbox: also author as SDC Questionnaire, built deterministically from the internal set. Pick systems or skip coding. AI proposes bindings only for ticked systems. Needs a shared sdc.js (app, server, registry CI). No build chunk yet.', built: false },
-    { id: 'p1-9', title: 'FHIR export quality', desc: 'Done: Provenance, Composition.author, applied-set/pathway/version section, signed notes as sections, UCUM-safe quantities, in-browser structural checks (required elements, resolvable references). Parked: profile conformance and external validator run until a real consumer defines the profile.', built: true },
-    { id: 'p1-4', title: 'Notes (draft → sign → amend-with-reason)', desc: 'Free-text and structured-snapshot notes. Signed notes are immutable; changes are amendments with a reason. Drafts are discarded by marking, never deleted. Signer is a typed name until Phase 4 auth.', built: true },
-    { id: 'p1-5', title: 'Patient banner & multi-case / ward list', desc: 'Identity, diagnosis/pathway chips, search, archive/restore (no hard delete). Open-alert count waits for the Phase 2 alert log.', built: true },
-    { id: 'p1-6', title: 'Versioned element sets', desc: 'Editing a set that changes fields creates a new version and keeps the old. Each case pins the version it applied and updates only on request, after a diff (added / removed / changed fields; values kept). Diff is a confirm dialog for now, not a true side-by-side view.', built: true },
-  ]},
-  { phase: 'Phase 2 — Safety & clinical depth', items: [
-    { id: 'p2-1', title: 'CDS rules engine (clinician-approved only)', desc: 'Rules on sets/pathways. Editing resets approval. No model-invented thresholds. Per build plan: evaluator and AI-drafted rules built; approval is stamped by the signed-in user. Rules-in-force admin list is build chunk 35c.', repo: true },
-    { id: 'p2-2', title: 'Alert log, acknowledge, Alerts tab', desc: 'Runtime alerts from approved rules; open count on banner and ward list. Per build plan: built in the app; server-side acknowledgement records are build chunk 35b.', repo: true },
-    { id: 'p2-3', title: 'Flowsheets & daily tracking views', desc: 'Vitals, fever chart, insulin grid, trend views. Per build plan: built. Intake/output set, shift summary and handover view are build chunks 37b-d.', repo: true },
-    { id: 'p2-4', title: 'Informatician review / approval workflow', desc: 'Draft → automated lint → review → immutable approved version. Informatician role is not the author; two reviewers for rules, bands or dose-like text; approver stamped by the server. Build chunks 42-44.', built: false },
-  ]},
-  { phase: 'Phase 3 — Intelligence', items: [
-    { id: 'p3-1', title: 'Contextual module recommender', desc: 'Deterministic eligibility + redundancy suppression from manifest appliesWhen; optional LLM ranking only. First works on installed content; marketplace content added by p5-10. Basic rule-based Suggest exists (p0-8).', built: false },
-    { id: 'p3-2', title: 'Recommendation feedback loop', desc: 'Accept/dismiss/modify signals improve the catalogue. No build chunk yet; needs privacy design (what is logged, per user or aggregate).', built: false },
-    { id: 'p3-3', title: 'Patient monitoring portal', desc: 'Same modules, patient-facing projection; structured results flow back. No build chunk yet; needs patient authentication, consent and a separate threat model before any design.', built: false },
-    { id: 'p3-4', title: 'Trajectory & cohort analytics', desc: 'Local analytics engine: runs declarative analytic definitions over repeating observations and element values. Per-patient trends and simple cohort metrics (synthetic until governance). Marketplace analytics packages plug into this (p5-11).', built: false },
-  ]},
-  { phase: 'Phase 4 — Multi-user system of record', items: [
-    { id: 'p4-1', title: 'PostgreSQL + versioned rows + append-only observations', desc: 'Optimistic concurrency; two staff can chart at once. Per build plan: built (schema, REST API, cache-first client Store, import). Flat repo root, numbered migrations that are never edited once applied.', repo: true },
-    { id: 'p4-2', title: 'Authentication, roles, sessions', desc: 'admin · doctor · nurse · informatician · viewer. Per build plan: built (hashed passwords, lockout, idle and absolute session limits, CSRF, one permission table enforced on every route, author and approver always from the session). Nurse cannot apply sets or write notes; only admin imports.', repo: true },
-    { id: 'p4-3', title: 'Append-only audit log', desc: 'Who viewed/created/modified/signed/exported/signed in. Per build plan: built, with an admin audit screen and audited CSV export. Patient national id never enters the audit log.', repo: true },
-    { id: 'p4-4', title: 'Conflict resolution UI', desc: 'Side-by-side true conflicts only. Per build plan: built for patient data; not yet tested in a real browser with two users. Reference-data conflicts (sets, rules, codes) only offer reload.', repo: true },
-    { id: 'p4-5', title: 'Patient registration & encounter management', desc: 'Server done per build plan (MRN with check digit, duplicate check, merge without deleting, encounters, one open encounter per bed). Screens, real banner and Patients list are build chunks 34b-d. Journey stage 1: EMR-local, never in the marketplace (ADR-004).', next: true, built: false },
-    { id: 'p4-6', title: 'AI on the server, de-identified, off by default', desc: 'Key lives in server environment, never in the browser. Admin switch, limits, audit. Shows exactly what will be sent; buttons follow the switch. Build chunk 36.', built: false },
-    { id: 'p4-7', title: 'Safety-test pack and CI', desc: 'Permission matrix, concurrency, audit coverage, seed sets with zero rules and bands, migration test, browser smoke test. Build chunk 39 (grows with ADR-003/004 rules).', built: false },
-    { id: 'p4-8', title: 'Security hardening and data governance', desc: 'Content-security policy and output escaping, restricted database role, headers, limits, retention, subject access, consent, regulatory checklist. Build chunk 40.', built: false },
-    { id: 'p4-9', title: 'Deploy, encrypted backup, tested restore, go-live', desc: 'Container and TLS, encrypted backups with a restore actually tested, downtime procedure, go-live checklist (see Go-live gate). Build chunk 41.', built: false },
-  ]},
-  { phase: 'Phase 5 — Content lifecycle & operations', items: [
-    { id: 'p5-1', title: 'Marketplace package format & install (ADR-004)', desc: 'Manifest (id, version, kind, journey stage, specialty, conditions, code systems, appliesWhen, requires, licence), content hash, signed index with pinned public key, read-only install enforced by the server, fork, withdrawal, file install, no auto-upgrade. Build chunks 42, 45, 46.', built: false },
-    { id: 'p5-7', title: 'GitHub marketplace repository & CI (ADR-004)', desc: 'Separate registry repo: packages/<kind>/<id>/<version>, generated index and compatibility index, signed release workflow, protected main, CODEOWNERS. CI runs the same lint script as the app and server (one file), verifies bound codes, checks hashes, refuses edits to merged versions, rejects patient-like strings. Synthetic fixtures only.', built: false },
-    { id: 'p5-8', title: 'Review & trust workflow (ADR-004)', desc: 'Tiers: marketplace-verified, local-reviewed, local-draft. Index metadata: checks, tests, reviewer count, evidence link. Two independent reviewers (clinician + informatician) for rules or bands; server-stamped. Withdraw and recall. GOVERNANCE doc: reviewers, conflicts of interest, key rotation, response time.', built: false },
-    { id: 'p5-9', title: 'In-EMR marketplace browser & installer (ADR-004)', desc: 'Browse by journey stage, specialty, condition, code system, uncoded flag, tier. Roles: browse (clinical), install (informatician, admin), request (doctor). Site minimum tier. Offline and private-mirror support.', built: false },
-    { id: 'p5-10', title: 'Marketplace-powered Suggest buttons (ADR-004)', desc: 'Suggest from case context (applied sets, diagnosis codes, narrative terms) using manifest appliesWhen, redundancy suppression, installed vs in-marketplace labels with trust badge; add = install + apply after confirmation. Also suggests compatible analytics. LLM only ranks/explains with minimal context.', built: false },
-    { id: 'p5-11', title: 'Analytics packages & compatibility index (ADR-004)', desc: 'Declarative analytic definitions with requires (elementSetId@range+field, or verified code + type/unit). CI-generated index both ways: pick an element set or pathway → all compatible analytics; pick an analytic → all compatible sets and pathways. Match kinds exact / via code / partial, with missing fields listed. Depends on p3-4.', built: false },
-    { id: 'p5-12', title: 'Content governance, licensing and regulatory check', desc: 'Before the first public release: content licence chosen; SNOMED CT, ICD, RxNorm, CPT redistribution terms checked; medical-device-software position for decision-support rules checked with a qualified person; disclaimer wording; top-10 marketplace risks. No legal conclusion is drawn in the repo.', built: false },
-    { id: 'p5-2', title: 'Composite pathways with pinned versions', desc: 'Members reference exact setId + version + contentHash, one nested level, cycle check. Composite takes the weakest tier; a publishable composite may contain only marketplace-verified members.', built: false },
-    { id: 'p5-3', title: 'Orders, MAR, ADT, charge capture', desc: 'Built on repeating-row engine; no calculated doses. Safety: zero pre-filled doses or thresholds; doses are free text, never calculated, summed or converted; discontinuing needs a reason and never deletes; billing codes never alter notes or alerts; unverified billing codes omitted. Not marketplace content by default. Build chunks 48-52.', built: false },
-    { id: 'p5-5', title: 'ABDM export profile (validated)', desc: 'ABDM-conformant Document Bundle (e.g. OPConsultRecord, DiagnosticReportRecord) with required resources and identifiers; pick an IG version; validate with the official validator before ever emitting meta.profile. No build chunk yet.', built: false },
-    { id: 'p5-6', title: 'SDC depth', desc: 'enableWhen and calculated expressions, answerValueSet expansion via terminology server, multi-answer, pathways as PlanDefinition. Only if curated packs need them.', built: false },
-    { id: 'p5-4', title: 'Boundary integrations (on demand)', desc: 'DDI service via RxNorm/ATC mapping; registry-specific profile at submit time; optional FHIR endpoint write; limited import. One interface per real consumer — core model unchanged.', built: false },
-  ]},
+/* s: d = done, n = next, l = later */
+const ITEMS=[
+{phase:'Phase 0 — Foundation',items:[
+ ['p0-1','Blank case + narrative root','d'],
+ ['p0-2','Element-set registry (disease · care · template · custom)','d'],
+ ['p0-3','Apply/remove sets (additive composition)','d'],
+ ['p0-4','Pathways as bundles','d'],
+ ['p0-5','Dynamic form rendering','d'],
+ ['p0-6','Hand-built sets with per-field bindings and Verify','d'],
+ ['p0-7','LLM/demo set generation; codes are candidates, dose-like text flagged','d'],
+ ['p0-8','Rule-based Suggest','d']]},
+{phase:'Phase 1 — Trajectory, coding, FHIR',items:[
+ ['p1-1','Repeating timestamped observations','d'],
+ ['p1-2','SNOMED/LOINC binding + verification (exists AND display matches)','d'],
+ ['p1-3','FHIR R4 Bundle export, verified codes only','d'],
+ ['p1-4','Notes: draft → sign → amend with reason','d'],
+ ['p1-5','Patient banner, multi-case list, archive/restore','d'],
+ ['p1-6','Versioned sets; cases pin versions; update after diff','d'],
+ ['p1-7','Terminology layer inside the model (ADR-001)','d'],
+ ['p1-8','Internal ↔ FHIR mapping page','d'],
+ ['p1-9','Export quality: Provenance, author, signed notes, UCUM, structural checks. Profile conformance parked','d'],
+ ['p1-10','SDC Questionnaire ⇄ element set (ADR-002)','d'],
+ ['p1-11','Code-system registry + bindings[] per field (ADR-003); new migration; before package format freeze','l'],
+ ['p1-14','Autosuggest while typing: suggest previously entered values for the same field (this facility only, never sent to AI, no patient identifiers)','n'],
+ ['p1-15','Diagnosis typeahead: SNOMED CT list as you type (terminology server search; ICD optional); picked diagnosis stores a verified binding. Needs a production terminology server and licence check','n'],
+ ['p1-13','Rule for removed sets that hold data: keep visible (read-only) and exported, or require a reason to remove. Fix demo gap where export skips removed sets','n'],
+ ['p1-12','Unified create/generate screen: SDC checkbox + system picker (ADR-003); shared sdc.js','l']]},
+{phase:'Phase 2 — Safety and clinical depth',items:[
+ ['p2-1','CDS rules engine, clinician-approved only','d'],
+ ['p2-2','Alert log, acknowledge, Alerts tab','d'],
+ ['p2-3','Flowsheets and daily tracking (I/O, shift summary, handover still to do)','d'],
+ ['p2-4','Informatician review/approval workflow; two reviewers for rules','l']]},
+{phase:'Phase 3 — Intelligence',items:[
+ ['p3-1','Deterministic module recommender; optional LLM ranking','l'],
+ ['p3-2','Recommendation feedback loop (needs privacy design)','l'],
+ ['p3-3','Patient monitoring portal (needs auth, consent, threat model)','l'],
+ ['p3-4','Trajectory and cohort analytics; small-count masking','l']]},
+{phase:'Phase 4 — Multi-user system of record',items:[
+ ['p4-1','PostgreSQL, versioned rows, append-only observations','d'],
+ ['p4-2','Authentication, roles, sessions','d'],
+ ['p4-3','Append-only audit log','d'],
+ ['p4-4','Conflict resolution UI (needs real two-browser test)','d'],
+ ['p4-5','Patient registration and encounters: server done; screens next (EMR-local)','n'],
+ ['p4-6','AI on the server, de-identified, off by default','l'],
+ ['p4-7','Safety-test pack and CI','l'],
+ ['p4-8','Security hardening and data governance','l'],
+ ['p4-9','Deploy, encrypted backup, tested restore, go-live','l']]},
+{phase:'Phase 5 — Content lifecycle and operations',items:[
+ ['p5-1','Package format and install: manifest, hashes, signed index, read-only, fork, withdrawal','l'],
+ ['p5-7','GitHub registry repo and CI (shared lint, signed release)','l'],
+ ['p5-8','Review and trust workflow; GOVERNANCE doc','l'],
+ ['p5-9','In-EMR marketplace browser and installer','l'],
+ ['p5-10','Marketplace-powered Suggest','l'],
+ ['p5-11','Analytics packages and compatibility index (needs p3-4)','l'],
+ ['p5-12','Licensing, governance and regulatory check before first public release','l'],
+ ['p5-2','Composite pathways with pinned versions','l'],
+ ['p5-13','Orders and tests: lab and imaging order entry, specimen/status tracking, results recorded as repeating observations; orders pick from a coded catalogue. Results from the LIS/PACS stay parked until a real interface is needed','l'],
+ ['p5-3','Medication orders, MAR, ADT, charge capture (not marketplace)','l'],
+ ['p5-5','Validated ABDM export profile','l'],
+ ['p5-6','SDC depth (enableWhen, expressions, value-set expansion)','l'],
+ ['p5-4','Boundary integrations on demand (DDI, registries)','l']]}
 ];
-
-const BUILT = new Set(ITEMS.flatMap(p => p.items.filter(i => i.built || i.repo).map(i => i.id)));
-let L = {};
-try { L = JSON.parse(localStorage.getItem('emr_enhancer_chk') || '{}') || {}; } catch (_) {}
-BUILT.forEach(id => { if (L[id] === undefined) L[id] = true; });
-
-const box = document.getElementById('list');
-ITEMS.forEach(phase => {
-  const wrap = document.createElement('div');
-  wrap.innerHTML = `<div class="phase"><h3>${phase.phase}</h3></div>`;
-  phase.items.forEach(it => {
-    const div = document.createElement('div');
-    div.className = 'item' + (L[it.id] ? ' done' : '');
-    div.id = 'ck-' + it.id;
-    const tag = it.built ? '<span class="tag done">in demo</span>' : it.repo ? '<span class="tag done">in repo</span>' : (it.next ? '<span class="tag next">next</span>' : '<span class="tag">later</span>');
-    div.innerHTML = `<input type="checkbox" ${L[it.id] ? 'checked' : ''} data-id="${it.id}">
-      <div class="body"><b>${it.title}</b> ${tag}<div class="mu">${it.desc}</div></div>`;
-    div.querySelector('input').onchange = e => {
-      L[it.id] = e.target.checked;
-      try { localStorage.setItem('emr_enhancer_chk', JSON.stringify(L)); } catch (_) {}
-      up();
-    };
-    wrap.appendChild(div);
+const DONE=new Set(ITEMS.flatMap(p=>p.items.filter(i=>i[2]==='d').map(i=>i[0])));
+let L={};try{L=JSON.parse(localStorage.getItem('emr_enhancer_chk')||'{}')||{}}catch(_){}
+DONE.forEach(id=>{if(L[id]===undefined)L[id]=true});
+const save=()=>{try{localStorage.setItem('emr_enhancer_chk',JSON.stringify(L))}catch(_){}};
+const box=document.getElementById('list');
+ITEMS.forEach(ph=>{
+  const w=document.createElement('div');
+  w.innerHTML=`<div class="ph">${ph.phase}</div>`;
+  ph.items.forEach(([id,t,s])=>{
+    const d=document.createElement('div');d.className='item';d.id='ck-'+id;
+    const tag=s==='d'?'<span class="tag done">done</span>':s==='n'?'<span class="tag next">next</span>':'<span class="tag">later</span>';
+    d.innerHTML=`<input type="checkbox"><div><b>${t}</b> ${tag}</div>`;
+    d.querySelector('input').onchange=e=>{L[id]=e.target.checked;save();up()};
+    w.appendChild(d);
   });
-  box.appendChild(wrap);
+  box.appendChild(w);
 });
-
-function up() {
-  const all = ITEMS.flatMap(p => p.items);
-  const n = all.filter(i => L[i.id]).length;
-  document.getElementById('pc').textContent = n + ' / ' + all.length;
-  document.getElementById('pb').style.width = (100 * n / all.length) + '%';
-  all.forEach(i => {
-    const el = document.getElementById('ck-' + i.id);
-    if (!el) return;
-    el.classList.toggle('done', !!L[i.id]);
-    el.querySelector('input').checked = !!L[i.id];
-  });
-  const next = all.find(i => i.next && !L[i.id]) || all.find(i => !L[i.id]);
-  document.getElementById('nx').innerHTML = next
-    ? '<b>Next:</b> ' + next.title
-    : 'All tracked items marked done.';
+function up(){
+  const all=ITEMS.flatMap(p=>p.items),n=all.filter(i=>L[i[0]]).length;
+  document.getElementById('pc').textContent=n+' / '+all.length;
+  document.getElementById('pb').style.width=(100*n/all.length)+'%';
+  all.forEach(i=>{const e=document.getElementById('ck-'+i[0]);e.classList.toggle('done',!!L[i[0]]);e.querySelector('input').checked=!!L[i[0]]});
+  const nx=all.find(i=>i[2]==='n'&&!L[i[0]])||all.find(i=>!L[i[0]]);
+  document.getElementById('nx').innerHTML=nx?'<b>Next:</b> '+nx[1]:'All items done.';
 }
-function resetTicks() {
-  if (!confirm('Clear all checkboxes? (Built-in “in demo” items will stay marked if you use Mark all in demo.)')) return;
-  L = {};
-  try { localStorage.setItem('emr_enhancer_chk', JSON.stringify(L)); } catch (_) {}
-  up();
-}
-function markBuilt() {
-  BUILT.forEach(id => L[id] = true);
-  try { localStorage.setItem('emr_enhancer_chk', JSON.stringify(L)); } catch (_) {}
-  up();
-}
+function resetTicks(){if(!confirm('Clear all ticks?'))return;L={};save();up()}
 up();
 </script>
 </body>

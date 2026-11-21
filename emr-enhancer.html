@@ -67,18 +67,6 @@ pre.raw{font-size:11px;background:var(--side);padding:8px;border-radius:6px;over
 .rep-add{display:flex;gap:6px;margin-top:6px;align-items:center}
 .rep-add input{flex:1}
 #setPanel{display:none;margin:0 16px 8px}
-.phase{border-left:3px solid var(--ac);padding:4px 0 8px 16px;margin:18px 0 8px}
-.phase h3{margin:0 0 4px;font-size:15px}
-.feat{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--bd)}
-.feat:last-child{border-bottom:0}
-.feat .num{flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
-.feat.done .num{background:var(--g)}
-.feat .body{flex:1}.feat .body b{display:block;margin-bottom:2px}
-.feat .tag{display:inline-block;font-size:10px;padding:1px 7px;border-radius:99px;border:1px solid var(--bd);color:var(--mu);margin-right:4px}
-.feat .tag.done{border-color:var(--g);color:var(--g)}
-.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 16px;font-size:12px}
-.legend span{display:inline-flex;align-items:center;gap:4px}
-.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
 table.ctab{width:100%;font-size:12px;border-collapse:collapse;margin-top:8px}
 table.ctab th,table.ctab td{border:1px solid var(--bd);padding:5px 8px;text-align:left}
 table.ctab th{background:var(--side)}
@@ -106,7 +94,6 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <button data-t="create">Create / Generate</button>
     <button data-t="notes">Notes</button>
     <button data-t="codes">Codes &amp; FHIR</button>
-    <button data-t="features">Features</button>
   </nav>
 </header>
 <div id="pbanner" class="pb"></div>
@@ -298,41 +285,6 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <div id="bchk" class="mu" style="margin-top:6px"></div>
         <pre class="raw" id="bj"></pre>
       </div>
-    </div>
-
-    <!-- FEATURES -->
-    <div class="pane" id="features">
-      <h3>Features &amp; build order</h3>
-      <div class="legend">
-        <span><span class="dot" style="background:var(--g)"></span> In this demo</span>
-        <span><span class="dot" style="background:var(--ac)"></span> Next</span>
-        <span><span class="dot" style="background:var(--bd)"></span> Later</span>
-      </div>
-      <div class="phase"><h3>Phase 0 — Foundation</h3></div>
-      <div class="feat done"><div class="num">1</div><div class="body"><b>Blank case + narrative</b> <span class="tag done">in this demo</span></div></div>
-      <div class="feat done"><div class="num">2</div><div class="body"><b>Element-set registry</b> <span class="tag done">in this demo</span></div></div>
-      <div class="feat done"><div class="num">3</div><div class="body"><b>Apply / remove sets</b> <span class="tag done">in this demo</span></div></div>
-      <div class="feat done"><div class="num">4</div><div class="body"><b>Pathways as bundles</b> <span class="tag done">in this demo</span></div></div>
-      <div class="feat done"><div class="num">5</div><div class="body"><b>Dynamic form rendering</b> <span class="tag done">in this demo</span></div></div>
-      <div class="feat done"><div class="num">6</div><div class="body"><b>Create / LLM-generate sets</b> <span class="tag done">in this demo</span></div></div>
-      <div class="feat done"><div class="num">7</div><div class="body"><b>Suggest from context</b> <span class="tag done">in this demo</span></div></div>
-      <div class="phase"><h3>Phase 1 — Trajectory + coding + FHIR</h3></div>
-      <div class="feat done"><div class="num">8</div><div class="body"><b>Repeating fields (timestamped rows)</b> <span class="tag done">in this demo</span><div class="mu">Vitals, glucose, etc. support multiple readings over time.</div></div></div>
-      <div class="feat done"><div class="num">9</div><div class="body"><b>SNOMED / LOINC binding + verification</b> <span class="tag done">in this demo</span><div class="mu">Live lookup or manual add. Only verified codes become Coding in export.</div></div></div>
-      <div class="feat done"><div class="num">10</div><div class="body"><b>FHIR R4 Bundle export</b> <span class="tag done">in this demo</span><div class="mu">Patient, Condition, Observation. Unverified → text only.</div></div></div>
-      <div class="feat done"><div class="num">11</div><div class="body"><b>Terminology bindings inside the model</b> <span class="tag done">in this demo</span><div class="mu">Builder and LLM generator both carry {system, code, display}; verified only if the code exists and the display matches. Dose/threshold-like text is flagged.</div></div></div>
-      <div class="feat done"><div class="num">12</div><div class="body"><b>Internal ↔ FHIR mapping (v0)</b> <span class="tag done">in plan file</span></div></div>
-      <div class="feat done"><div class="num">13</div><div class="body"><b>Notes (draft → sign → amend)</b> <span class="tag done">in this demo</span></div></div>
-      <div class="feat done"><div class="num">14</div><div class="body"><b>Patient banner &amp; ward list</b> <span class="tag done">in this demo</span></div></div>
-      <div class="feat done"><div class="num">15</div><div class="body"><b>FHIR export quality</b> <span class="tag done">in this demo</span><div class="mu">Provenance, Composition author + applied sets + signed notes, UCUM-safe quantities, structural checks. Profile conformance parked until a real consumer exists.</div></div></div>
-      <div class="feat done"><div class="num">16</div><div class="body"><b>Versioned element sets</b> <span class="tag done">in this demo</span></div></div>
-      <div class="feat done"><div class="num">+</div><div class="body"><b>Dual authoring: SDC Questionnaire ⇄ element set</b> <span class="tag done">in this demo</span><div class="mu">Import/export Questionnaire; QuestionnaireResponse in the bundle; curation labels. ABDM export profile is planned, not enabled.</div></div></div>
-      <div class="phase"><h3>Later phases</h3></div>
-      <div class="feat"><div class="num">17</div><div class="body"><b>CDS rules + alerts</b> <span class="tag">later</span></div></div>
-      <div class="feat"><div class="num">18</div><div class="body"><b>Contextual recommender</b> <span class="tag">later</span></div></div>
-      <div class="feat"><div class="num">19</div><div class="body"><b>Multi-user (Postgres, auth, audit)</b> <span class="tag">later</span></div></div>
-      <div class="feat"><div class="num">20</div><div class="body"><b>Boundary integrations</b> <span class="tag">later</span><div class="mu">DDI via RxNorm/ATC mapping, registry profile mapping, optional FHIR endpoint write — at the edge, not in the core.</div></div></div>
-      <div class="feat"><div class="num">21</div><div class="body"><b>Marketplace, Orders, MAR, ADT</b> <span class="tag">later</span></div></div>
     </div>
   </main>
 </div>
