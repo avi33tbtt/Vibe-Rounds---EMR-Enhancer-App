@@ -1,7 +1,7 @@
 'use strict';
 // node --test review-decide.test.js  (needs DATABASE_URL; creates and drops its own database)
 // 44a2c: POST /api/review-requests/:id/request-changes and /reject. Made-up set ids only. Runs as the restricted emr_app role, like review-approve.test.js.
-// Not covered here on purpose (44a2d): the author is refused (403), one approval is not enough, rollback leaves no half rows.
+// 44a2d (the guard tests at the end): the author is refused, one approval is not enough, a comment is always required, a failed write leaves no half rows.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
