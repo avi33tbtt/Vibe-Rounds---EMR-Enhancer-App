@@ -33,8 +33,8 @@ const save = (setId, body, extra = {}) => post('/api/element-sets', { setId, kin
 const changes = (id, body = { comment: 'Please add a unit' }, role = 'informatician') => post(`/api/review-requests/${id}/request-changes`, body, role);
 const reject = (id, body = { comment: 'Not suitable' }, role = 'informatician') => post(`/api/review-requests/${id}/reject`, body, role);
 // a saved set and a request made straight in the database, authored by the doctor
-const direct = async (setId, status = 'submitted') => {
-  assert.equal((await save(setId, { title: setId, access: ACC })).status, 201, setId);
+const direct = async (setId, status = 'submitted', body = { title: setId, access: ACC }) => {
+  assert.equal((await save(setId, body)).status, 201, setId);
   await getActor({ headers: { 'x-test-role': 'doctor' } });
   const h = (await owner.query('SELECT content_hash FROM element_sets WHERE set_id=$1 AND version=1', [setId])).rows[0].content_hash;
   return (await owner.query('INSERT INTO review_requests (set_id,set_version,author_id,status,content_hash,submitted_at) VALUES ($1,1,$2,$3,$4,now()) RETURNING id', [setId, actors.doctor.id, status, h])).rows[0].id;
@@ -166,4 +166,83 @@ test('after changes are requested: it cannot be approved, a new version withdraw
   assert.equal((await rr(s.body.id)).status, 'withdrawn');
   const again = await post('/api/review-requests', { setId: 'user.f1', version: 2 }, 'doctor');
   assert.equal(again.status, 201, JSON.stringify(again.body));
+});
+
+// ---------------------------------------------------------------- 44a2d: guard tests for approve, request-changes and reject together
+const GO = { 'request-changes': (id, role) => changes(id, { comment: 'x' }, role), reject: (id, role) => reject(id, { comment: 'x' }, role), approve: (id, role) => post(`/api/review-requests/${id}/approve`, {}, role) };
+const REFS = [{ id: 'r1', citation: 'Local protocol (made-up test reference)' }];
+const RULES_SET = { title: 'Rules', access: ACC, rules: [{ op: '>', threshold: 38 }], references: REFS };   // a rules set needs two different approving reviewers (44a2b)
+const submitAs = async (setId, role, body = { title: setId, access: ACC }) => {
+  assert.equal((await save(setId, body)).status, 201, setId);
+  const r = await post('/api/review-requests', { setId, version: 1 }, role);
+  assert.equal(r.status, 201, JSON.stringify(r.body)); return r.body.id;
+};
+const noDecision = async (id) => {                                 // nothing was decided or recorded
+  const e = await evs(id);
+  assert.ok(!e.some((x) => ['approved', 'approval_recorded', 'changes_requested', 'rejected'].includes(x.event)), 'no decision event');
+  for (const a of ['review.approve', 'review.request_changes', 'review.reject']) assert.equal((await audits(id, a)).length, 0, a);
+};
+
+test('the author cannot approve, request changes or reject their own request: 403 own_request as informatician or admin, nothing changes, and the database CHECK is a second wall', async () => {
+  for (const role of ['informatician', 'admin']) {
+    const setId = 'user.own_' + role, id = await submitAs(setId, role);
+    for (const [what, go] of Object.entries(GO)) {
+      const r = await go(id, role);
+      assert.equal(r.status, 403, role + ' ' + what); assert.equal(r.body.error.code, 'own_request', role + ' ' + what);
+    }
+    const row = await rr(id);
+    assert.equal(row.status, 'submitted'); assert.equal(row.reviewer_id, null); assert.equal(row.comment, null);
+    assert.equal(await tier(setId), 'local-draft'); await noDecision(id);
+    assert.equal((await evs(id)).length, 1);                        // only the 'submitted' event from the submit route
+    await assert.rejects(owner.query('UPDATE review_requests SET reviewer_id=author_id WHERE id=$1', [id]), (e) => e.code === '23514');
+  }
+});
+
+test('one approval is not enough, and a second reviewer may still send it back or reject it: the version never becomes local-reviewed', async () => {
+  for (const [path, go, status] of [['request-changes', GO['request-changes'], 'changes_requested'], ['reject', GO.reject, 'rejected']]) {
+    const setId = 'user.one_' + path.replace('-', '_');
+    const id = await direct(setId, 'submitted', RULES_SET);          // direct() saves the set itself
+    const one = await GO.approve(id, 'informatician');
+    assert.equal(one.status, 200, JSON.stringify(one.body)); assert.equal(one.body.finalized, false); assert.equal(one.body.status, 'in_review');
+    assert.equal(await tier(setId), 'local-draft');
+    const r = await go(id, 'admin');
+    assert.equal(r.status, 200, path + JSON.stringify(r.body)); assert.equal(r.body.status, status);
+    assert.equal(await tier(setId), 'local-draft', path); assert.equal((await rr(id)).status, status);
+    assert.deepEqual((await evs(id)).map((e) => e.event), ['approval_recorded', status], path);   // the first approval stays as history
+    const late = await GO.approve(id, 'informatician');             // a decided or sent-back request cannot be approved any more
+    assert.equal(late.status, 409, path); assert.equal(late.body.error.code, 'bad_status', path);
+    assert.equal(await tier(setId), 'local-draft', path);
+  }
+});
+
+test('a comment is always required for request changes and reject: missing, blank, not text, over 2000 characters or an extra key is 400, nothing changes; 2000 characters are accepted', async () => {
+  const id = await direct('user.cm1');
+  for (const body of [undefined, {}, { comment: '' }, { comment: ' \n\t ' }, { comment: null }, { comment: 5 }, { comment: ['x'] }, { comment: 'x'.repeat(2001) }, { comment: 'ok', extra: 1 }]) {
+    for (const path of ['request-changes', 'reject']) {
+      const r = await post(`/api/review-requests/${id}/${path}`, body, 'informatician');
+      assert.equal(r.status, 400, path + ' ' + String(JSON.stringify(body)).slice(0, 40)); assert.equal(r.body.error.code, 'validation');
+    }
+  }
+  await untouched(id, 'submitted');
+  assert.equal((await changes(id, { comment: 'y'.repeat(2000) })).status, 200);
+});
+
+test('a failed write leaves no half rows: if the event or the audit insert fails, request changes and reject change nothing, and work again afterwards', async () => {
+  for (const table of ['audit_log', 'review_events']) {
+    for (const [path, go] of [['request-changes', GO['request-changes']], ['reject', GO.reject]]) {
+      const id = await direct(`user.tx_${table}_${path.replace('-', '_')}`);
+      await owner.query(`CREATE FUNCTION fail_dc() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'write down'; END $$`);
+      await owner.query(`CREATE TRIGGER fail_dc_t BEFORE INSERT ON ${table} FOR EACH ROW EXECUTE FUNCTION fail_dc()`);
+      const log = console.error; console.error = () => {};
+      try {
+        assert.equal((await go(id, 'informatician')).status, 500, table + ' ' + path);
+      } finally {
+        console.error = log;
+        await owner.query(`DROP TRIGGER fail_dc_t ON ${table}`); await owner.query('DROP FUNCTION fail_dc()');
+      }
+      await untouched(id, 'submitted');                             // status, reviewer, comment, events and audit rows all as before
+      assert.equal(await tier(`user.tx_${table}_${path.replace('-', '_')}`), 'local-draft');
+      assert.equal((await go(id, 'informatician')).status, 200, 'the trigger was the cause: ' + table + ' ' + path);
+    }
+  }
 });
