@@ -12,7 +12,7 @@
     "db:down": "docker compose down",
     "seed": "node seed.js",
     "create-admin": "node create-admin.js",
-    "test": "node --test --test-concurrency=1 server.test.js api.test.js auth.test.js permissions.test.js audit.test.js versions.test.js audit-admin.test.js rules-inforce.test.js users.test.js audit-auth.test.js e2e32f.test.js patients.test.js alert-acks.test.js llm.test.js changes.test.js store.test.js store-live.test.js io-set.test.js sum-by-type.test.js board-no-reading.test.js handover-data.test.js handover-view.test.js handover-print.test.js package-lint.test.js package-lint.draft.test.js review-requests.test.js draft-block.test.js set-fork.test.js set-fork-ui.test.js set-withdraw.test.js review-queue.test.js review-request-get.test.js review-approve.test.js review-decide.test.js review-queue-ui.test.js review-page-ui.test.js review-diff-ui.test.js"
+    "test": "node --test --test-concurrency=1 server.test.js api.test.js auth.test.js permissions.test.js audit.test.js versions.test.js audit-admin.test.js rules-inforce.test.js users.test.js audit-auth.test.js e2e32f.test.js patients.test.js alert-acks.test.js llm.test.js changes.test.js store.test.js store-live.test.js io-set.test.js sum-by-type.test.js board-no-reading.test.js handover-data.test.js handover-view.test.js handover-print.test.js package-lint.test.js package-lint.draft.test.js review-requests.test.js draft-block.test.js set-fork.test.js set-fork-ui.test.js set-withdraw.test.js review-queue.test.js review-request-get.test.js review-approve.test.js review-decide.test.js review-queue-ui.test.js review-page-ui.test.js review-diff-ui.test.js review-decide-ui.test.js"
   },
   "dependencies": {
     "express": "^4.21.2",

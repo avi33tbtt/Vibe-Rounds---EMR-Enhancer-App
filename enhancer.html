@@ -1170,15 +1170,44 @@ return'<div class="sh"><b>'+esc(b.title||q.setId)+'</b><span class="mu">'+esc(s.
 +(pv===undefined?'':sec('Changes since the previous version'+(pv&&pv.n?' (v'+esc(pv.n)+')':''),!pv||pv.none?'<div class="mu">This is the first version: there is nothing to compare.</div>':pv.error?'<div class="mu">The previous version could not be loaded: '+esc(pv.error)+'</div>':reviewDiffHtml(pv.body,b,q.setId)))
 +sec('The server\'s check',(E.length?'<div><b>Must be fixed ('+E.length+')</b></div>'+li(E):'<div class="mu">No errors.</div>')+(W.length?'<div><b>Warnings ('+W.length+')</b></div>'+li(W):'')+(E.length||W.length?'':'<div class="mu">It only checks the format. It does not say the content is right.</div>'))
 +sec('History',ev.length?ev.map(e=>'<div class="mu">'+esc(revDate(e.at))+' · '+esc(e.userName||'unknown')+' · '+esc(e.event)+'</div>').join(''):'<div class="mu">No events yet.</div>')}
-function revShowList(){$('revDetail').hidden=true;$('revList').hidden=false}
-async function reviewOpen(id){const o=$('revDetailOut');$('revList').hidden=true;$('revDetail').hidden=false;
+/* 44b4: the checklist and the three decisions. Two items are automatic and come from the server's own check (schemaValid: no lint errors and the hash matches; codesVerified: no code outside the verified_codes table, as the lint warns). The rest are ticked by the reviewer and live only in this page (they are not sent or stored). Approve stays off until every item is done; Request changes and Reject need a comment. The server repeats every check and is the authority. */
+const REV_OPEN=['submitted','in_review'];
+function reviewChecks(d,meId,chk){chk=chk||{};const q=d&&d.request||{},s=d&&d.set||{},b=s.body&&typeof s.body=='object'?s.body:{},lt=d&&d.lint,E=lt&&Array.isArray(lt.errors)?lt.errors:null,W=lt&&Array.isArray(lt.warnings)?lt.warnings:[],bad=W.filter(w=>w&&(w.code=='unverified_coding'||w.code=='no_verified_list')).length,own=!!(q.authorId&&meId&&q.authorId===meId),open=REV_OPEN.includes(q.status),pw=s.kind=='pathway';
+const auto=[{id:'schemaValid',label:'The server\'s format check passes and the stored version matches what was submitted',ok:!!E&&!E.length&&d.hashMatches===true,why:!E?'The check did not run.':d.hashMatches!==true?'The stored version does not match the hash recorded at submission.':E.length+' error(s) to fix.'},{id:'codesVerified',label:'Every code on a field is in the verified codes list',ok:!!E&&!bad,why:!E?'The check did not run.':'Some codes are not in the verified codes list, or the list was not available.'}];
+const m=[['readRequest','I read the request text and where it came from']];if(q.version>1)m.push(['readChanges','I read what changed since the previous version']);m.push(pw?['readSets','I read every set in the pathway']:['readFields','I read every field']);if(Array.isArray(b.rules)&&b.rules.length)m.push(['readRules','I checked every rule and its numbers against a source I trust']);m.push(['readText','I read all free text and found no patient details']);
+const manual=m.map(x=>({id:x[0],label:x[1],on:chk[x[0]]===true})),missing=[];if(!open)missing.push('This request is no longer open.');if(own)missing.push('You cannot review your own request.');auto.forEach(a=>{if(!a.ok)missing.push(a.why)});if(manual.some(x=>!x.on))missing.push('Tick each item you have done.');
+return{auto,manual,open,own,missing,ready:!missing.length}}
+function reviewActHtml(d,meId,chk){const c=reviewChecks(d,meId,chk),q=d&&d.request||{},box=x=>'<div class="cd" style="margin:6px 0">'+x+'</div>';
+if(!c.open)return box('<div class="mu">This request is '+esc(String(REV_ALL[q.status]||q.status).toLowerCase())+'. It can no longer be decided.</div>');
+if(c.own)return box('<div class="mu"><b>You cannot review your own request.</b></div>');
+return box('<b>Checklist</b>'+c.auto.map(a=>'<div class="mu">'+(a.ok?'✓ ':'✗ ')+esc(a.label)+' (automatic)'+(a.ok?'':' — '+esc(a.why))+'</div>').join('')+c.manual.map(x=>'<label class="ro"><input type="checkbox" data-chk="'+esc(x.id)+'"'+(x.on?' checked':'')+'> '+esc(x.label)+'</label>').join('')
++'<div style="margin-top:8px"><label for="revComment"><b>Comment</b> <span class="mu">(needed to request changes or reject; optional to approve; 2000 characters at most)</span></label><textarea id="revComment" maxlength="2000"></textarea></div>'
++'<div class="sh" style="margin-top:6px"><button class="b" type="button" data-decide="approve"'+(c.ready?'':' disabled')+'>Approve</button><button class="b" type="button" data-decide="request-changes">Request changes</button><button class="b" type="button" data-decide="reject">Reject</button></div>'
++'<div class="mu" id="revWhy">'+(c.ready?'':esc('Approve is off until: '+c.missing.join(' ')))+'</div><div class="mu" id="revActMsg" aria-live="polite"></div>')}
+let revCur=null;
+function revApproveSync(){const c=revCur,b=document.querySelector('#revAct [data-decide="approve"]');if(!c||!b)return;const k=reviewChecks(c.d,Store.me.id,c.chk);b.disabled=!k.ready;$('revWhy').textContent=k.ready?'':'Approve is off until: '+k.missing.join(' ')}
+async function reviewDecide(kind){const c=revCur,msg=$('revActMsg');if(!c||!msg)return;
+if(Store.mode!=='server'||!Store.me||!Store.can('content.review')){msg.textContent='Your role may not review content.';return}
+const m=$('revComment').value.trim();
+if(kind!=='approve'&&!m){msg.textContent='A comment is required: say what needs to change, or why it is rejected.';return}
+if(m.length>2000){msg.textContent='The comment is longer than 2000 characters.';return}
+if(kind==='approve'&&!reviewChecks(c.d,Store.me.id,c.chk).ready){msg.textContent='Finish the checklist first.';return}
+if(kind==='approve'&&!confirm('Approve version '+c.d.request.version+' of '+c.d.request.setId+'? It will be frozen as reviewed. Any later edit makes a new draft.'))return;
+const bs=[...document.querySelectorAll('#revAct button')];bs.forEach(b=>b.disabled=true);msg.textContent='Saving…';
+try{const r=await Store.api('POST','/review-requests/'+encodeURIComponent(c.d.request.id)+'/'+kind,m?{comment:m}:{});
+const t=kind==='approve'?(r&&r.finalized===false?'Your approval is recorded ('+r.approvals+' of '+r.required+'). A different reviewer must approve next.':'Approved. This version is now frozen as reviewed. This is local review, not regulatory approval.'):kind==='reject'?'Rejected.':'Changes requested. The author must save a new version and submit it again.';await reviewOpen(c.d.request.id,t)}
+catch(e){msg.textContent='Not saved: '+String((e&&e.message)||'error');bs.forEach(b=>b.disabled=false);revApproveSync()}}
+function revShowList(){revCur=null;$('revDetail').hidden=true;$('revList').hidden=false}
+async function reviewOpen(id,note){const o=$('revDetailOut');$('revList').hidden=true;$('revDetail').hidden=false;
 if(Store.mode!=='server'||!Store.me){o.innerHTML='<div class="mu">Review needs the server.</div>';return}
 if(!Store.can('content.review')){o.innerHTML='<div class="mu">Your role may not review content.</div>';return}
 o.innerHTML='<div class="mu">Loading…</div>';
-try{const d=await Store.api('GET','/review-requests/'+encodeURIComponent(id)),v=d&&d.request&&d.request.version;let pv={none:true};if(v>1){const n=v-1;try{const r=await Store.api('GET','/element-sets/'+encodeURIComponent(d.request.setId)+'/versions/'+n);pv={n,body:r&&r.body}}catch(e2){pv={n,error:String((e2&&e2.message)||'error')}}}o.innerHTML=reviewPageHtml(d,Store.me.id,pv)}
+try{const d=await Store.api('GET','/review-requests/'+encodeURIComponent(id)),v=d&&d.request&&d.request.version;let pv={none:true};if(v>1){const n=v-1;try{const r=await Store.api('GET','/element-sets/'+encodeURIComponent(d.request.setId)+'/versions/'+n);pv={n,body:r&&r.body}}catch(e2){pv={n,error:String((e2&&e2.message)||'error')}}}revCur={d,chk:{}};o.innerHTML=(note?'<div class="cd" style="margin:6px 0"><b>'+esc(note)+'</b></div>':'')+reviewPageHtml(d,Store.me.id,pv)+'<div id="revAct">'+reviewActHtml(d,Store.me.id,revCur.chk)+'</div>'}
 catch(e){o.innerHTML='<div class="mu">Could not load this request: '+esc(String((e&&e.message)||'error'))+'</div>'}}
 $('revOut').addEventListener('click',e=>{const a=e.target&&e.target.closest&&e.target.closest('[data-open]');if(a){e.preventDefault();reviewOpen(a.getAttribute('data-open'))}});
 $('revBack').addEventListener('click',()=>{revShowList();reviewQueueLoad()});
+$('revDetailOut').addEventListener('change',e=>{const t=e.target,k=t&&t.getAttribute&&t.getAttribute('data-chk');if(k&&revCur){revCur.chk[k]=!!t.checked;revApproveSync()}});
+$('revDetailOut').addEventListener('click',e=>{const b=e.target&&e.target.closest&&e.target.closest('[data-decide]');if(b&&!b.disabled)reviewDecide(b.getAttribute('data-decide'))});
 $('reqTool').addEventListener('click',()=>{if($('tools'))$('tools').open=false;$('reqPanel').hidden=false;$('reqOut').innerHTML='';reqOwnerFill();reqDraftsPaint();$('reqText').focus()});
 $('reqClose').addEventListener('click',()=>{$('reqPanel').hidden=true});
 $('reqText').addEventListener('input',()=>{$('reqCount').textContent=$('reqText').value.length+' / 500'});
