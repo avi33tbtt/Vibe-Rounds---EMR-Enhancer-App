@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EMR Enhancer</title>
+<style>
+:root {
+  --bg:#f7f9fc; --fg:#1a2332; --mu:#5c6b7e; --cd:#fff; --bd:#d8e0ec;
+  --ac:#0b6e5f; --r:#c0392b; --a:#d68910; --g:#1e8449;
+  --side:#eef2f7; --chip:#e0f2f1; --hover:#f0f7f6;
+}
+@media(prefers-color-scheme:dark){
+  :root{--bg:#0f1419;--fg:#e6eaf2;--mu:#94a3b8;--cd:#1a2130;--bd:#2c364b;
+  --ac:#2dd4bf;--r:#f87171;--a:#fbbf24;--g:#4ade80;--side:#151c27;--chip:#134e4a;--hover:#1e293b}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,sans-serif;height:100vh;display:flex;flex-direction:column}
+.ban{background:#fff3cd;color:#664d03;padding:6px 16px;font-size:12px;text-align:center}
+@media(prefers-color-scheme:dark){.ban{background:#422006;color:#fcd34d}}
+header{padding:10px 16px;border-bottom:1px solid var(--bd);display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--cd)}
+header b{font-size:16px}.mu{color:var(--mu);font-size:12px}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{background:none;border:0;padding:8px 14px;cursor:pointer;color:var(--mu);border-bottom:2px solid transparent;font:inherit}
+nav button.on{color:var(--ac);border-color:var(--ac);font-weight:600}
+.layout{display:flex;flex:1;overflow:hidden}
+.side{width:300px;min-width:260px;background:var(--side);border-right:1px solid var(--bd);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
+.main{flex:1;overflow-y:auto;padding:16px 20px;max-width:980px}
+.pane{display:none}.pane.on{display:block}
+input,select,textarea{width:100%;padding:7px 10px;border:1px solid var(--bd);border-radius:6px;background:var(--cd);color:var(--fg);font:inherit}
+textarea{min-height:70px;resize:vertical}
+label{display:block;margin:8px 0 3px;font-weight:600;font-size:13px}
+button.b{background:var(--ac);color:#fff;border:0;border-radius:6px;padding:7px 14px;cursor:pointer;font:inherit;margin:4px 4px 0 0}
+button.b:hover{filter:brightness(1.08)}
+button.b.sec{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+button.b.sm{padding:4px 10px;font-size:12px}
+button.b:disabled{opacity:.55;cursor:not-allowed}
+.cd{background:var(--cd);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;margin:10px 0}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);color:var(--fg);padding:4px 10px;border-radius:99px;font-size:12px;margin:3px}
+.chip button{background:none;border:0;color:var(--mu);cursor:pointer;font-size:14px;line-height:1;padding:0 2px}
+.chip.pathway{background:#dbeafe}@media(prefers-color-scheme:dark){.chip.pathway{background:#1e3a5f}}
+.item{padding:8px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.item:hover{background:var(--hover)}.item .meta{font-size:11px;color:var(--mu)}
+.kind{font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;border-radius:4px;background:var(--bd);color:var(--mu)}
+.kind.disease{background:#fee2e2;color:#991b1b}.kind.care{background:#dbeafe;color:#1e40af}
+.kind.template{background:#e0e7ff;color:#3730a3}.kind.pathway{background:#d1fae5;color:#065f46}
+.kind.custom{background:#fef3c7;color:#92400e}
+@media(prefers-color-scheme:dark){
+  .kind.disease{background:#7f1d1d;color:#fecaca}.kind.care{background:#1e3a5f;color:#bfdbfe}
+  .kind.template{background:#312e81;color:#c7d2fe}.kind.pathway{background:#064e3b;color:#a7f3d0}
+  .kind.custom{background:#78350f;color:#fde68a}
+}
+.bd{display:inline-block;padding:1px 8px;border-radius:99px;color:#fff;font-size:11px;margin-left:4px}
+.field-row{display:flex;gap:8px;align-items:flex-start;margin-bottom:6px}
+.field-row input,.field-row select{flex:1}
+#toast{min-height:22px;color:var(--r);font-size:13px;margin-bottom:6px}
+.sec-title{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mu);margin:4px 0}
+.search{margin-bottom:6px}.empty{color:var(--mu);font-size:13px;padding:20px;text-align:center}
+.narrative{min-height:80px;font-size:14px}
+.flex{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+h3{margin:0 0 8px;font-size:15px}
+.applied-list{display:flex;flex-wrap:wrap;gap:4px;min-height:28px}
+pre.raw{font-size:11px;background:var(--side);padding:8px;border-radius:6px;overflow:auto;max-height:260px}
+.rep-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.rep-table th,.rep-table td{border:1px solid var(--bd);padding:4px 8px;text-align:left}
+.rep-table th{background:var(--side)}
+.rep-add{display:flex;gap:6px;margin-top:6px;align-items:center}
+.rep-add input{flex:1}
+#setPanel{display:none;margin:0 16px 8px}
+.phase{border-left:3px solid var(--ac);padding:4px 0 8px 16px;margin:18px 0 8px}
+.phase h3{margin:0 0 4px;font-size:15px}
+.feat{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--bd)}
+.feat:last-child{border-bottom:0}
+.feat .num{flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.feat.done .num{background:var(--g)}
+.feat .body{flex:1}.feat .body b{display:block;margin-bottom:2px}
+.feat .tag{display:inline-block;font-size:10px;padding:1px 7px;border-radius:99px;border:1px solid var(--bd);color:var(--mu);margin-right:4px}
+.feat .tag.done{border-color:var(--g);color:var(--g)}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 16px;font-size:12px}
+.legend span{display:inline-flex;align-items:center;gap:4px}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+table.ctab{width:100%;font-size:12px;border-collapse:collapse;margin-top:8px}
+table.ctab th,table.ctab td{border:1px solid var(--bd);padding:5px 8px;text-align:left}
+table.ctab th{background:var(--side)}
+.fblock{border:1px solid var(--bd);border-radius:8px;padding:8px;margin-bottom:8px;background:var(--side)}
+.fblock .field-row{margin-bottom:6px}.fblock .field-row:last-child{margin-bottom:0}
+.fblock .bind{border-top:1px dashed var(--bd);padding-top:6px}
+.gen-warn{color:var(--a);font-size:12px;margin:4px 0}
+.note{border-left:3px solid var(--ac);padding:6px 12px;margin:8px 0;font-size:13px;color:var(--mu)}
+.pb{padding:6px 16px;background:var(--chip);font-size:13px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--bd)}
+.nt{border-left:3px solid var(--bd);padding-left:10px}.nt.draft{border-color:var(--a)}.nt.signed{border-color:var(--g)}.nt.discarded{opacity:.5}
+pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
+</style>
+</head>
+<body>
+<div class="ban">Prototype / synthetic data only — not for clinical use. LLM fields and codes are drafts until verified. Internal model is the system of record; FHIR is export-only and omits unverified codes.</div>
+<header>
+  <b>EMR Enhancer</b>
+  <span class="mu">context-aware · pathways · codes · FHIR</span>
+  <span style="flex:1"></span>
+  <button class="b sec sm" onclick="tg('setPanel')">Settings</button>
+  <nav>
+    <button class="on" data-t="case">Case</button>
+    <button data-t="cases">Cases</button>
+    <button data-t="lib">Library</button>
+    <button data-t="create">Create / Generate</button>
+    <button data-t="notes">Notes</button>
+    <button data-t="codes">Codes &amp; FHIR</button>
+    <button data-t="features">Features</button>
+  </nav>
+</header>
+<div id="pbanner" class="pb"></div>
+
+<div id="setPanel" class="cd">
+  <label>Provider</label>
+  <select id="prov"><option value="or">OpenRouter</option><option value="an">Anthropic</option></select>
+  <label>Model</label>
+  <input id="model" placeholder="e.g. anthropic/claude-sonnet-4.5">
+  <label>API key (browser only)</label>
+  <input id="key" type="password">
+  <label style="display:flex;align-items:center;gap:8px;font-weight:500">
+    <input type="checkbox" id="demo" style="width:auto"> Demo mode (no key — snake / DKA only)
+  </label>
+  <button class="b" onclick="saveSet()">Save settings</button>
+</div>
+
+<div class="layout">
+  <aside class="side" id="sidebar">
+    <div>
+      <div class="sec-title">Currently applied</div>
+      <div class="applied-list" id="appliedChips"></div>
+      <div class="mu" id="appliedEmpty" style="display:none">Nothing applied yet.</div>
+    </div>
+    <div>
+      <div class="sec-title">Add pathway</div>
+      <div id="pathwayList"></div>
+    </div>
+    <div>
+      <div class="sec-title">Add context / element</div>
+      <input class="search" id="searchEl" placeholder="Search…" oninput="renderLists()">
+      <div id="elementList"></div>
+    </div>
+    <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--bd)">
+      <button class="b" style="width:100%" onclick="suggest()">✦ Suggest</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div id="toast"></div>
+
+    <!-- CASE -->
+    <div class="pane on" id="case">
+      <div class="cd"><div class="flex">
+        <input id="p_name" placeholder="Patient name (synthetic)" style="flex:2" onchange="savePatient()">
+        <input id="p_mrn" placeholder="MRN" style="flex:1" onchange="savePatient()">
+        <input id="p_age" placeholder="Age" style="width:80px" onchange="savePatient()">
+        <select id="p_sex" style="width:90px" onchange="savePatient()"><option value="">Sex</option><option value="M">M</option><option value="F">F</option><option value="O">Other</option></select>
+      </div></div>
+      <div class="cd">
+        <label>Case narrative</label>
+        <textarea class="narrative" id="narrative" placeholder="e.g. 62M with T2DM, CKD 3b, new plantar ulcer…" oninput="saveCase()"></textarea>
+        <div class="flex" style="margin-top:8px">
+          <button class="b sec sm" onclick="suggest()">Suggest</button>
+          <button class="b sec sm" onclick="archiveCase()">Archive case</button>
+        </div>
+      </div>
+      <div id="formArea">
+        <div class="empty" id="formEmpty">Apply a pathway, generate a context, or add elements.</div>
+        <div id="forms"></div>
+      </div>
+    </div>
+
+    <!-- LIBRARY -->
+    <div class="pane" id="lib">
+      <h3>Element &amp; Pathway Library</h3>
+      <div id="libList"></div>
+    </div>
+
+    <!-- CREATE / GENERATE -->
+    <div class="pane" id="create">
+      <h3>Create or generate a contextual element</h3>
+      <div class="cd">
+        <b>A · Generate from diagnosis (LLM or demo)</b>
+        <div class="note">The model proposes fields and <i>candidate</i> SNOMED/LOINC bindings. Bindings are stored in the element set itself (not in FHIR) and stay <b>unverified</b> until looked up on a terminology server <i>and</i> the display matches. No doses or therapeutic thresholds are requested.</div>
+        <label>Primary diagnosis</label>
+        <input id="gen_dx" placeholder="e.g. Acute ischemic stroke">
+        <div class="mu">Examples:
+          <a href="#" onclick="return fillDx(this)">Snake envenomation (hemotoxic)</a> ·
+          <a href="#" onclick="return fillDx(this)">Diabetic ketoacidosis</a> ·
+          <a href="#" onclick="return fillDx(this)">Sepsis</a>
+        </div>
+        <label>Vignette (optional)</label>
+        <textarea id="gen_vg"></textarea>
+        <label>Instructions (optional)</label>
+        <textarea id="gen_ins" placeholder="e.g. focus on time-critical intervals"></textarea>
+        <div class="flex" style="margin-top:10px">
+          <button class="b" id="genBtn" onclick="generate()">Generate element set</button>
+          <span class="mu" id="genStatus"></span>
+        </div>
+        <div id="genPreview" style="display:none;margin-top:12px">
+          <div class="flex" style="justify-content:space-between">
+            <b>Preview</b>
+            <div>
+              <button class="b sm" onclick="applyGenerated()">Apply to case</button>
+              <button class="b sec sm" onclick="saveGenerated()">Save to library</button>
+            </div>
+          </div>
+          <div id="genSummary" class="mu" style="margin:6px 0"></div>
+          <div id="genBind"></div>
+          <button class="b sec sm" id="genVerify" onclick="verifyGenerated()">Verify bindings (tx.fhir.org)</button>
+          <details><summary class="mu">Raw JSON</summary><pre class="raw" id="genRaw"></pre></details>
+        </div>
+      </div>
+      <div class="cd">
+        <b>B · Build by hand</b>
+        <div class="note">Each field can carry a terminology binding (system · code · display). Use <b>Verify</b> to check it against tx.fhir.org. Changing a code automatically drops its verified status.</div>
+        <label>ID</label><input id="c_id" placeholder="urine_io">
+        <label>Title</label><input id="c_title">
+        <label>Kind</label>
+        <select id="c_kind"><option value="care">care</option><option value="disease">disease</option><option value="template">template</option><option value="custom">custom</option></select>
+        <label>Description</label><input id="c_desc">
+        <div style="margin-top:12px"><div class="sec-title">Fields</div><div id="c_fields"></div>
+          <button class="b sec sm" onclick="addFieldRow()">+ Add field</button></div>
+        <div style="margin-top:14px">
+          <button class="b" onclick="saveElement()">Save</button>
+          <button class="b sec" onclick="resetCreate()">Reset</button>
+        </div>
+      </div>
+      <div class="cd">
+        <b>C · Import a FHIR Questionnaire (SDC)</b>
+        <div class="note">Standards-based or curated forms (e.g. a national or ABDM-aligned form pack) become ordinary element sets: they can be applied, mixed with proprietary sets, versioned, and exported back as a Questionnaire. Supported: groups, string/text/integer/decimal/quantity/boolean/date/dateTime, choice with inline options, item codes (SNOMED/LOINC). Not supported yet (flagged on import): conditional display, calculated expressions, value-set options, multi-answer, attachments.</div>
+        <label>Questionnaire JSON</label><textarea id="q_json" placeholder='{"resourceType":"Questionnaire", …}'></textarea>
+        <div class="flex" style="margin-top:6px"><input type="file" id="q_file" accept=".json,application/json" style="flex:1" onchange="loadQFile(this)">
+          <input id="q_url" placeholder="…or URL (needs CORS)" style="flex:1"><button class="b sec sm" onclick="loadQUrl()">Fetch</button></div>
+        <div class="flex" style="margin-top:6px"><select id="q_kind" style="width:130px"><option value="template">template</option><option value="care">care</option><option value="disease">disease</option><option value="custom">custom</option></select>
+          <input id="q_label" placeholder="Curation label (optional, e.g. ABDM-aligned · informational only)" style="flex:1">
+          <button class="b" onclick="importQ()">Import to library</button></div>
+        <div id="qSummary" style="margin-top:8px"></div>
+      </div>
+      <div class="cd"><b>Custom / generated</b><div id="customList" class="mu">None yet.</div></div>
+    </div>
+
+    <!-- CASES -->
+    <div class="pane" id="cases">
+      <h3>Cases</h3>
+      <div class="flex"><input id="caseQ" placeholder="Search name, MRN, context…" style="flex:1" oninput="renderCases()">
+        <label style="display:flex;gap:4px;font-weight:400;margin:0"><input type="checkbox" id="caseArch" style="width:auto" onchange="renderCases()"> show archived</label>
+        <button class="b" onclick="newCase()">+ New case</button></div>
+      <div id="caseList"></div>
+    </div>
+
+    <!-- NOTES -->
+    <div class="pane" id="notes">
+      <h3>Notes</h3>
+      <div class="cd">
+        <label>Signing as</label><input id="n_user" placeholder="Your name" oninput="localStorage.setItem('vr_user',this.value)">
+        <label>Title</label><input id="n_title" placeholder="e.g. Progress note">
+        <label>Free text</label><textarea id="n_body"></textarea>
+        <div class="flex" style="margin-top:8px"><button class="b" onclick="addNote('free')">Save as draft</button>
+          <button class="b sec" onclick="addNote('structured')">Draft from current values</button></div>
+        <div class="mu" style="margin-top:6px">Signed notes cannot be edited; change them by amendment with a reason. Nothing is deleted.</div>
+      </div>
+      <div id="noteList"></div>
+    </div>
+
+    <!-- CODES & FHIR -->
+    <div class="pane" id="codes">
+      <h3>Code verification &amp; FHIR export</h3>
+      <p class="mu">Bindings live inside the element sets (system of record). A binding counts as <b>verified</b> only if the code exists on the terminology server <i>and</i> its display matches. Only verified codes are emitted as <code>Coding</code> in the FHIR Bundle; everything else stays as text.</p>
+
+      <div class="cd">
+        <b>Ontology binding status (current case)</b>
+        <div id="codeSum" class="mu">Apply sets and fill values first.</div>
+        <div id="codeTab"></div>
+        <div class="flex" style="margin-top:10px">
+          <button class="b" onclick="liveCheck()">Verify live (tx.fhir.org)</button>
+          <button class="b sec" onclick="codesUI()">Refresh</button>
+        </div>
+        <div class="mu" style="margin-top:8px">Manually add a code you verified in a browser:</div>
+        <div class="flex" style="margin-top:4px">
+          <select id="asys" style="width:110px"><option>snomed</option><option>loinc</option></select>
+          <input id="acode" placeholder="code" style="width:120px">
+          <input id="adisp" placeholder="display" style="flex:1">
+          <button class="b sm" onclick="addCode()">Add</button>
+        </div>
+      </div>
+
+      <div class="cd">
+        <b>FHIR R4 transaction Bundle</b>
+        <span class="mu">Built from current form values. Unverified codes → text only.</span>
+        <div class="flex" style="margin-top:6px"><span class="mu">QuestionnaireResponse:</span>
+          <select id="qrMode" style="width:auto"><option value="sdc">for SDC-sourced sets</option><option value="all">for all applied sets</option><option value="none">none</option></select></div>
+        <div class="flex" style="margin-top:8px">
+          <button class="b" onclick="buildBundle()">Build bundle</button>
+          <button class="b sec" onclick="copyBundle()">Copy</button>
+          <button class="b sec" onclick="dlBundle()">Download</button>
+        </div>
+        <div id="bchk" class="mu" style="margin-top:6px"></div>
+        <pre class="raw" id="bj"></pre>
+      </div>
+    </div>
+
+    <!-- FEATURES -->
+    <div class="pane" id="features">
+      <h3>Features &amp; build order</h3>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--g)"></span> In this demo</span>
+        <span><span class="dot" style="background:var(--ac)"></span> Next</span>
+        <span><span class="dot" style="background:var(--bd)"></span> Later</span>
+      </div>
+      <div class="phase"><h3>Phase 0 — Foundation</h3></div>
+      <div class="feat done"><div class="num">1</div><div class="body"><b>Blank case + narrative</b> <span class="tag done">in this demo</span></div></div>
+      <div class="feat done"><div class="num">2</div><div class="body"><b>Element-set registry</b> <span class="tag done">in this demo</span></div></div>
+      <div class="feat done"><div class="num">3</div><div class="body"><b>Apply / remove sets</b> <span class="tag done">in this demo</span></div></div>
+      <div class="feat done"><div class="num">4</div><div class="body"><b>Pathways as bundles</b> <span class="tag done">in this demo</span></div></div>
+      <div class="feat done"><div class="num">5</div><div class="body"><b>Dynamic form rendering</b> <span class="tag done">in this demo</span></div></div>
+      <div class="feat done"><div class="num">6</div><div class="body"><b>Create / LLM-generate sets</b> <span class="tag done">in this demo</span></div></div>
+      <div class="feat done"><div class="num">7</div><div class="body"><b>Suggest from context</b> <span class="tag done">in this demo</span></div></div>
+      <div class="phase"><h3>Phase 1 — Trajectory + coding + FHIR</h3></div>
+      <div class="feat done"><div class="num">8</div><div class="body"><b>Repeating fields (timestamped rows)</b> <span class="tag done">in this demo</span><div class="mu">Vitals, glucose, etc. support multiple readings over time.</div></div></div>
+      <div class="feat done"><div class="num">9</div><div class="body"><b>SNOMED / LOINC binding + verification</b> <span class="tag done">in this demo</span><div class="mu">Live lookup or manual add. Only verified codes become Coding in export.</div></div></div>
+      <div class="feat done"><div class="num">10</div><div class="body"><b>FHIR R4 Bundle export</b> <span class="tag done">in this demo</span><div class="mu">Patient, Condition, Observation. Unverified → text only.</div></div></div>
+      <div class="feat done"><div class="num">11</div><div class="body"><b>Terminology bindings inside the model</b> <span class="tag done">in this demo</span><div class="mu">Builder and LLM generator both carry {system, code, display}; verified only if the code exists and the display matches. Dose/threshold-like text is flagged.</div></div></div>
+      <div class="feat done"><div class="num">12</div><div class="body"><b>Internal ↔ FHIR mapping (v0)</b> <span class="tag done">in plan file</span></div></div>
+      <div class="feat done"><div class="num">13</div><div class="body"><b>Notes (draft → sign → amend)</b> <span class="tag done">in this demo</span></div></div>
+      <div class="feat done"><div class="num">14</div><div class="body"><b>Patient banner &amp; ward list</b> <span class="tag done">in this demo</span></div></div>
+      <div class="feat done"><div class="num">15</div><div class="body"><b>FHIR export quality</b> <span class="tag done">in this demo</span><div class="mu">Provenance, Composition author + applied sets + signed notes, UCUM-safe quantities, structural checks. Profile conformance parked until a real consumer exists.</div></div></div>
+      <div class="feat done"><div class="num">16</div><div class="body"><b>Versioned element sets</b> <span class="tag done">in this demo</span></div></div>
+      <div class="feat done"><div class="num">+</div><div class="body"><b>Dual authoring: SDC Questionnaire ⇄ element set</b> <span class="tag done">in this demo</span><div class="mu">Import/export Questionnaire; QuestionnaireResponse in the bundle; curation labels. ABDM export profile is planned, not enabled.</div></div></div>
+      <div class="phase"><h3>Later phases</h3></div>
+      <div class="feat"><div class="num">17</div><div class="body"><b>CDS rules + alerts</b> <span class="tag">later</span></div></div>
+      <div class="feat"><div class="num">18</div><div class="body"><b>Contextual recommender</b> <span class="tag">later</span></div></div>
+      <div class="feat"><div class="num">19</div><div class="body"><b>Multi-user (Postgres, auth, audit)</b> <span class="tag">later</span></div></div>
+      <div class="feat"><div class="num">20</div><div class="body"><b>Boundary integrations</b> <span class="tag">later</span><div class="mu">DDI via RxNorm/ATC mapping, registry profile mapping, optional FHIR endpoint write — at the edge, not in the core.</div></div></div>
+      <div class="feat"><div class="num">21</div><div class="body"><b>Marketplace, Orders, MAR, ADT</b> <span class="tag">later</span></div></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const $=i=>document.getElementById(i);
+const toast=m=>{ $('toast').textContent=m; setTimeout(()=>{if($('toast').textContent===m)$('toast').textContent=''},4500)};
+const tg=id=>{const e=$(id);e.style.display=e.style.display==='block'?'none':'block'};
+
+/* Settings */
+function loadSet(){try{const s=JSON.parse(localStorage.getItem('vr_set')||'{}');$('prov').value=s.p||'or';$('model').value=s.m||'';$('key').value=s.k||'';$('demo').checked=s.d!==false&&!s.k}catch(e){}}
+function saveSet(){try{localStorage.setItem('vr_set',JSON.stringify({p:$('prov').value,m:$('model').value,k:$('key').value,d:$('demo').checked}))}catch(e){}tg('setPanel');toast('Settings saved')}
+
+/* Systems */
+const SYSU={snomed:'http://snomed.info/sct',loinc:'http://loinc.org'};
+const codes=()=>{try{return JSON.parse(localStorage.getItem('vr_codes')||'{}')}catch(e){return{}}};
+const saveCodes=t=>{try{localStorage.setItem('vr_codes',JSON.stringify(t))}catch(e){}};
+const ck=c=>(c.system||'')+'|'+(c.code||'');
+const st=f=>{const c=f.coding;if(!c||!c.code)return'missing';return codes()[ck(c)]?'verified':'unverified'};
+const COL={verified:'--g',unverified:'--a',missing:'--r'};
+
+/* Terminology layer — independent of FHIR */
+const MM=(()=>{try{return JSON.parse(localStorage.getItem('vr_mm')||'{}')}catch(e){return{}}})();
+const saveMM=()=>{try{localStorage.setItem('vr_mm',JSON.stringify(MM))}catch(e){}};
+const STAT={verified:'✓ verified',mismatch:'⚠ display mismatch',notfound:'✗ not found',unreachable:'? server unreachable',missing:'no code',nosystem:'unknown system'};
+function normWords(x){return String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').split(' ').filter(w=>w.length>2)}
+function displayMatch(mine,server){
+  const a=normWords(mine);if(!a.length)return true;
+  const b=new Set(normWords(server));
+  return a.filter(w=>b.has(w)).length/a.length>=0.6;
+}
+async function lookupCode(c){
+  if(!SYSU[c.system])return{found:false,nosystem:true};
+  try{
+    const r=await fetch(`https://tx.fhir.org/r4/CodeSystem/$lookup?system=${encodeURIComponent(SYSU[c.system])}&code=${encodeURIComponent(c.code)}&_format=json`);
+    const j=await r.json();
+    const d=(j.parameter||[]).find(p=>p.name==='display')?.valueString;
+    return r.ok&&d?{found:true,display:d}:{found:false};
+  }catch(e){return{found:false,error:true}}
+}
+async function verifyField(f){
+  const c=f.coding;if(!c||!c.code)return'missing';
+  const t=codes();if(t[ck(c)])return'verified';
+  const r=await lookupCode(c);
+  if(r.nosystem)return'nosystem';
+  if(!r.found)return r.error?'unreachable':'notfound';
+  if(c.display&&!displayMatch(c.display,r.display)){MM[ck(c)]=r.display;saveMM();return'mismatch'}
+  t[ck(c)]=r.display;saveCodes(t);delete MM[ck(c)];saveMM();
+  if(!c.display)c.display=r.display;
+  return'verified';
+}
+
+/* Built-in sets — several with coding + repeat */
+const BUILTIN=[
+  {id:'basic_emr',kind:'template',title:'Basic EMR',desc:'History, examination, assessment & plan',
+   fields:[
+     {id:'cc',label:'Chief complaint',type:'text'},
+     {id:'hpi',label:'History of present illness',type:'text'},
+     {id:'pmh',label:'Past medical history',type:'text'},
+     {id:'exam',label:'Examination findings',type:'text'},
+     {id:'assessment',label:'Assessment',type:'text'},
+     {id:'plan',label:'Plan',type:'text'}
+   ]},
+  {id:'vitals',kind:'care',title:'Vitals',desc:'Core vital signs (repeating)',
+   fields:[
+     {id:'hr',label:'Heart rate',type:'integer',unit:'/min',repeat:true,coding:{system:'loinc',code:'8867-4',display:'Heart rate'}},
+     {id:'bp_sys',label:'Systolic BP',type:'integer',unit:'mmHg',repeat:true,coding:{system:'loinc',code:'8480-6',display:'Systolic blood pressure'}},
+     {id:'bp_dia',label:'Diastolic BP',type:'integer',unit:'mmHg',repeat:true,coding:{system:'loinc',code:'8462-4',display:'Diastolic blood pressure'}},
+     {id:'rr',label:'Respiratory rate',type:'integer',unit:'/min',repeat:true,coding:{system:'loinc',code:'9279-1',display:'Respiratory rate'}},
+     {id:'temp',label:'Temperature',type:'number',unit:'°C',repeat:true,coding:{system:'loinc',code:'8310-5',display:'Body temperature'}},
+     {id:'spo2',label:'SpO₂',type:'integer',unit:'%',repeat:true,coding:{system:'loinc',code:'2708-6',display:'Oxygen saturation in Arterial blood'}}
+   ]},
+  {id:'urine_io',kind:'care',title:'Urine Input / Output',desc:'Fluid balance',
+   fields:[
+     {id:'intake',label:'Total intake (24h)',type:'integer',unit:'mL',coding:{system:'loinc',code:'9257-7',display:'Fluid intake 24 hour'}},
+     {id:'output',label:'Total urine output (24h)',type:'integer',unit:'mL',coding:{system:'loinc',code:'9187-6',display:'Urine output 24 hour'}},
+     {id:'balance',label:'Net balance',type:'integer',unit:'mL',derived:true},
+     {id:'catheter',label:'Catheter in situ',type:'boolean'},
+     {id:'io_notes',label:'Notes',type:'text'}
+   ]},
+  {id:'glucose_ss',kind:'care',title:'Glucose & Sliding Scale',desc:'POC glucose (repeating) + dose',
+   fields:[
+     {id:'glu',label:'Capillary glucose',type:'number',unit:'mg/dL',repeat:true,coding:{system:'loinc',code:'2339-0',display:'Glucose [Mass/volume] in Blood'}},
+     {id:'ss_dose',label:'Sliding-scale dose given',type:'integer',unit:'units'},
+     {id:'ss_notes',label:'Notes / band used',type:'text'}
+   ]},
+  {id:'hba1c_mon',kind:'care',title:'HbA1c Monitoring',desc:'Glycaemic control',
+   fields:[
+     {id:'hba1c',label:'Latest HbA1c',type:'number',unit:'%',coding:{system:'loinc',code:'4548-4',display:'Hemoglobin A1c/Hemoglobin.total in Blood'}},
+     {id:'hba1c_date',label:'Date of result',type:'datetime'},
+     {id:'target',label:'Target range',type:'text'}
+   ]},
+  {id:'dm_ctx',kind:'disease',title:'Diabetes Mellitus context',desc:'DM disease fields',
+   fields:[
+     {id:'dm_type',label:'Type',type:'select',options:['T1DM','T2DM','Other'],coding:{system:'snomed',code:'73211009',display:'Diabetes mellitus'}},
+     {id:'dm_duration',label:'Duration (years)',type:'number'},
+     {id:'dm_meds',label:'Current anti-diabetic regimen',type:'text'},
+     {id:'dm_comp',label:'Known complications',type:'text'},
+     {id:'dm_hypo',label:'Recent hypoglycaemia',type:'boolean'}
+   ]},
+  {id:'ckd_ctx',kind:'disease',title:'CKD context',desc:'Chronic kidney disease',
+   fields:[
+     {id:'ckd_stage',label:'CKD stage',type:'select',options:['1','2','3a','3b','4','5'],coding:{system:'snomed',code:'709044004',display:'Chronic kidney disease'}},
+     {id:'egfr',label:'eGFR',type:'number',unit:'mL/min/1.73m²',coding:{system:'loinc',code:'33914-3',display:'Glomerular filtration rate/1.73 sq M.predicted'}},
+     {id:'creat',label:'Creatinine',type:'number',unit:'mg/dL',coding:{system:'loinc',code:'2160-0',display:'Creatinine [Mass/volume] in Serum or Plasma'}},
+     {id:'ckd_cause',label:'Aetiology',type:'text'},
+     {id:'renal_diet',label:'Renal diet / restrictions',type:'text'}
+   ]},
+  {id:'foot_ulcer',kind:'disease',title:'Diabetic Foot Ulcer',desc:'Wound assessment',
+   fields:[
+     {id:'ulcer_site',label:'Site',type:'text'},
+     {id:'ulcer_size',label:'Size (cm)',type:'text'},
+     {id:'ulcer_grade',label:'Wagner grade',type:'select',options:['0','1','2','3','4','5']},
+     {id:'ulcer_inf',label:'Clinical infection',type:'boolean'},
+     {id:'ulcer_probe',label:'Probe-to-bone',type:'boolean'},
+     {id:'ulcer_abx',label:'Antibiotics',type:'text'}
+   ]},
+  {id:'dka_ctx',kind:'disease',title:'DKA context',desc:'Time-critical DKA',
+   fields:[
+     {id:'dka_arr',label:'ED arrival',type:'datetime'},
+     {id:'dka_ins',label:'Insulin start',type:'datetime'},
+     {id:'dka_glu',label:'Glucose at presentation',type:'number',unit:'mg/dL',coding:{system:'loinc',code:'2339-0',display:'Glucose [Mass/volume] in Blood'}},
+     {id:'dka_ph',label:'Venous pH',type:'number',coding:{system:'loinc',code:'2744-1',display:'pH of Venous blood'}},
+     {id:'dka_hco3',label:'Bicarbonate',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'1963-8',display:'Bicarbonate [Moles/volume] in Serum or Plasma'}},
+     {id:'dka_k',label:'K⁺ before insulin',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'2823-3',display:'Potassium [Moles/volume] in Serum or Plasma'}}
+   ]},
+  {id:'snake_ctx',kind:'disease',title:'Snake Envenomation',desc:'Time-critical + severity',
+   fields:[
+     {id:'bite_time',label:'Time of bite',type:'datetime'},
+     {id:'asv_time',label:'First ASV dose',type:'datetime'},
+     {id:'wbct',label:'20-min WBCT',type:'select',options:['Clotted','Unclotted','Not done']},
+     {id:'swell',label:'Local swelling grade',type:'select',options:['0','1','2','3']},
+     {id:'asv_vials',label:'Initial ASV vials',type:'integer'}
+   ]}
+];
+
+const PATHWAYS=[
+  {id:'pw_basic',kind:'pathway',title:'Basic admission',desc:'Minimal chart',members:['basic_emr','vitals']},
+  {id:'pw_dm',kind:'pathway',title:'DM pathway',desc:'Diabetes admission',members:['basic_emr','vitals','dm_ctx','glucose_ss','hba1c_mon']},
+  {id:'pw_dm_ckd_foot',kind:'pathway',title:'DM + CKD + Foot Ulcer',desc:'Complex diabetic foot',members:['basic_emr','vitals','dm_ctx','ckd_ctx','foot_ulcer','glucose_ss','urine_io']},
+  {id:'pw_dka',kind:'pathway',title:'DKA pathway',desc:'Time-critical DKA',members:['basic_emr','vitals','dka_ctx','glucose_ss']},
+  {id:'pw_snake',kind:'pathway',title:'Snake-bite pathway',desc:'Envenomation starter',members:['basic_emr','vitals','snake_ctx']}
+];
+
+const DEMO_SNAKE={id:'gen_snake',kind:'disease',title:'Snake envenomation (hemotoxic)',desc:'Demo schema',
+  fields:[
+    {id:'bite',label:'Time of bite',type:'datetime'},{id:'arr',label:'Hospital arrival',type:'datetime'},
+    {id:'asv',label:'ASV first dose',type:'datetime'},{id:'gap',label:'Bite to ASV (min)',type:'integer'},
+    {id:'wbct',label:'20-min WBCT',type:'select',options:['Clotted','Unclotted','Not done']},
+    {id:'swell',label:'Swelling grade',type:'select',options:['0','1','2','3']},
+    {id:'vials',label:'Initial ASV vials',type:'integer'},{id:'out',label:'Outcome',type:'select',options:['Recovered','AKI','Amputation','Death']}
+  ]};
+const DEMO_DKA={id:'gen_dka',kind:'disease',title:'Diabetic ketoacidosis',desc:'Demo schema',
+  fields:[
+    {id:'arr',label:'ED arrival',type:'datetime'},{id:'ins',label:'Insulin start',type:'datetime'},
+    {id:'glu',label:'Glucose',type:'number',unit:'mg/dL',coding:{system:'loinc',code:'2339-0',display:'Glucose [Mass/volume] in Blood'}},{id:'ph',label:'Venous pH',type:'number',coding:{system:'loinc',code:'2746-6',display:'pH of Venous blood'}},
+    {id:'hco3',label:'Bicarbonate',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'1963-8',display:'Bicarbonate [Moles/volume] in Serum or Plasma'}},{id:'k',label:'K⁺ before insulin',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'2823-3',display:'Potassium [Moles/volume] in Serum or Plasma'}},
+    {id:'out',label:'Outcome',type:'select',options:['Recovered','ICU stay','Death']}
+  ]};
+
+const SYS=`You are a clinical informatics assistant. Return ONLY valid JSON (no prose, no markdown):
+{"id":"snake_case","kind":"disease|care","title":"","desc":"","fields":[{"id":"snake_case","label":"","type":"datetime|number|integer|select|boolean|text","unit":"","options":[],"required":false,"repeat":false,"coding":{"system":"snomed|loinc","code":"","display":""},"rationale":""}]}.
+8-14 high-yield fields. Prioritise time-critical intervals, severity, therapy. Use select only with options. For serial observations set repeat:true.
+Terminology: coding is a CANDIDATE binding that will be machine-verified, so give the exact official display term. Use LOINC for lab/vital observations and SNOMED CT for findings/procedures. If you are not certain of a code, leave coding empty (an empty binding is better than a wrong one).
+Safety: do NOT include drug doses, dose calculations, therapeutic target ranges, or protocol thresholds anywhere (labels, options, rationale). Capture what to record, not what to do. Use the diagnosis as title.`;
+
+/* State */
+let REGISTRY=[],CASES=[],CASE=null,LAST_GENERATED=null;
+/* values: fieldId -> scalar | [{ts, value}] for repeat */
+
+const nowISO=()=>new Date().toISOString();
+const user=()=>($('n_user').value||'').trim();
+const canon=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((r,x)=>(r[x]=v[x],r),{}):v);
+function newCaseObj(){return{id:'c_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),patient:{name:'',mrn:'',age:'',sex:''},narrative:'',applied:[],values:{},notes:[],status:'open',createdAt:nowISO(),updatedAt:nowISO()}}
+function load(){
+  let d={};try{d=JSON.parse(localStorage.getItem('vr_traj')||'{}')}catch(e){}
+  REGISTRY=[...BUILTIN,...(d.customs||[])];
+  CASES=d.cases||(d.case?[{...newCaseObj(),...d.case}]:[]);
+  if(!CASES.length)CASES.push(newCaseObj());
+  CASES.forEach(c=>{c.notes=c.notes||[];c.patient=c.patient||{};c.status=c.status||'open';c.updatedAt=c.updatedAt||nowISO()});
+  CASE=CASES.find(c=>c.id===d.current)||CASES[0];
+}
+function save(touch=true){
+  if(touch)CASE.updatedAt=nowISO();
+  const customs=REGISTRY.filter(s=>!BUILTIN.find(b=>b.id===s.id));
+  try{localStorage.setItem('vr_traj',JSON.stringify({cases:CASES,current:CASE.id,customs}))}catch(e){toast('Storage full')}
+}
+function saveCase(){CASE.narrative=$('narrative').value;save()}
+const ver=id=>getSet(id)?.version||1;
+function resolve(a){const s=getSet(a.setId);if(!s)return;const av=a.version||1;if(av>=(s.version||1))return s;
+  const h=(s.history||[]).find(x=>x.version===av);return h?{...s,title:h.title,desc:h.desc,fields:h.fields,version:av}:s}
+function verNote(a){const s=getSet(a.setId);if(!s||(a.version||1)>=(s.version||1))return'';
+  return` · <b style="color:var(--a)">v${a.version||1} applied, v${s.version} available</b> <button class="b sec sm" onclick="upgradeSet('${a.setId}')">Review &amp; update</button>`}
+function upgradeSet(id){
+  const a=CASE.applied.find(x=>x.setId===id),s=getSet(id);if(!a||!s)return;
+  const old=resolve(a).fields,om=Object.fromEntries(old.map(f=>[f.id,f])),nm=Object.fromEntries(s.fields.map(f=>[f.id,f]));
+  const add=s.fields.filter(f=>!om[f.id]).map(f=>f.label),rem=old.filter(f=>!nm[f.id]).map(f=>f.label),chg=s.fields.filter(f=>om[f.id]&&canon(om[f.id])!==canon(f)).map(f=>f.label);
+  if(confirm(`${s.title}: v${a.version||1} → v${s.version}\nAdded: ${add.join(', ')||'none'}\nRemoved from form: ${rem.join(', ')||'none'}\nChanged: ${chg.join(', ')||'none'}\n\nEntered values are kept. Update this case?`)){a.version=s.version;save();renderAll();toast('Updated to v'+s.version)}
+}
+function getSet(id){return REGISTRY.find(s=>s.id===id)||PATHWAYS.find(p=>p.id===id)}
+function isApplied(id){return CASE.applied.some(a=>a.setId===id)}
+
+/* Apply / remove */
+function applySet(id,fromPathway){
+  if(isApplied(id)){toast('Already applied');return}
+  const s=getSet(id);if(!s)return;
+  if(s.kind==='pathway'){
+    (s.members||[]).forEach(mid=>{if(!isApplied(mid))CASE.applied.push({setId:mid,version:ver(mid),addedAt:nowISO(),fromPathway:id})});
+    toast('Pathway applied: '+s.title);
+  }else{
+    CASE.applied.push({setId:id,version:ver(id),addedAt:nowISO(),fromPathway:fromPathway||null});
+    toast('Added: '+s.title);
+  }
+  save();renderAll();
+}
+function removeSet(id){CASE.applied=CASE.applied.filter(a=>a.setId!==id);save();renderAll();toast('Removed')}
+function savePatient(){CASE.patient={name:$('p_name').value.trim(),mrn:$('p_mrn').value.trim(),age:$('p_age').value.trim(),sex:$('p_sex').value};save();renderBanner()}
+function fillPatient(){const p=CASE.patient||{};$('p_name').value=p.name||'';$('p_mrn').value=p.mrn||'';$('p_age').value=p.age||'';$('p_sex').value=p.sex||''}
+function renderBanner(){
+  const p=CASE.patient||{},dx=CASE.applied.map(a=>resolve(a)).filter(s=>s&&s.kind==='disease').map(s=>s.title);
+  const pw=[...new Set(CASE.applied.map(a=>a.fromPathway).filter(Boolean))].map(id=>getSet(id)?.title).filter(Boolean);
+  $('pbanner').innerHTML=`<b>${escA(p.name||'Unnamed patient')}</b><span>MRN ${escA(p.mrn||'—')}</span><span>${escA(p.age||'?')}${p.sex?' · '+escA(p.sex):''}</span>`+
+    dx.map(x=>`<span class="kind disease">${escA(x)}</span>`).join('')+pw.map(x=>`<span class="kind pathway">${escA(x)}</span>`).join('')+
+    (CASE.status==='archived'?'<span class="kind">archived</span>':'')+'<span class="mu">synthetic data only</span>';
+}
+function newCase(){const c=newCaseObj();CASES.push(c);openCase(c.id)}
+function openCase(id){
+  const c=CASES.find(x=>x.id===id);if(!c)return;CASE=c;save(false);
+  fillPatient();$('narrative').value=CASE.narrative||'';$('bj').textContent='';$('bchk').textContent='';
+  renderAll();document.querySelector('[data-t=case]').click();
+}
+function archiveCase(){
+  if(!confirm('Archive this case? Nothing is deleted; it stays under “show archived”.'))return;
+  CASE.status='archived';save();const o=CASES.find(c=>c.status!=='archived');if(o)openCase(o.id);else newCase();
+}
+function restoreCase(id){const c=CASES.find(x=>x.id===id);if(c){c.status='open';save(false);renderCases();renderBanner()}}
+function renderCases(){
+  const q=($('caseQ').value||'').toLowerCase(),showA=$('caseArch').checked;
+  const rows=CASES.filter(c=>showA||c.status!=='archived').filter(c=>{
+    const hay=[c.patient.name,c.patient.mrn,...c.applied.map(a=>getSet(a.setId)?.title)].join(' ').toLowerCase();return!q||hay.includes(q)})
+    .sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
+  $('caseList').innerHTML=rows.map(c=>{
+    const dx=c.applied.map(a=>resolve(a)).filter(s=>s&&s.kind==='disease').map(s=>`<span class="kind disease">${escA(s.title)}</span>`).join(' ');
+    const dr=c.notes.filter(n=>n.status==='draft').length;
+    return`<div class="item" onclick="openCase('${c.id}')"><div><b>${escA(c.patient.name||'Unnamed patient')}</b> <span class="mu">MRN ${escA(c.patient.mrn||'—')}</span> ${dx}
+      <div class="meta">${c.applied.length} sets · ${c.notes.length} notes${dr?` (${dr} draft)`:''} · updated ${c.updatedAt.slice(0,16).replace('T',' ')}${c.id===CASE.id?' · open':''}</div></div>
+      ${c.status==='archived'?`<button class="b sec sm" onclick="event.stopPropagation();restoreCase('${c.id}')">Restore</button>`:''}</div>`;
+  }).join('')||'<div class="empty">No cases.</div>';
+}
+
+/* Notes: draft → sign → amend-with-reason (never deleted) */
+const AMEND={};
+const noteCurrent=n=>n.amendments.length?n.amendments[n.amendments.length-1].body:n.body;
+function snapshotText(){
+  return CASE.applied.map(a=>{const s=resolve(a);if(!s||!s.fields)return'';
+    const l=s.fields.map(f=>{const v=f.repeat?getRows(f.id).slice(0,3).map(r=>`${r.value} @ ${r.ts}`).join(', '):CASE.values[f.id];
+      return v!==''&&v!=null?`- ${f.label}: ${v}${f.unit&&!f.repeat?' '+f.unit:''}`:''}).filter(Boolean);
+    return l.length?s.title+'\n'+l.join('\n'):''}).filter(Boolean).join('\n\n');
+}
+function addNote(kind){
+  const body=kind==='structured'?(snapshotText()||'(no values entered)'):$('n_body').value.trim();
+  if(!body)return toast('Write something first');
+  CASE.notes.unshift({id:'n_'+Date.now().toString(36),kind,title:$('n_title').value.trim()||(kind==='structured'?'Structured snapshot':'Note'),body,status:'draft',createdAt:nowISO(),amendments:[]});
+  $('n_body').value='';$('n_title').value='';save();renderNotes();
+}
+const nid=id=>CASE.notes.find(n=>n.id===id);
+function editNote(id,v){const n=nid(id);if(n&&n.status==='draft'){n.body=v;save()}}
+function signNote(id){const n=nid(id);if(!n||n.status!=='draft')return;if(!user())return toast('Enter your name under “Signing as”');
+  n.status='signed';n.signedBy=user();n.signedAt=nowISO();save();renderNotes();toast('Signed')}
+function discardNote(id){const n=nid(id);if(n&&n.status==='draft'&&confirm('Discard this draft? It is kept, marked discarded.')){n.status='discarded';n.discardedAt=nowISO();save();renderNotes()}}
+function toggleAmend(id){AMEND[id]=!AMEND[id];renderNotes()}
+function submitAmend(id){const n=nid(id),r=$('am_r_'+id).value.trim(),b=$('am_b_'+id).value.trim();
+  if(!user())return toast('Enter your name under “Signing as”');if(!r)return toast('A reason is required');if(!b||b===noteCurrent(n))return toast('Change the text');
+  n.amendments.push({at:nowISO(),by:user(),reason:r,body:b});AMEND[id]=false;save();renderNotes();toast('Amended')}
+function renderNotes(){
+  $('noteList').innerHTML=CASE.notes.map(n=>{
+    const head=`<b>${escA(n.title)}</b> <span class="kind">${n.kind}</span> <span class="mu">${n.status} · ${n.createdAt.slice(0,16).replace('T',' ')}</span>`;
+    if(n.status==='draft')return`<div class="cd nt draft">${head}<textarea onchange="editNote('${n.id}',this.value)">${escA(n.body)}</textarea>
+      <button class="b sm" onclick="signNote('${n.id}')">Sign</button><button class="b sec sm" onclick="discardNote('${n.id}')">Discard</button></div>`;
+    if(n.status==='discarded')return`<div class="cd nt discarded">${head}</div>`;
+    const am=n.amendments.map((x,i)=>`<div class="mu">Amendment ${i+1} · ${escA(x.by)} · ${x.at.slice(0,16).replace('T',' ')} · reason: ${escA(x.reason)}</div>`).join('');
+    const form=AMEND[n.id]?`<label>Reason for amendment</label><input id="am_r_${n.id}"><label>Amended text</label><textarea id="am_b_${n.id}">${escA(noteCurrent(n))}</textarea>
+      <button class="b sm" onclick="submitAmend('${n.id}')">Submit amendment</button><button class="b sec sm" onclick="toggleAmend('${n.id}')">Cancel</button>`
+      :`<button class="b sec sm" onclick="toggleAmend('${n.id}')">Amend…</button>`;
+    return`<div class="cd nt signed">${head}<pre class="body">${escA(noteCurrent(n))}</pre><div class="mu">Signed by ${escA(n.signedBy)} · ${n.signedAt.slice(0,16).replace('T',' ')}</div>${am}
+      ${n.amendments.length?`<details><summary class="mu">Original (as signed)</summary><pre class="body">${escA(n.body)}</pre></details>`:''}${form}</div>`;
+  }).join('')||'<div class="empty">No notes yet.</div>';
+}
+
+
+/* LLM generate */
+function fillDx(a){$('gen_dx').value=a.textContent;return false}
+async function callLLM(u){
+  const s=JSON.parse(localStorage.getItem('vr_set')||'{}');
+  if(!s.k||!s.m)throw Error('Set provider, model and key in Settings (or Demo mode for snake/DKA).');
+  let r;
+  if(s.p==='an'){
+    r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:AbortSignal.timeout(60000),
+      headers:{'content-type':'application/json','x-api-key':s.k,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:s.m,max_tokens:3000,system:SYS,messages:[{role:'user',content:u}]})});
+    const j=await r.json();if(!r.ok)throw Error(j.error?.message||r.status);return j.content[0].text;
+  }
+  r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',signal:AbortSignal.timeout(60000),
+    headers:{'content-type':'application/json',Authorization:'Bearer '+s.k},
+    body:JSON.stringify({model:s.m,max_tokens:3000,messages:[{role:'system',content:SYS},{role:'user',content:u}]})});
+  const j=await r.json();if(!r.ok)throw Error(j.error?.message||r.status);return j.choices[0].message.content;
+}
+function parseJSON(t){return JSON.parse(String(t).replace(/```json|```/g,'').trim())}
+const DOSE_RE=/\d+(\.\d+)?\s*(mg|mcg|µg|ml|units?|iu)\b|[≥≤<>]=?\s*\d/i;
+function normaliseGenerated(raw,dx){
+  const idBase=(raw.id||raw.title||dx||'generated').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'generated';
+  let id='gen_'+idBase,n=2;
+  while(REGISTRY.find(s=>s.id===id)||PATHWAYS.find(p=>p.id===id))id='gen_'+idBase+'_'+n++;
+  const T=['datetime','number','integer','select','boolean','text'],seen=new Set();
+  const fields=(raw.fields||[]).filter(f=>f&&f.label).slice(0,16).map(f=>{
+    let fid=String(f.id||f.label).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'f';
+    let b=fid,k=2;while(seen.has(fid))fid=b+'_'+k++;seen.add(fid);
+    const o={id:fid,label:String(f.label),type:T.includes(f.type)?f.type:'text'};
+    if(f.unit)o.unit=String(f.unit);
+    if(o.type==='select')o.options=Array.isArray(f.options)&&f.options.length?f.options.map(String):['Yes','No'];
+    if(f.required)o.required=true;
+    if(f.repeat)o.repeat=true;
+    if(f.rationale)o.rationale=String(f.rationale);
+    if(f.coding&&f.coding.code)o.coding={system:f.coding.system==='loinc'?'loinc':'snomed',code:String(f.coding.code).trim(),display:String(f.coding.display||''),source:'llm'};
+    const scan=[o.label,o.rationale||'',...(o.options||[])].join(' | ');
+    if(DOSE_RE.test(scan))o.flag='dose/threshold-like text — review or remove';
+    return o;
+  });
+  if(!fields.length)throw Error('No usable fields');
+  return{id,kind:raw.kind==='care'?'care':'disease',title:String(raw.title||dx||'Generated'),desc:String(raw.desc||raw.description||'LLM-generated — review before use'),fields,generated:true,custom:true,provenance:{by:'llm',at:new Date().toISOString(),reviewed:false}};
+}
+async function generate(){
+  const dx=$('gen_dx').value.trim();if(!dx)return toast('Enter a diagnosis');
+  const btn=$('genBtn');btn.disabled=true;btn.textContent='Generating…';$('genStatus').textContent='';$('genPreview').style.display='none';LAST_GENERATED=null;
+  try{
+    const s=JSON.parse(localStorage.getItem('vr_set')||'{}');
+    const demoOn=s.d!==false&&!s.k;
+    let set;
+    if(demoOn){
+      if(/snake|envenom/i.test(dx))set={...DEMO_SNAKE,id:'gen_snake_'+Date.now().toString(36)};
+      else if(/dka|ketoacid/i.test(dx))set={...DEMO_DKA,id:'gen_dka_'+Date.now().toString(36)};
+      else throw Error('Demo mode only has Snake envenomation and DKA. Add a model key for other diagnoses.');
+    }
+    if(!set){
+      const u=`Diagnosis: ${dx}\nVignette: ${$('gen_vg').value}\nExtra: ${$('gen_ins').value}`;
+      let t=await callLLM(u);
+      try{set=normaliseGenerated(parseJSON(t),dx)}catch(e){t=await callLLM(u+'\nReturn ONLY JSON.');set=normaliseGenerated(parseJSON(t),dx)}
+    }else{set=normaliseGenerated(set,dx);set.provenance.by='demo'}
+    LAST_GENERATED=set;
+    $('genSummary').textContent=`${set.title} · ${set.kind} · ${set.fields.length} fields`;
+    $('genRaw').textContent=JSON.stringify(set,null,2);
+    renderGenPreview();
+    $('genPreview').style.display='block';
+    $('genStatus').textContent='Draft ready — review then apply or save.';
+  }catch(e){toast('Error: '+(e.name==='TimeoutError'?'LLM timed out (60s)':e.message))}
+  btn.disabled=false;btn.textContent='Generate element set';
+}
+function renderGenPreview(){
+  const set=LAST_GENERATED;if(!set)return;
+  const rows=set.fields.filter(f=>f.coding||f.flag).map(f=>{
+    const t=f.coding?st(f):'missing';
+    const mm=f.coding&&MM[ck(f.coding)];
+    return`<tr><td>${f.label}</td><td>${f.coding?f.coding.system+' '+f.coding.code:'—'}</td><td>${f.coding?.display||''}${mm?` <span style="color:var(--a)">⚠ server: ${mm}</span>`:''}</td>
+      <td>${f.coding?`<span class="bd" style="background:var(${COL[t]})">${t}</span>`:''}</td><td>${f.flag?`<span class="gen-warn">${f.flag}</span>`:''}</td></tr>`;
+  }).join('');
+  const nb=set.fields.filter(f=>f.coding).length;
+  $('genBind').innerHTML=nb||rows?`<div class="mu">${nb} of ${set.fields.length} fields carry a proposed binding. Proposed ≠ verified.</div>
+    <table class="ctab"><tr><th>Field</th><th>Code</th><th>Display</th><th>Status</th><th>Review</th></tr>${rows}</table>`
+    :'<div class="mu">No bindings proposed — add them in B or after saving.</div>';
+  $('genVerify').style.display=nb?'inline-block':'none';
+}
+async function verifyGenerated(){
+  if(!LAST_GENERATED)return;
+  const b=$('genVerify');b.disabled=true;b.textContent='Checking…';
+  const n={verified:0,mismatch:0,notfound:0,unreachable:0,nosystem:0};
+  for(const f of LAST_GENERATED.fields){if(f.coding)n[await verifyField(f)]++}
+  b.disabled=false;b.textContent='Verify bindings (tx.fhir.org)';
+  $('genRaw').textContent=JSON.stringify(LAST_GENERATED,null,2);
+  renderGenPreview();
+  toast(`${n.verified} verified · ${n.mismatch} display mismatch · ${n.notfound} not found · ${n.unreachable} unreachable`);
+}
+function commitGenerated(apply){
+  if(!LAST_GENERATED)return;
+  const set=LAST_GENERATED;
+  const i=REGISTRY.findIndex(s=>s.id===set.id);
+  if(i>=0)REGISTRY[i]=set;else REGISTRY.push(set);
+  save();
+  if(apply)applySet(set.id);else toast('Saved: '+set.title);
+  renderAll();LAST_GENERATED=null;$('genPreview').style.display='none';
+}
+function applyGenerated(){commitGenerated(true)}
+function saveGenerated(){commitGenerated(false)}
+
+/* Values helpers for repeat */
+function getRows(fid){
+  const v=CASE.values[fid];
+  return Array.isArray(v)?v:[];
+}
+function setRows(fid,rows){CASE.values[fid]=rows;save()}
+function addRow(fid,val){
+  const rows=getRows(fid);
+  rows.unshift({ts:new Date().toISOString().slice(0,16),value:val});
+  setRows(fid,rows);renderForms();
+}
+function delRow(fid,idx){
+  const rows=getRows(fid);rows.splice(idx,1);setRows(fid,rows);renderForms();
+}
+function setVal(id,val){
+  CASE.values[id]=val;
+  if(id==='intake'||id==='output'){
+    const inn=parseFloat(CASE.values.intake)||0,out=parseFloat(CASE.values.output)||0;
+    CASE.values.balance=String(inn-out);
+    const el=$('f_balance');if(el)el.value=CASE.values.balance;
+  }
+  save();
+}
+
+/* Render */
+function renderAll(){renderBanner();renderApplied();renderLists();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases()}
+function renderApplied(){
+  const box=$('appliedChips'),empty=$('appliedEmpty');box.innerHTML='';
+  if(!CASE.applied.length){empty.style.display='block';return}
+  empty.style.display='none';
+  CASE.applied.forEach(a=>{
+    const s=resolve(a);if(!s)return;
+    const span=document.createElement('span');
+    span.className='chip'+(a.fromPathway?' pathway':'');
+    span.innerHTML=`${s.title}${(getSet(a.setId).version||1)>1?' v'+(a.version||1):''}${(a.version||1)<(getSet(a.setId).version||1)?' ↑':''} <button onclick="removeSet('${a.setId}')">×</button>`;
+    box.appendChild(span);
+  });
+}
+function renderLists(){
+  const q=($('searchEl').value||'').toLowerCase();
+  $('pathwayList').innerHTML=PATHWAYS.map(p=>{
+    const on=(p.members||[]).every(m=>isApplied(m));
+    return`<div class="item" onclick="applySet('${p.id}')"><div><span class="kind pathway">pathway</span> ${p.title}<div class="meta">${p.desc||''}</div></div>
+      <button class="b sm ${on?'sec':''}" onclick="event.stopPropagation();applySet('${p.id}')">${on?'✓':'+'}</button></div>`;
+  }).join('');
+  $('elementList').innerHTML=REGISTRY.filter(s=>!q||s.title.toLowerCase().includes(q)||(s.desc||'').toLowerCase().includes(q)||s.id.includes(q))
+    .map(s=>{
+      const on=isApplied(s.id);
+      return`<div class="item" onclick="applySet('${s.id}')"><div><span class="kind ${s.kind}">${s.kind}</span> ${s.title}${s.generated?' <span class="mu">·gen</span>':''}<div class="meta">${s.desc||''}</div></div>
+        <button class="b sm ${on?'sec':''}" onclick="event.stopPropagation();applySet('${s.id}')">${on?'✓':'+'}</button></div>`;
+    }).join('')||'<div class="mu">No matches</div>';
+}
+
+function fieldHTML(f){
+  const status=st(f);
+  const badge=`<span class="bd" style="background:var(${COL[status]})">${status}</span>`;
+  if(f.repeat){
+    const rows=getRows(f.id);
+    let t=`<label>${f.label}${f.unit?' ('+f.unit+')':''} ${badge} <span class="mu">repeating</span></label>
+      <div class="rep-add"><input id="new_${f.id}" type="${f.type==='text'||f.type==='select'||f.type==='boolean'?'text':'number'}" placeholder="New value">
+      <button class="b sm" onclick="const v=$('new_${f.id}').value;if(v!==''){addRow('${f.id}',v);$('new_${f.id}').value=''}">Add</button></div>`;
+    if(rows.length){
+      t+=`<table class="rep-table"><tr><th>Time</th><th>Value</th><th></th></tr>`;
+      rows.forEach((r,i)=>{t+=`<tr><td>${r.ts||''}</td><td>${r.value}</td><td><button class="b sec sm" onclick="delRow('${f.id}',${i})">×</button></td></tr>`});
+      t+=`</table>`;
+    }
+    return t;
+  }
+  const id='f_'+f.id, v=CASE.values[f.id]??'';
+  let inp;
+  if(f.type==='select'){
+    const opts=(f.options||[]).map(o=>`<option value="${o}" ${v===o?'selected':''}>${o}</option>`).join('');
+    inp=`<select id="${id}" onchange="setVal('${f.id}',this.value)"><option value="">—</option>${opts}</select>`;
+  }else if(f.type==='boolean'){
+    inp=`<select id="${id}" onchange="setVal('${f.id}',this.value)"><option value="">—</option>
+      <option value="Yes" ${v==='Yes'?'selected':''}>Yes</option><option value="No" ${v==='No'?'selected':''}>No</option></select>`;
+  }else if(f.type==='datetime'){
+    inp=`<input id="${id}" type="datetime-local" value="${v}" onchange="setVal('${f.id}',this.value)">`;
+  }else if(f.type==='text'){
+    inp=`<input id="${id}" value="${String(v).replace(/"/g,'&quot;')}" onchange="setVal('${f.id}',this.value)">`;
+  }else{
+    inp=`<input id="${id}" type="number" value="${v}" ${f.derived?'readonly':''} onchange="setVal('${f.id}',this.value)">`;
+  }
+  return`<label>${f.label}${f.unit?' ('+f.unit+')':''}${f.required?' *':''} ${badge}</label>${inp}${f.rationale?`<div class="mu">${f.rationale}</div>`:''}`;
+}
+
+function renderForms(){
+  const area=$('forms'),empty=$('formEmpty');
+  if(!CASE.applied.length){area.innerHTML='';empty.style.display='block';return}
+  empty.style.display='none';
+  let html='';
+  CASE.applied.forEach(a=>{
+    const s=resolve(a);if(!s||!s.fields)return;
+    html+=`<div class="cd"><div class="flex" style="justify-content:space-between">
+      <h3 style="margin:0">${s.title} <span class="kind ${s.kind}">${s.kind}</span>${s.generated?' <span class="mu">generated</span>':''}${sdcBadge(s)}</h3>
+      <button class="b sec sm" onclick="removeSet('${s.id}')">Remove</button></div>
+      <div class="mu" style="margin-bottom:8px">${s.desc||''}${a.fromPathway?' · via pathway':''}${verNote(a)}</div>`;
+    s.fields.forEach(f=>{html+=fieldHTML(f)});
+    html+=`</div>`;
+  });
+  area.innerHTML=html;
+}
+function renderLib(){
+  const all=[...PATHWAYS,...REGISTRY];
+  $('libList').innerHTML=all.map(s=>{
+    const isPw=s.kind==='pathway';
+    return`<div class="cd"><div class="flex" style="justify-content:space-between">
+      <div><span class="kind ${s.kind}">${s.kind}</span> <b>${s.title}</b>${s.generated?' <span class="mu">·gen</span>':''}${sdcBadge(s)}
+        <div class="mu">${s.desc||''}</div>
+        ${isPw?`<div class="mu">Members: ${(s.members||[]).join(', ')}</div>`:`<div class="mu">${(s.fields||[]).length} fields</div>`}
+      </div><div><button class="b sm" onclick="applySet('${s.id}')">Use in case</button>${isPw?'':` <button class="b sec sm" onclick="dlQ('${s.id}')">Questionnaire</button>`}</div></div></div>`;
+  }).join('');
+}
+
+/* Codes UI */
+function codesUI(){
+  if(!CASE.applied.length){$('codeSum').textContent='Apply sets first.';$('codeTab').innerHTML='';return}
+  const n={verified:0,unverified:0,missing:0};let rows='';
+  CASE.applied.forEach(a=>{
+    const s=resolve(a);if(!s||!s.fields)return;
+    s.fields.forEach(f=>{
+      const t=st(f);n[t]++;
+      rows+=`<tr><td>${s.title}</td><td>${f.label}</td><td>${f.coding?f.coding.system+' '+f.coding.code:''}</td><td>${f.coding?.display||''}${f.coding&&MM[ck(f.coding)]?` <span style="color:var(--a)">⚠ server: ${MM[ck(f.coding)]}</span>`:''}</td>
+        <td><span class="bd" style="background:var(${COL[t]})">${t}</span></td></tr>`;
+    });
+  });
+  const tot=n.verified+n.unverified+n.missing;
+  $('codeSum').innerHTML=`Ontology binding: <b>${tot?Math.round(100*n.verified/tot):0}%</b> verified (${n.verified}/${tot}) · ${n.unverified} unverified · ${n.missing} missing`;
+  $('codeTab').innerHTML=`<table class="ctab"><tr><th>Set</th><th>Field</th><th>Code</th><th>Display</th><th>Status</th></tr>${rows}</table>`;
+}
+function addCode(){
+  const c={system:$('asys').value,code:$('acode').value.trim()},d=$('adisp').value.trim();
+  if(!c.code||!d)return toast('Code and display needed');
+  const t=codes();t[ck(c)]=d;saveCodes(t);delete MM[ck(c)];saveMM();toast('Added');codesUI();renderForms();
+}
+async function liveCheck(){
+  if(!CASE.applied.length)return;
+  const n={verified:0,mismatch:0,notfound:0,unreachable:0,nosystem:0};
+  for(const a of CASE.applied){
+    const s=resolve(a);if(!s||!s.fields)continue;
+    for(const f of s.fields){
+      if(!f.coding||!f.coding.code||st(f)==='verified')continue;
+      n[await verifyField(f)]++;
+    }
+  }
+  save();
+  toast(`Live check: ${n.verified} verified · ${n.mismatch} display mismatch · ${n.notfound} not found · ${n.unreachable} unreachable`);
+  codesUI();renderForms();
+}
+
+/* SDC dual authoring: Questionnaire <-> element set */
+const SDCSYS={'http://snomed.info/sct':'snomed','http://loinc.org':'loinc'};
+const SDCT={string:'text',text:'text',url:'text',integer:'integer',decimal:'number',quantity:'number',boolean:'boolean',date:'datetime',dateTime:'datetime',time:'text',choice:'select','open-choice':'select'};
+const slug=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+const sdcBadge=s=>s.sdc?` <span class="kind custom">SDC</span>${s.sdc.modified?' <span class="mu">modified</span>':''}${s.curation&&s.curation.label?` <span class="mu">· ${escA(s.curation.label)}${s.curation.reviewed?'':' (unreviewed)'}</span>`:''}`:'';
+function sdcToSet(q){
+  if(!q||q.resourceType!=='Questionnaire')throw Error('Not a FHIR Questionnaire');
+  const fields=[],warn=[],seen=new Set();
+  const walk=(items,path)=>(items||[]).forEach(it=>{
+    if(it.enableWhen||it.enableWhenExpression)warn.push(`${it.linkId}: conditional display not enforced`);
+    if((it.extension||[]).some(e=>/calculatedExpression|initialExpression/.test(e.url||'')))warn.push(`${it.linkId}: calculated expression ignored`);
+    if(it.type==='display')return;
+    if(it.type==='group'){walk(it.item,[...path,{linkId:it.linkId,text:it.text||''}]);return}
+    const t=SDCT[it.type];if(!t){warn.push(`${it.linkId}: type ${it.type} skipped`);return}
+    let fid=slug(it.linkId)||'q',b=fid,k=2;while(seen.has(fid))fid=b+'_'+k++;seen.add(fid);
+    const f={id:fid,linkId:it.linkId,sdcType:it.type,text:it.text||it.linkId,label:[...path.map(g=>g.text).filter(Boolean),it.text||it.linkId].join(' › '),type:t};
+    if(path.length)f.path=path;
+    if(it.required)f.required=true;
+    if(it.repeats)warn.push(`${it.linkId}: multi-answer not supported (single value kept)`);
+    const u=(it.extension||[]).find(e=>(e.url||'').endsWith('questionnaire-unit'));if(u&&u.valueCoding&&u.valueCoding.code)f.unit=u.valueCoding.code;
+    if(t==='select'){
+      const ao=it.answerOption||[];
+      f.options=ao.map(o=>String(o.valueString??o.valueCoding?.display??o.valueCoding?.code??o.valueInteger??'')).filter(Boolean);
+      ao.forEach(o=>{if(o.valueCoding)(f.optCodings=f.optCodings||{})[o.valueCoding.display||o.valueCoding.code]=o.valueCoding});
+      if(!f.options.length){f.type='text';delete f.options;warn.push(`${it.linkId}: value-set options not expanded here — captured as text`)}
+    }
+    const cs=(it.code||[]).find(c=>SDCSYS[c.system]);
+    if(cs)f.coding={system:SDCSYS[cs.system],code:cs.code,display:cs.display||'',source:'sdc'};
+    const oc=(it.code||[]).filter(c=>!SDCSYS[c.system]);if(oc.length)f.otherCodes=oc;
+    fields.push(f);
+  });
+  walk(q.item,[]);
+  if(!fields.length)throw Error('No usable items in this Questionnaire');
+  return{fields,warn,title:q.title||q.name||'Imported questionnaire',desc:q.description||'Imported FHIR Questionnaire',
+    sdc:{url:q.url||'',version:q.version||'',publisher:q.publisher||'',declaredProfiles:(q.meta&&q.meta.profile)||[],warnings:warn,original:q,importedAt:nowISO()}};
+}
+function importQ(){
+  try{
+    const q=JSON.parse($('q_json').value),r=sdcToSet(q);
+    const prev=q.url?REGISTRY.find(x=>x.sdc&&x.sdc.url===q.url):null;
+    let id=prev?prev.id:'sdc_'+(slug(q.name||q.id||r.title)||'q');
+    if(!prev){const b=id;let n=2;while(getSet(id))id=b+'_'+n++}
+    const set={id,kind:$('q_kind').value,title:r.title,desc:r.desc,fields:r.fields,custom:true,sdc:r.sdc,
+      curation:{label:$('q_label').value.trim(),reviewed:false},version:1};
+    if(prev){set.version=prev.version||1;set.history=prev.history||[];
+      if(canon(prev.fields)!==canon(set.fields)){set.history=[...set.history,{version:set.version,title:prev.title,desc:prev.desc,fields:prev.fields,at:nowISO()}];set.version++}}
+    const i=REGISTRY.findIndex(x=>x.id===id);if(i>=0)REGISTRY[i]=set;else REGISTRY.push(set);
+    save();renderAll();
+    $('qSummary').innerHTML=`<b>${escA(set.title)}</b> · ${set.fields.length} fields · v${set.version}${prev?' (updated existing)':''} · ${set.fields.filter(f=>f.coding).length} bound codes (unverified until checked)
+      ${r.warn.length?`<div class="gen-warn">${r.warn.length} limitation(s): ${escA(r.warn.slice(0,6).join('; '))}${r.warn.length>6?' …':''}</div>`:''}
+      <button class="b sm" onclick="applySet('${id}')">Apply to case</button>`;
+  }catch(e){toast('Import failed: '+e.message)}
+}
+function loadQFile(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('q_json').value=r.result};r.readAsText(f)}
+async function loadQUrl(){const u=$('q_url').value.trim();if(!u)return;try{const r=await fetch(u);if(!r.ok)throw Error(r.status);$('q_json').value=await r.text()}catch(e){toast('Could not fetch (CORS or network). Download it and use the file picker or paste.')}}
+function nest(fields,mk,isQR){
+  const root=[],gm={};
+  fields.forEach(f=>{const it=mk(f);if(!it)return;let cur=root;
+    (f.path||[]).forEach((g,i)=>{const key=f.path.slice(0,i+1).map(x=>x.linkId).join('/');let n=gm[key];
+      if(!n){n=isQR?{linkId:g.linkId,text:g.text,item:[]}:{linkId:g.linkId,text:g.text,type:'group',item:[]};gm[key]=n;cur.push(n)}cur=n.item});
+    cur.push(it)});
+  return root;
+}
+function buildQuestionnaire(s){
+  if(s.sdc&&!s.sdc.modified&&s.sdc.original)return s.sdc.original;
+  const TQ={text:'string',number:'decimal',integer:'integer',boolean:'boolean',datetime:'dateTime',select:'choice'};
+  const item=nest(s.fields,f=>{
+    const it={linkId:f.linkId||f.id,text:f.text||f.label,type:f.sdcType&&SDCT[f.sdcType]===f.type?f.sdcType:(TQ[f.type]||'string')};
+    if(f.required)it.required=true;
+    if(f.unit&&f.type==='number')it.extension=[{url:'http://hl7.org/fhir/StructureDefinition/questionnaire-unit',valueCoding:UC[f.unit]?{system:'http://unitsofmeasure.org',code:UC[f.unit],display:f.unit}:{display:f.unit}}];
+    if(f.type==='select')it.answerOption=(f.options||[]).map(o=>f.optCodings&&f.optCodings[o]?{valueCoding:f.optCodings[o]}:{valueString:o});
+    if(f.coding&&st(f)==='verified')it.code=[{system:SYSU[f.coding.system],code:f.coding.code,display:f.coding.display||codes()[ck(f.coding)]}];
+    return it;
+  });
+  return{resourceType:'Questionnaire',url:'urn:emr-enhancer:questionnaire:'+s.id,version:String(s.version||1),name:s.id,title:s.title,status:'draft',description:s.desc||'',item};
+}
+function dlQ(id){const s=getSet(id);if(!s)return;const t=JSON.stringify(buildQuestionnaire(s),null,2);
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='questionnaire-'+id+'.json';a.click()}
+function ansObj(f,v){
+  if(v===''||v==null)return null;
+  if(f.sdcType==='date')return{valueDate:String(v).slice(0,10)};
+  if(f.sdcType==='url')return{valueUri:String(v)};
+  if(f.sdcType==='quantity')return{valueQuantity:qty(v,f.unit)};
+  if(f.type==='integer')return{valueInteger:+v};
+  if(f.type==='number')return{valueDecimal:+v};
+  if(f.type==='boolean')return{valueBoolean:v==='Yes'||v===true};
+  if(f.type==='datetime')return{valueDateTime:new Date(v).toISOString()};
+  if(f.optCodings&&f.optCodings[v])return{valueCoding:f.optCodings[v]};
+  return{valueString:String(v)};
+}
+function buildQR(s,pid,author){
+  const item=nest(s.fields,f=>{
+    const vals=f.repeat?getRows(f.id).map(r=>r.value):[CASE.values[f.id]];
+    const answer=vals.map(v=>ansObj(f,v)).filter(Boolean);
+    return answer.length?{linkId:f.linkId||f.id,text:f.text||f.label,answer}:null;
+  },true);
+  if(!item.length)return null;
+  const qc=(s.sdc&&!s.sdc.modified&&s.sdc.url)?s.sdc.url+(s.sdc.version?'|'+s.sdc.version:''):'urn:emr-enhancer:questionnaire:'+s.id+'|'+(s.version||1);
+  return{resourceType:'QuestionnaireResponse',questionnaire:qc,status:'in-progress',subject:{reference:pid},authored:nowISO(),author:{display:author},item};
+}
+
+/* FHIR Bundle */
+const UC={'mg/dL':'mg/dL','mmol/L':'mmol/L','mEq/L':'meq/L','g/dL':'g/dL','mmHg':'mm[Hg]','bpm':'/min','beats/min':'/min','/min':'/min','°C':'Cel','°F':'[degF]','kg':'kg','g':'g','mg':'mg','mL':'mL','L':'L','%':'%','µmol/L':'umol/L','umol/L':'umol/L','mg/L':'mg/L','U/L':'U/L','mL/h':'mL/h','mL/min':'mL/min','h':'h','min':'min'};
+const qty=(v,u)=>{const q={value:+v};if(u){q.unit=u;if(UC[u]){q.system='http://unitsofmeasure.org';q.code=UC[u]}}return q};
+const xh=t=>`<div xmlns="http://www.w3.org/1999/xhtml">${String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br/>')}</div>`;
+function patientRes(){const p=CASE.patient||{},r={resourceType:'Patient',identifier:[{system:'urn:emr-enhancer:synthetic-mrn',value:p.mrn||'SYNTHETIC-'+CASE.id}]};
+  if(p.name)r.name=[{text:p.name}];const g={M:'male',F:'female',O:'other'}[p.sex];if(g)r.gender=g;return r}
+const REQ={QuestionnaireResponse:['status'],Condition:['subject','clinicalStatus'],Observation:['status','code','subject'],Composition:['status','type','date','author','title'],Provenance:['target','recorded','agent']};
+function checkBundle(B){
+  const urls=new Set(B.entry.map(e=>e.fullUrl)),iss=[];
+  B.entry.forEach((e,i)=>{const r=e.resource,t=r.resourceType;
+    (REQ[t]||[]).forEach(k=>{if(r[k]==null||(Array.isArray(r[k])&&!r[k].length))iss.push(`${t}[${i}] missing ${k}`)});
+    if(t==='Observation'&&!Object.keys(r).some(k=>k.startsWith('value')))iss.push(`Observation[${i}] has no value`);
+    if(!e.request)iss.push(`entry ${i} missing request`);
+    JSON.stringify(r,(k,v)=>{if(k==='reference'&&typeof v==='string'&&v.startsWith('urn:uuid:')&&!urls.has(v))iss.push(`${t}[${i}] unresolved ${v}`);return v});
+  });
+  return iss;
+}
+function buildBundle(){
+  if(!CASE.applied.length)return toast('Apply sets first');
+  const pid='urn:uuid:'+crypto.randomUUID(),E=[];
+  E.push({fullUrl:pid,resource:patientRes(),request:{method:'POST',url:'Patient'}});
+
+  // Conditions from disease sets that have a top-level coding or title
+  CASE.applied.forEach(a=>{
+    const s=resolve(a);if(!s||s.kind!=='disease')return;
+    const top=s.fields.find(f=>f.coding&&st(f)==='verified');
+    const code=top?{coding:[{system:SYSU[top.coding.system],code:top.coding.code,display:top.coding.display||codes()[ck(top.coding)]}],text:s.title}:{text:s.title};
+    E.push({fullUrl:'urn:uuid:'+crypto.randomUUID(),resource:{
+      resourceType:'Condition',subject:{reference:pid},code,
+      clinicalStatus:{coding:[{system:'http://terminology.hl7.org/CodeSystem/condition-clinical',code:'active'}]}
+    },request:{method:'POST',url:'Condition'}});
+  });
+
+  let sk=0;
+  CASE.applied.forEach(a=>{
+    const s=resolve(a);if(!s||!s.fields)return;
+    s.fields.forEach(f=>{
+      const verified=st(f)==='verified';
+      const codeConcept=verified
+        ?{coding:[{system:SYSU[f.coding.system],code:f.coding.code,display:f.coding.display||codes()[ck(f.coding)]}],text:f.label}
+        :{text:f.label};
+      if(!verified&&f.coding)sk++;
+
+      if(f.repeat){
+        getRows(f.id).forEach(row=>{
+          if(row.value===''||row.value==null)return;
+          const obs={resourceType:'Observation',status:'final',code:codeConcept,subject:{reference:pid}};
+          if(row.ts)obs.effectiveDateTime=new Date(row.ts).toISOString();
+          if(f.type==='integer'||f.type==='number')obs.valueQuantity=qty(row.value,f.unit);
+          else if(f.type==='boolean')obs.valueBoolean=row.value==='Yes'||row.value===true;
+          else obs.valueString=String(row.value);
+          E.push({fullUrl:'urn:uuid:'+crypto.randomUUID(),resource:obs,request:{method:'POST',url:'Observation'}});
+        });
+        return;
+      }
+
+      const x=CASE.values[f.id];if(x===''||x==null)return;
+      const obs={resourceType:'Observation',status:'final',code:codeConcept,subject:{reference:pid}};
+      if(f.type==='datetime')obs.valueDateTime=new Date(x).toISOString();
+      else if(f.type==='integer')obs.valueInteger=+x;
+      else if(f.type==='number')obs.valueQuantity=qty(x,f.unit);
+      else if(f.type==='boolean')obs.valueBoolean=x==='Yes';
+      else obs.valueString=String(x);
+      E.push({fullUrl:'urn:uuid:'+crypto.randomUUID(),resource:obs,request:{method:'POST',url:'Observation'}});
+    });
+  });
+
+  const qm=$('qrMode').value;
+  if(qm!=='none')CASE.applied.forEach(a=>{const s=resolve(a);if(!s||!s.fields||(qm==='sdc'&&!s.sdc))return;
+    const qr=buildQR(s,pid,user()||'unsigned (EMR Enhancer draft)');
+    if(qr)E.push({fullUrl:'urn:uuid:'+crypto.randomUUID(),resource:qr,request:{method:'POST',url:'QuestionnaireResponse'}})});
+  // Composition: narrative + applied-set metadata + signed notes; Provenance over everything
+  const author=user()||'unsigned (EMR Enhancer draft)',sec=[];
+  if(CASE.narrative)sec.push({title:'Narrative',text:{status:'additional',div:xh(CASE.narrative)}});
+  const ap=CASE.applied.map(a=>{const s=resolve(a);return s?`${s.title} (${a.setId}) v${a.version||1}${a.fromPathway?' via '+(getSet(a.fromPathway)?.title||a.fromPathway):''}`:''}).filter(Boolean);
+  if(ap.length)sec.push({title:'Applied context sets',text:{status:'generated',div:xh(ap.join('\n'))}});
+  CASE.notes.filter(n=>n.status==='signed').forEach(n=>sec.push({title:n.title,text:{status:'additional',
+    div:xh(noteCurrent(n)+`\n— signed by ${n.signedBy} ${n.signedAt}`+(n.amendments.length?` (amended ${n.amendments.length}x)`:''))}}));
+  E.push({fullUrl:'urn:uuid:'+crypto.randomUUID(),resource:{resourceType:'Composition',status:'preliminary',type:{text:'Clinical case summary'},
+    subject:{reference:pid},date:nowISO(),author:[{display:author}],title:'Case summary',section:sec},request:{method:'POST',url:'Composition'}});
+  E.push({fullUrl:'urn:uuid:'+crypto.randomUUID(),resource:{resourceType:'Provenance',target:E.map(e=>({reference:e.fullUrl})),
+    recorded:nowISO(),agent:[{who:{display:author}}]},request:{method:'POST',url:'Provenance'}});
+
+  const B={resourceType:'Bundle',type:'transaction',entry:E};
+  $('bj').textContent=JSON.stringify(B,null,2);
+  const iss=checkBundle(B);
+  $('bchk').textContent=`${E.length} entries · ${sk} with unverified coding (text only) · structural check: ${iss.length?iss.length+' issue(s): '+iss.slice(0,5).join('; '):'passed'}. This is not profile conformance — validate before real use.`;
+}
+function copyBundle(){const t=$('bj').textContent;if(!t)return toast('Build first');navigator.clipboard.writeText(t);toast('Copied')}
+function dlBundle(){const t=$('bj').textContent;if(!t)return toast('Build first');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='bundle.json';a.click()}
+
+/* Manual create */
+function escA(x){return String(x??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function addFieldRow(data){
+  const box=$('c_fields'),c=data?.coding||{};
+  const b=document.createElement('div');b.className='fblock';b._orig=data?JSON.parse(JSON.stringify(data)):{};
+  b.innerHTML=`<div class="field-row">
+    <input class="f-id" placeholder="id" value="${escA(data?.id)}" style="flex:.7">
+    <input class="f-label" placeholder="Label" value="${escA(data?.label)}" style="flex:1.2">
+    <select class="f-type" style="flex:.8"><option value="text">text</option><option value="number">number</option><option value="integer">integer</option>
+      <option value="boolean">boolean</option><option value="datetime">datetime</option><option value="select">select</option></select>
+    <input class="f-extra" placeholder="unit / options" value="${escA(data?.unit||(data?.options?data.options.join(','):''))}" style="flex:1">
+    <label style="display:flex;align-items:center;gap:4px;font-weight:400;white-space:nowrap"><input type="checkbox" class="f-rep" style="width:auto" ${data?.repeat?'checked':''}> repeat</label>
+    <button class="b sec sm" onclick="this.closest('.fblock').remove()">×</button></div>
+  <div class="field-row bind">
+    <select class="f-sys" style="flex:.6"><option value="">no code</option><option value="snomed">SNOMED CT</option><option value="loinc">LOINC</option></select>
+    <input class="f-code" placeholder="code" value="${escA(c.code)}" style="flex:.7">
+    <input class="f-disp" placeholder="display (official term)" value="${escA(c.display)}" style="flex:1.5">
+    <button class="b sec sm" onclick="verifyRow(this)">Verify</button>
+    <span class="mu f-stat" style="min-width:110px"></span></div>`;
+  if(data?.type)b.querySelector('.f-type').value=data.type;
+  b.querySelector('.f-sys').value=c.system||'';
+  if(c.code){const t=st(data);b.querySelector('.f-stat').textContent=t==='verified'?STAT.verified:'unverified'}
+  box.appendChild(b);
+}
+async function verifyRow(btn){
+  const b=btn.closest('.fblock'),stat=b.querySelector('.f-stat'),disp=b.querySelector('.f-disp');
+  const system=b.querySelector('.f-sys').value,code=b.querySelector('.f-code').value.trim();
+  if(!system||!code){stat.textContent=STAT.missing;return}
+  const f={coding:{system,code,display:disp.value.trim()}};
+  stat.textContent='checking…';
+  const r=await verifyField(f);
+  if(r==='verified'&&!disp.value.trim())disp.value=f.coding.display;
+  stat.textContent=STAT[r]+(r==='mismatch'?` — server: ${MM[ck(f.coding)]}`:'');
+  stat.style.color=r==='verified'?'var(--g)':'var(--a)';
+  codesUI();
+}
+function resetCreate(){$('c_id').value='';$('c_title').value='';$('c_kind').value='care';$('c_desc').value='';$('c_fields').innerHTML='';addFieldRow()}
+function saveElement(){
+  const id=$('c_id').value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'_');
+  const title=$('c_title').value.trim();
+  if(!id||!title)return toast('ID and title required');
+  if(BUILTIN.find(b=>b.id===id)||PATHWAYS.find(p=>p.id===id))return toast('ID conflicts with built-in');
+  const fields=[];
+  $('c_fields').querySelectorAll('.fblock').forEach(row=>{
+    const q=x=>row.querySelector(x);
+    const label=q('.f-label').value.trim();if(!label)return;
+    const type=q('.f-type').value,extra=q('.f-extra').value.trim();
+    const f={...(row._orig||{}),id:q('.f-id').value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'_')||'f',label,type};
+    delete f.unit;delete f.options;delete f.repeat;delete f.coding;delete f.flag;
+    if(type==='select'&&extra)f.options=extra.split(',').map(x=>x.trim()).filter(Boolean);else if(extra)f.unit=extra;
+    if(q('.f-rep').checked)f.repeat=true;
+    const system=q('.f-sys').value,code=q('.f-code').value.trim();
+    if(system&&code){
+      const o=row._orig?.coding;
+      f.coding={system,code,display:q('.f-disp').value.trim(),source:(o&&o.system===system&&o.code===code&&o.source)||'manual'};
+    }
+    fields.push(f);
+  });
+  if(!fields.length)return toast('Add at least one field');
+  const prev=REGISTRY.find(s=>s.id===id);
+  const set={...(prev||{}),id,kind:$('c_kind').value,title,desc:$('c_desc').value.trim(),fields,custom:true};
+  if(prev&&canon(prev.fields)!==canon(fields)){set.version=(prev.version||1)+1;set.history=[...(prev.history||[]),{version:prev.version||1,title:prev.title,desc:prev.desc,fields:prev.fields,at:nowISO()}]}
+  else set.version=prev?.version||1;
+  if(prev?.sdc&&canon(prev.fields)!==canon(fields))set.sdc={...prev.sdc,modified:true};
+  const i=REGISTRY.findIndex(s=>s.id===id);if(i>=0)REGISTRY[i]=set;else REGISTRY.push(set);
+  save();toast('Saved: '+title);renderAll();resetCreate();
+}
+function renderCustomList(){
+  const customs=REGISTRY.filter(s=>s.custom||s.generated||!BUILTIN.find(b=>b.id===s.id));
+  if(!customs.length){$('customList').innerHTML='<span class="mu">None yet.</span>';return}
+  $('customList').innerHTML=customs.map(s=>`<div class="item"><div><span class="kind ${s.kind}">${s.kind}</span> ${s.title} <span class="mu">(${s.id})</span></div>
+    <button class="b sec sm" onclick="editCustom('${s.id}')">Edit</button></div>`).join('');
+}
+function editCustom(id){
+  const s=getSet(id);if(!s)return;
+  $('c_id').value=s.id;$('c_title').value=s.title;$('c_kind').value=s.kind;$('c_desc').value=s.desc||'';
+  $('c_fields').innerHTML='';(s.fields||[]).forEach(f=>addFieldRow(f));
+  document.querySelector('[data-t=create]').click();
+}
+
+/* Suggest */
+function suggest(){
+  const text=(CASE.narrative+' '+CASE.applied.map(a=>resolve(a)?.title||'').join(' ')).toLowerCase();
+  const suggestions=[];
+  const rules=[
+    {keys:['diabetes','dm','t2dm','glucose','hba1c'],sets:['dm_ctx','glucose_ss','hba1c_mon'],pw:'pw_dm'},
+    {keys:['ckd','renal','egfr','creatinine'],sets:['ckd_ctx','urine_io'],pw:null},
+    {keys:['ulcer','foot','plantar'],sets:['foot_ulcer'],pw:'pw_dm_ckd_foot'},
+    {keys:['dka','ketoacidosis'],sets:['dka_ctx','glucose_ss'],pw:'pw_dka'},
+    {keys:['snake','envenom','asv','bite'],sets:['snake_ctx'],pw:'pw_snake'},
+    {keys:['urine','output','input','fluid'],sets:['urine_io'],pw:null},
+    {keys:['vital','bp','heart rate','spo2'],sets:['vitals'],pw:null}
+  ];
+  rules.forEach(r=>{
+    if(r.keys.some(k=>text.includes(k))){
+      r.sets.forEach(sid=>{if(!isApplied(sid)&&!suggestions.find(x=>x.id===sid)){const s=getSet(sid);if(s)suggestions.push({type:'element',id:sid,title:s.title})}});
+      if(r.pw){const p=PATHWAYS.find(x=>x.id===r.pw);if(p&&!(p.members||[]).every(m=>isApplied(m))&&!suggestions.find(x=>x.id===r.pw))suggestions.push({type:'pathway',id:r.pw,title:p.title})}
+    }
+  });
+  if(!CASE.applied.length)suggestions.unshift({type:'pathway',id:'pw_basic',title:'Basic admission'});
+  if(!suggestions.length){toast('No strong suggestions — try keywords or generate a context.');return}
+  const msg=suggestions.map((s,i)=>`${i+1}. [${s.type}] ${s.title}`).join('\n');
+  const n=parseInt(prompt('Suggestions:\n\n'+msg),10);
+  if(n>=1&&n<=suggestions.length)applySet(suggestions[n-1].id);
+}
+
+/* Nav */
+document.querySelectorAll('nav button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('nav button,.pane').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');$(b.dataset.t).classList.add('on');
+    $('sidebar').style.display=b.dataset.t==='case'?'flex':'none';
+    if(b.dataset.t==='lib')renderLib();
+    if(b.dataset.t==='create')renderCustomList();
+    if(b.dataset.t==='codes')codesUI();
+    if(b.dataset.t==='cases')renderCases();
+    if(b.dataset.t==='notes')renderNotes();
+  };
+});
+
+/* Init */
+loadSet();load();$('narrative').value=CASE.narrative||'';fillPatient();$('n_user').value=localStorage.getItem('vr_user')||'';
+if(!$('c_fields').children.length)addFieldRow();
+renderAll();
+</script>
+</body>
+</html>
