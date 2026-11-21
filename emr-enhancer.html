@@ -359,17 +359,61 @@ function loadSet(){try{const s=JSON.parse(localStorage.getItem('vr_set')||'{}');
 function saveSet(){try{localStorage.setItem('vr_set',JSON.stringify({p:$('prov').value,m:$('model').value,k:$('key').value,d:$('demo').checked,a:$('aiOn').checked}))}catch(e){}applyAiState();tg('setPanel');toast('Settings saved')}
 
 /* Systems */
-const SYSU={snomed:'http://snomed.info/sct',loinc:'http://loinc.org'};
+/* Code-system registry (chunk 02). A field carries bindings[]; each binding is {system:<registry key>, code, display, source?}.
+   A system is verifiable only if it has a verifier. Systems without one stay unverified and are never exported as FHIR Coding. */
+const CFG={txHost:'https://tx.fhir.org/r4'};   // terminology host; override with localStorage 'vr_cfg' = {"txHost":"https://…/r4"}
+try{Object.assign(CFG,JSON.parse(localStorage.getItem('vr_cfg')||'{}'))}catch(e){}
+const FKIND={number:'numeric',integer:'numeric',select:'choice',boolean:'boolean',text:'text',datetime:'datetime'};
+const ALLK=['numeric','choice','boolean','text','datetime'];
+const CODESYS=[
+  {key:'snomed',uri:'http://snomed.info/sct',label:'SNOMED CT',roles:ALLK,verifier:{type:'fhir-lookup'},licenceNote:'Check SNOMED licence terms for your country before real use.',enabled:true},
+  {key:'loinc',uri:'http://loinc.org',label:'LOINC',roles:ALLK,verifier:{type:'fhir-lookup'},licenceNote:'Check LOINC licence terms before real use.',enabled:true},
+  {key:'rxnorm',uri:'http://www.nlm.nih.gov/research/umls/rxnorm',label:'RxNorm',roles:['choice','text'],verifier:{type:'fhir-lookup'},licenceNote:'Check RxNorm/UMLS terms before real use.',enabled:true},
+  {key:'icd10',uri:'http://hl7.org/fhir/sid/icd-10',label:'ICD-10',roles:['choice','boolean','text'],verifier:null,licenceNote:'No verifier configured: stays unverified. Check WHO terms.',enabled:true},
+  {key:'icd11',uri:'http://id.who.int/icd/release/11/mms',label:'ICD-11',roles:['choice','boolean','text'],verifier:null,licenceNote:'No verifier configured: stays unverified. Check WHO terms.',enabled:true},
+  {key:'atc',uri:'http://www.whocc.no/atc',label:'ATC',roles:['choice','text'],verifier:null,licenceNote:'No verifier configured: stays unverified. Check WHO CC terms.',enabled:true},
+  {key:'ucum',uri:'http://unitsofmeasure.org',label:'UCUM',roles:['numeric'],verifier:null,licenceNote:'No verifier configured: stays unverified.',enabled:true},
+  {key:'local',uri:'urn:emr-enhancer:local',label:'Local',roles:ALLK,verifier:null,licenceNote:'Local codes are never exported as FHIR Coding.',enabled:true},
+  {key:'cpt',uri:'http://www.ama-assn.org/go/cpt',label:'CPT',roles:['choice','text','boolean'],verifier:null,licenceNote:'Present but OFF: needs an AMA licence.',enabled:false}
+];
+const csBy=k=>CODESYS.find(x=>x.key===k);
+const csByUri=u=>CODESYS.find(x=>x.uri===u);
+const SYSU=Object.fromEntries(CODESYS.map(x=>[x.key,x.uri]));
+const bnds=f=>Array.isArray(f&&f.bindings)?f.bindings.filter(b=>b&&b.code):[];
+/* Migration coding -> bindings[]. Idempotent, lossless; returns how many fields changed. */
+function migrateFields(fields){let n=0;
+  (fields||[]).forEach(f=>{
+    if(!('coding' in f))return;
+    const c=f.coding;
+    if(c&&c.code){const b=Array.isArray(f.bindings)?f.bindings:(f.bindings=[]);if(!b.some(x=>ck(x)===ck(c)))b.push(c)}
+    else if(c)f.legacyCoding=c;
+    delete f.coding;n++;
+  });return n}
+function migrateSet(set){if(!set)return 0;let n=migrateFields(set.fields);(set.history||[]).forEach(h=>{n+=migrateFields(h.fields)});return n}
 const codes=()=>{try{return JSON.parse(localStorage.getItem('vr_codes')||'{}')}catch(e){return{}}};
 const saveCodes=t=>{try{localStorage.setItem('vr_codes',JSON.stringify(t))}catch(e){}};
 const ck=c=>(c.system||'')+'|'+(c.code||'');
-const st=f=>{const c=f.coding;if(!c||!c.code)return'missing';return codes()[ck(c)]?'verified':'unverified'};
+/* Verified = system has a verifier AND code was confirmed on the terminology server AND the display matches. */
+function bst(b){
+  if(!b||!b.code)return'missing';
+  const sys=csBy(b.system);if(!sys||!sys.verifier||sys.enabled===false)return'unverified';
+  const d=codes()[ck(b)];
+  return d&&(!b.display||displayMatch(b.display,d))?'verified':'unverified';
+}
+const st=f=>{const bs=bnds(f);if(!bs.length)return'missing';return bs.every(b=>bst(b)==='verified')?'verified':'unverified'};
+function roleWarn(f,b){
+  const sys=csBy(b.system);if(!sys)return'Unknown code system';if(sys.enabled===false)return sys.label+' is turned off';
+  const k=FKIND[f.type]||'text';return sys.roles.includes(k)?'':`${sys.label} is not usually used for ${k} fields (warning only)`;
+}
+const fhirCoding=b=>({system:SYSU[b.system],code:b.code,display:b.display||codes()[ck(b)]});
+/* Only verified bindings become FHIR Coding; unverified, local and no-verifier bindings never do. */
+const exportCodings=f=>{const seen=new Set();return bnds(f).filter(b=>bst(b)==='verified').filter(b=>!seen.has(ck(b))&&seen.add(ck(b))).map(fhirCoding)};
 const COL={verified:'--g',unverified:'--a',missing:'--r'};
 
 /* Terminology layer — independent of FHIR */
 const MM=(()=>{try{return JSON.parse(localStorage.getItem('vr_mm')||'{}')}catch(e){return{}}})();
 const saveMM=()=>{try{localStorage.setItem('vr_mm',JSON.stringify(MM))}catch(e){}};
-const STAT={verified:'✓ verified',mismatch:'⚠ display mismatch',notfound:'✗ not found',unreachable:'? server unreachable',missing:'no code',nosystem:'unknown system'};
+const STAT={verified:'✓ verified',mismatch:'⚠ display mismatch',notfound:'✗ not found',unreachable:'? server unreachable',missing:'no code',nosystem:'no verifier for this system'};
 function normWords(x){return String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').split(' ').filter(w=>w.length>2)}
 function displayMatch(mine,server){
   const a=normWords(mine);if(!a.length)return true;
@@ -377,17 +421,23 @@ function displayMatch(mine,server){
   return a.filter(w=>b.has(w)).length/a.length>=0.6;
 }
 async function lookupCode(c){
-  if(!SYSU[c.system])return{found:false,nosystem:true};
+  const sys=csBy(c.system);
+  if(!sys||sys.enabled===false||!sys.verifier)return{found:false,nosystem:true};
   try{
-    const r=await fetch(`https://tx.fhir.org/r4/CodeSystem/$lookup?system=${encodeURIComponent(SYSU[c.system])}&code=${encodeURIComponent(c.code)}&_format=json`);
+    const r=await fetch(`${CFG.txHost}/CodeSystem/$lookup?system=${encodeURIComponent(sys.uri)}&code=${encodeURIComponent(c.code)}&_format=json`);
     const j=await r.json();
     const d=(j.parameter||[]).find(p=>p.name==='display')?.valueString;
     return r.ok&&d?{found:true,display:d}:{found:false};
   }catch(e){return{found:false,error:true}}
 }
-async function verifyField(f){
-  const c=f.coding;if(!c||!c.code)return'missing';
-  const t=codes();if(t[ck(c)])return'verified';
+async function verifyBinding(c){
+  if(!c||!c.code)return'missing';
+  const sys=csBy(c.system);if(!sys||sys.enabled===false||!sys.verifier)return'nosystem';
+  const t=codes();
+  if(t[ck(c)]){
+    if(!c.display||displayMatch(c.display,t[ck(c)]))return'verified';
+    MM[ck(c)]=t[ck(c)];saveMM();return'mismatch';
+  }
   const r=await lookupCode(c);
   if(r.nosystem)return'nosystem';
   if(!r.found)return r.error?'unreachable':'notfound';
@@ -504,6 +554,7 @@ const DEMO_DKA={id:'gen_dka',kind:'disease',title:'Diabetic ketoacidosis',desc:'
     {id:'hco3',label:'Bicarbonate',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'1963-8',display:'Bicarbonate [Moles/volume] in Serum or Plasma'}},{id:'k',label:'K⁺ before insulin',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'2823-3',display:'Potassium [Moles/volume] in Serum or Plasma'}},
     {id:'out',label:'Outcome',type:'select',options:['Recovered','ICU stay','Death']}
   ]};
+[...BUILTIN,DEMO_SNAKE,DEMO_DKA].forEach(migrateSet);
 
 const SYS=`You are a clinical informatics assistant. Return ONLY valid JSON (no prose, no markdown):
 {"id":"snake_case","kind":"disease|care","title":"","desc":"","fields":[{"id":"snake_case","label":"","type":"datetime|number|integer|select|boolean|text","unit":"","options":[],"required":false,"repeat":false,"coding":{"system":"snomed|loinc","code":"","display":""},"rationale":""}]}.
@@ -521,11 +572,14 @@ const canon=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)
 function newCaseObj(){return{id:'c_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),patient:{name:'',mrn:'',age:'',sex:''},narrative:'',applied:[],values:{},notes:[],status:'open',createdAt:nowISO(),updatedAt:nowISO()}}
 function load(){
   let d={};try{d=JSON.parse(localStorage.getItem('vr_traj')||'{}')}catch(e){}
+  let moved=0;(d.customs||[]).forEach(x=>{moved+=migrateSet(x)});
+  if(moved){try{if(!localStorage.getItem('vr_traj_pre_bindings'))localStorage.setItem('vr_traj_pre_bindings',localStorage.getItem('vr_traj')||'')}catch(e){}}
   REGISTRY=[...BUILTIN,...(d.customs||[])];
   CASES=d.cases||(d.case?[{...newCaseObj(),...d.case}]:[]);
   if(!CASES.length)CASES.push(newCaseObj());
   CASES.forEach(c=>{c.notes=c.notes||[];c.patient=c.patient||{};c.status=c.status||'open';c.updatedAt=c.updatedAt||nowISO()});
   CASE=CASES.find(c=>c.id===d.current)||CASES[0];
+  if(moved)save(false);
 }
 function save(touch=true){
   if(touch)CASE.updatedAt=nowISO();
@@ -730,7 +784,7 @@ function normaliseGenerated(raw,dx){
     if(f.required)o.required=true;
     if(f.repeat)o.repeat=true;
     if(f.rationale)o.rationale=String(f.rationale);
-    if(f.coding&&f.coding.code)o.coding={system:f.coding.system==='loinc'?'loinc':'snomed',code:String(f.coding.code).trim(),display:String(f.coding.display||''),source:'llm'};
+    if(f.coding&&f.coding.code)o.bindings=[{system:f.coding.system==='loinc'?'loinc':'snomed',code:String(f.coding.code).trim(),display:String(f.coding.display||''),source:'llm'}];
     const scan=[o.label,o.rationale||'',...(o.options||[])].join(' | ');
     if(DOSE_RE.test(scan))o.flag='dose/threshold-like text — review or remove';
     return o;
@@ -766,14 +820,17 @@ async function generate(){
 }
 function renderGenPreview(){
   const set=LAST_GENERATED;if(!set)return;
-  const rows=set.fields.filter(f=>f.coding||f.flag).map(f=>{
-    const t=f.coding?st(f):'missing';
-    const mm=f.coding&&MM[ck(f.coding)];
-    return`<tr><td>${f.label}</td><td>${f.coding?f.coding.system+' '+f.coding.code:'—'}</td><td>${f.coding?.display||''}${mm?` <span style="color:var(--a)">⚠ server: ${mm}</span>`:''}</td>
-      <td>${f.coding?`<span class="bd" style="background:var(${COL[t]})">${t}</span>`:''}</td><td>${f.flag?`<span class="gen-warn">${f.flag}</span>`:''}</td></tr>`;
-  }).join('');
-  const nb=set.fields.filter(f=>f.coding).length;
-  $('genBind').innerHTML=nb||rows?`<div class="mu">${nb} of ${set.fields.length} fields carry a proposed binding. Proposed ≠ verified.</div>
+  let rows='',nb=0;
+  set.fields.forEach(f=>{
+    const bs=bnds(f);nb+=bs.length;
+    if(!bs.length&&!f.flag)return;
+    (bs.length?bs:[null]).forEach((c,i)=>{
+      const t=c?bst(c):'missing',mm=c&&MM[ck(c)],rw=c?roleWarn(f,c):'';
+      rows+=`<tr><td>${i?'':f.label}</td><td>${c?c.system+' '+c.code:'—'}</td><td>${c?.display||''}${mm?` <span style="color:var(--a)">⚠ server: ${mm}</span>`:''}${rw?` <span class="gen-warn">${rw}</span>`:''}</td>
+      <td>${c?`<span class="bd" style="background:var(${COL[t]})">${t}</span>`:''}</td><td>${!i&&f.flag?`<span class="gen-warn">${f.flag}</span>`:''}</td></tr>`;
+    });
+  });
+  $('genBind').innerHTML=nb||rows?`<div class="mu">${nb} proposed binding(s) on ${set.fields.filter(f=>bnds(f).length).length} of ${set.fields.length} fields. Proposed ≠ verified.</div>
     <table class="ctab"><tr><th>Field</th><th>Code</th><th>Display</th><th>Status</th><th>Review</th></tr>${rows}</table>`
     :'<div class="mu">No bindings proposed — add them in B or after saving.</div>';
   $('genVerify').style.display=nb?'inline-block':'none';
@@ -782,7 +839,7 @@ async function verifyGenerated(){
   if(!LAST_GENERATED)return;
   const b=$('genVerify');b.disabled=true;b.textContent='Checking…';
   const n={verified:0,mismatch:0,notfound:0,unreachable:0,nosystem:0};
-  for(const f of LAST_GENERATED.fields){if(f.coding)n[await verifyField(f)]++}
+  for(const f of LAST_GENERATED.fields){for(const c of bnds(f))n[await verifyBinding(c)]++}
   b.disabled=false;b.textContent='Verify bindings (tx.fhir.org)';
   $('genRaw').textContent=JSON.stringify(LAST_GENERATED,null,2);
   renderGenPreview();
@@ -921,9 +978,13 @@ function codesUI(){
   CASE.applied.forEach(a=>{
     const s=resolve(a);if(!s||!s.fields)return;
     s.fields.forEach(f=>{
-      const t=st(f);n[t]++;
-      rows+=`<tr><td>${s.title}</td><td>${f.label}</td><td>${f.coding?f.coding.system+' '+f.coding.code:''}</td><td>${f.coding?.display||''}${f.coding&&MM[ck(f.coding)]?` <span style="color:var(--a)">⚠ server: ${MM[ck(f.coding)]}</span>`:''}</td>
+      const bs=bnds(f);
+      (bs.length?bs:[null]).forEach((c,i)=>{
+        const t=c?bst(c):'missing';n[t]++;
+        const sys=c&&csBy(c.system),rw=c?roleWarn(f,c):'';
+        rows+=`<tr><td>${i?'':s.title}</td><td>${i?'':f.label}</td><td>${c?(sys?sys.label:c.system)+' '+c.code:''}</td><td>${c?.display||''}${c&&MM[ck(c)]?` <span style="color:var(--a)">⚠ server: ${MM[ck(c)]}</span>`:''}${rw?` <span class="gen-warn">${rw}</span>`:''}${c&&sys&&!sys.verifier&&sys.enabled!==false?' <span class="mu">(no verifier)</span>':''}</td>
         <td><span class="bd" style="background:var(${COL[t]})">${t}</span></td></tr>`;
+      });
     });
   });
   const tot=n.verified+n.unverified+n.missing;
@@ -933,6 +994,7 @@ function codesUI(){
 function addCode(){
   const c={system:$('asys').value,code:$('acode').value.trim()},d=$('adisp').value.trim();
   if(!c.code||!d)return toast('Code and display needed');
+  const sys=csBy(c.system);if(!sys||!sys.verifier||sys.enabled===false)return toast('That system has no verifier, so a code in it cannot be marked verified');
   const t=codes();t[ck(c)]=d;saveCodes(t);delete MM[ck(c)];saveMM();toast('Added');codesUI();renderForms();
 }
 async function liveCheck(){
@@ -941,17 +1003,16 @@ async function liveCheck(){
   for(const a of CASE.applied){
     const s=resolve(a);if(!s||!s.fields)continue;
     for(const f of s.fields){
-      if(!f.coding||!f.coding.code||st(f)==='verified')continue;
-      n[await verifyField(f)]++;
+      for(const c of bnds(f)){if(bst(c)==='verified')continue;n[await verifyBinding(c)]++}
     }
   }
   save();
-  toast(`Live check: ${n.verified} verified · ${n.mismatch} display mismatch · ${n.notfound} not found · ${n.unreachable} unreachable`);
+  toast(`Live check: ${n.verified} verified · ${n.mismatch} display mismatch · ${n.notfound} not found · ${n.unreachable} unreachable · ${n.nosystem} no verifier`);
   codesUI();renderForms();
 }
 
 /* SDC dual authoring: Questionnaire <-> element set */
-const SDCSYS={'http://snomed.info/sct':'snomed','http://loinc.org':'loinc'};
+const sdcKnown=c=>{const x=csByUri(c&&c.system);return x&&x.enabled!==false?x:null};
 const SDCT={string:'text',text:'text',url:'text',integer:'integer',decimal:'number',quantity:'number',boolean:'boolean',date:'datetime',dateTime:'datetime',time:'text',choice:'select','open-choice':'select'};
 const slug=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
 const sdcBadge=s=>s.sdc?` <span class="kind custom">SDC</span>${s.sdc.modified?' <span class="mu">modified</span>':''}${s.curation&&s.curation.label?` <span class="mu">· ${escA(s.curation.label)}${s.curation.reviewed?'':' (unreviewed)'}</span>`:''}`:'';
@@ -976,9 +1037,9 @@ function sdcToSet(q){
       ao.forEach(o=>{if(o.valueCoding)(f.optCodings=f.optCodings||{})[o.valueCoding.display||o.valueCoding.code]=o.valueCoding});
       if(!f.options.length){f.type='text';delete f.options;warn.push(`${it.linkId}: value-set options not expanded here — captured as text`)}
     }
-    const cs=(it.code||[]).find(c=>SDCSYS[c.system]);
-    if(cs)f.coding={system:SDCSYS[cs.system],code:cs.code,display:cs.display||'',source:'sdc'};
-    const oc=(it.code||[]).filter(c=>!SDCSYS[c.system]);if(oc.length)f.otherCodes=oc;
+    const bl=(it.code||[]).filter(c=>c.code&&sdcKnown(c)).map(c=>({system:sdcKnown(c).key,code:String(c.code),display:c.display||'',source:'sdc'}));
+    if(bl.length)f.bindings=bl;
+    const oc=(it.code||[]).filter(c=>!(c.code&&sdcKnown(c)));if(oc.length)f.otherCodes=oc;
     fields.push(f);
   });
   walk(q.item,[]);
@@ -998,7 +1059,7 @@ function importQ(){
       if(canon(prev.fields)!==canon(set.fields)){set.history=[...set.history,{version:set.version,title:prev.title,desc:prev.desc,fields:prev.fields,at:nowISO()}];set.version++}}
     const i=REGISTRY.findIndex(x=>x.id===id);if(i>=0)REGISTRY[i]=set;else REGISTRY.push(set);
     save();renderAll();
-    $('qSummary').innerHTML=`<b>${escA(set.title)}</b> · ${set.fields.length} fields · v${set.version}${prev?' (updated existing)':''} · ${set.fields.filter(f=>f.coding).length} bound codes (unverified until checked)
+    $('qSummary').innerHTML=`<b>${escA(set.title)}</b> · ${set.fields.length} fields · v${set.version}${prev?' (updated existing)':''} · ${set.fields.reduce((n,f)=>n+bnds(f).length,0)} bound codes (unverified until checked)
       ${r.warn.length?`<div class="gen-warn">${r.warn.length} limitation(s): ${escA(r.warn.slice(0,6).join('; '))}${r.warn.length>6?' …':''}</div>`:''}
       <button class="b sm" onclick="applySet('${id}')">Apply to case</button>`;
   }catch(e){toast('Import failed: '+e.message)}
@@ -1021,7 +1082,7 @@ function buildQuestionnaire(s){
     if(f.required)it.required=true;
     if(f.unit&&f.type==='number')it.extension=[{url:'http://hl7.org/fhir/StructureDefinition/questionnaire-unit',valueCoding:UC[f.unit]?{system:'http://unitsofmeasure.org',code:UC[f.unit],display:f.unit}:{display:f.unit}}];
     if(f.type==='select')it.answerOption=(f.options||[]).map(o=>f.optCodings&&f.optCodings[o]?{valueCoding:f.optCodings[o]}:{valueString:o});
-    if(f.coding&&st(f)==='verified')it.code=[{system:SYSU[f.coding.system],code:f.coding.code,display:f.coding.display||codes()[ck(f.coding)]}];
+    const ec=exportCodings(f);if(ec.length)it.code=ec;
     return it;
   });
   return{resourceType:'Questionnaire',url:'urn:emr-enhancer:questionnaire:'+s.id,version:String(s.version||1),name:s.id,title:s.title,status:'draft',description:s.desc||'',item};
@@ -1076,8 +1137,8 @@ function buildBundle(){
   // Conditions from disease sets that have a top-level coding or title
   CASE.applied.forEach(a=>{
     const s=resolve(a);if(!s||s.kind!=='disease')return;
-    const top=s.fields.find(f=>f.coding&&st(f)==='verified');
-    const code=top?{coding:[{system:SYSU[top.coding.system],code:top.coding.code,display:top.coding.display||codes()[ck(top.coding)]}],text:s.title}:{text:s.title};
+    const top=s.fields.find(f=>exportCodings(f).length);
+    const code=top?{coding:exportCodings(top),text:s.title}:{text:s.title};
     E.push({fullUrl:'urn:uuid:'+crypto.randomUUID(),resource:{
       resourceType:'Condition',subject:{reference:pid},code,
       clinicalStatus:{coding:[{system:'http://terminology.hl7.org/CodeSystem/condition-clinical',code:'active'}]}
@@ -1088,11 +1149,9 @@ function buildBundle(){
   CASE.applied.forEach(a=>{
     const s=resolve(a);if(!s||!s.fields)return;
     s.fields.forEach(f=>{
-      const verified=st(f)==='verified';
-      const codeConcept=verified
-        ?{coding:[{system:SYSU[f.coding.system],code:f.coding.code,display:f.coding.display||codes()[ck(f.coding)]}],text:f.label}
-        :{text:f.label};
-      if(!verified&&f.coding)sk++;
+      const ec=exportCodings(f);
+      const codeConcept=ec.length?{coding:ec,text:f.label}:{text:f.label};
+      sk+=bnds(f).length-ec.length;
 
       if(f.repeat){
         getRows(f.id).forEach(row=>{
@@ -1137,7 +1196,7 @@ function buildBundle(){
   const B={resourceType:'Bundle',type:'transaction',entry:E};
   $('bj').textContent=JSON.stringify(B,null,2);
   const iss=checkBundle(B);
-  $('bchk').textContent=`${E.length} entries · ${sk} with unverified coding (text only) · structural check: ${iss.length?iss.length+' issue(s): '+iss.slice(0,5).join('; '):'passed'}. This is not profile conformance — validate before real use.`;
+  $('bchk').textContent=`${E.length} entries · ${sk} unverified binding(s) left out of Coding (text only) · structural check: ${iss.length?iss.length+' issue(s): '+iss.slice(0,5).join('; '):'passed'}. This is not profile conformance — validate before real use.`;
 }
 function copyBundle(){const t=$('bj').textContent;if(!t)return toast('Build first');navigator.clipboard.writeText(t);toast('Copied')}
 function dlBundle(){const t=$('bj').textContent;if(!t)return toast('Build first');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='bundle.json';a.click()}
@@ -1145,7 +1204,7 @@ function dlBundle(){const t=$('bj').textContent;if(!t)return toast('Build first'
 /* Manual create */
 function escA(x){return String(x??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
 function addFieldRow(data){
-  const box=$('c_fields'),c=data?.coding||{};
+  const box=$('c_fields'),bs=bnds(data),c=bs[0]||{};
   const b=document.createElement('div');b.className='fblock';b._orig=data?JSON.parse(JSON.stringify(data)):{};
   b.innerHTML=`<div class="field-row">
     <input class="f-id" placeholder="id" value="${escA(data?.id)}" style="flex:.7">
@@ -1156,25 +1215,26 @@ function addFieldRow(data){
     <label style="display:flex;align-items:center;gap:4px;font-weight:400;white-space:nowrap"><input type="checkbox" class="f-rep" style="width:auto" ${data?.repeat?'checked':''}> repeat</label>
     <button class="b sec sm" onclick="this.closest('.fblock').remove()">×</button></div>
   <div class="field-row bind">
-    <select class="f-sys" style="flex:.6"><option value="">no code</option><option value="snomed">SNOMED CT</option><option value="loinc">LOINC</option></select>
+    <select class="f-sys" style="flex:.6"><option value="">no code</option>${CODESYS.filter(x=>x.enabled!==false||x.key===c.system).map(x=>`<option value="${x.key}">${x.label}${x.verifier?'':' (no verifier)'}</option>`).join('')}</select>
     <input class="f-code" placeholder="code" value="${escA(c.code)}" style="flex:.7">
     <input class="f-disp" placeholder="display (official term)" value="${escA(c.display)}" style="flex:1.5">
     <button class="b sec sm" onclick="verifyRow(this)">Verify</button>
-    <span class="mu f-stat" style="min-width:110px"></span></div>`;
+    <span class="mu f-stat" style="min-width:110px"></span>${bs.length>1?`<span class="mu" title="Extra bindings are kept when you save">+${bs.length-1} more binding(s) kept</span>`:''}</div>`;
   if(data?.type)b.querySelector('.f-type').value=data.type;
   b.querySelector('.f-sys').value=c.system||'';
-  if(c.code){const t=st(data);b.querySelector('.f-stat').textContent=t==='verified'?STAT.verified:'unverified'}
+  if(c.code){const t=bst(c),rw=roleWarn(data,c);b.querySelector('.f-stat').textContent=(t==='verified'?STAT.verified:'unverified')+(rw?' · ⚠ '+rw:'')}
   box.appendChild(b);
 }
 async function verifyRow(btn){
   const b=btn.closest('.fblock'),stat=b.querySelector('.f-stat'),disp=b.querySelector('.f-disp');
   const system=b.querySelector('.f-sys').value,code=b.querySelector('.f-code').value.trim();
   if(!system||!code){stat.textContent=STAT.missing;return}
-  const f={coding:{system,code,display:disp.value.trim()}};
+  const c={system,code,display:disp.value.trim()};
   stat.textContent='checking…';
-  const r=await verifyField(f);
-  if(r==='verified'&&!disp.value.trim())disp.value=f.coding.display;
-  stat.textContent=STAT[r]+(r==='mismatch'?` — server: ${MM[ck(f.coding)]}`:'');
+  const r=await verifyBinding(c);
+  if(r==='verified'&&!disp.value.trim())disp.value=c.display;
+  const rw=roleWarn({type:b.querySelector('.f-type').value},c);
+  stat.textContent=STAT[r]+(r==='mismatch'?` — server: ${MM[ck(c)]}`:'')+(rw?' · ⚠ '+rw:'');
   stat.style.color=r==='verified'?'var(--g)':'var(--a)';
   codesUI();
 }
@@ -1190,14 +1250,14 @@ function saveElement(){
     const label=q('.f-label').value.trim();if(!label)return;
     const type=q('.f-type').value,extra=q('.f-extra').value.trim();
     const f={...(row._orig||{}),id:q('.f-id').value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'_')||'f',label,type};
-    delete f.unit;delete f.options;delete f.repeat;delete f.coding;delete f.flag;
+    delete f.unit;delete f.options;delete f.repeat;delete f.coding;delete f.bindings;delete f.flag;
     if(type==='select'&&extra)f.options=extra.split(',').map(x=>x.trim()).filter(Boolean);else if(extra)f.unit=extra;
     if(q('.f-rep').checked)f.repeat=true;
     const system=q('.f-sys').value,code=q('.f-code').value.trim();
-    if(system&&code){
-      const o=row._orig?.coding;
-      f.coding={system,code,display:q('.f-disp').value.trim(),source:(o&&o.system===system&&o.code===code&&o.source)||'manual'};
-    }
+    const ob=bnds(row._orig),bl=[];
+    if(system&&code){const o=ob[0];bl.push({system,code,display:q('.f-disp').value.trim(),source:(o&&o.system===system&&o.code===code&&o.source)||'manual'})}
+    ob.slice(1).forEach(x=>{if(!bl.some(y=>ck(y)===ck(x)))bl.push(x)});   // extra bindings are never dropped silently
+    if(bl.length)f.bindings=bl;
     fields.push(f);
   });
   if(!fields.length)return toast('Add at least one field');
@@ -1381,6 +1441,7 @@ async function encClose(id){
 }
 
 /* Init */
+$('asys').innerHTML=CODESYS.filter(x=>x.verifier&&x.enabled!==false).map(x=>`<option value="${x.key}">${x.label}</option>`).join('');
 loadSet();applyAiState();load();$('narrative').value=CASE.narrative||'';fillPatient();$('n_user').value=localStorage.getItem('vr_user')||'';
 if(!$('c_fields').children.length)addFieldRow();
 renderAll();srvInit();

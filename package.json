@@ -5,10 +5,12 @@
   "description": "EMR Enhancer server (synthetic data only, not for clinical use)",
   "main": "server.js",
   "scripts": {
-    "migrate": "node migrate.js",
-    "seed": "node seed.js",
-    "start": "node server.js",
-    "test": "node --test --test-concurrency=1 test/*.test.js"
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "migrate": "node --env-file=.env migrate.js",
+    "seed": "node --env-file=.env seed.js",
+    "start": "node --env-file=.env server.js",
+    "test": "node --env-file=.env --test --test-concurrency=1 test/*.test.js"
   },
   "engines": {
     "node": ">=20"
