@@ -56,7 +56,7 @@ const ACTIONS = {
   'ai.feature_request': ['admin', 'doctor', 'nurse', 'informatician'], // POST /llm/feature-request (43a2): one sentence -> a DRAFT set, pathway or rule; saves nothing, a draft is never approved. Not viewer.
   'ai.rule_draft': CLIN,                             // POST /llm/rule-draft: draft an alert rule (same people who write rules); a draft is never approved
   'audit.read': ['admin'],                           // GET /audit and /audit.csv: the log itself is admin only (chunk 33d)
-  // user.manage and password.change have routes since chunk 32e1; content.submit has a route since 43b3; content.review (the queue, reading a request, approve, request changes, reject: one action, 44a1 to 44a2) and package.install (46a2) arrive with their routes
+  // user.manage and password.change have routes since chunk 32e1; content.submit has a route since 43b3; content.review (the queue has a route since 44a1b and reading one request since 44a1c; approve, request changes, reject: one action, 44a1 to 44a2) and package.install (46a2) arrive with their routes
   'user.manage': ['admin'],                          // admin users routes (chunk 32e1)
   'password.change': ALL,                            // your own password only (chunk 32e1); the first-login change uses this too
   'content.review': ['admin', 'informatician'], /* 44a1a: informatician and admin review AND approve content; doctor, nurse and viewer never. Not charting: an informatician has no clinical action. The author of a request can never review it (CHECK reviewer_id <> author_id in 001_core.sql, and 44a2). */ 'package.install': ['admin', 'informatician'],
@@ -93,7 +93,7 @@ const ROUTE_ACTIONS = {
   'PUT /cases/:id/values': 'value.write',
   'POST /cases/:id/notes': 'note.write', 'PATCH /cases/:id/notes/:nid': 'note.write', 'POST /cases/:id/notes/:nid/sign': 'note.sign', 'POST /cases/:id/notes/:nid/amend': 'note.write',
   'GET /element-sets': 'ref.read', 'GET /element-sets/:setId': 'ref.read', 'GET /element-sets/:setId/versions': 'ref.read', 'GET /element-sets/:setId/versions/:n': 'ref.read',
-  'POST /review-requests': 'content.submit', 'POST /element-sets': 'set.write', 'PATCH /element-sets/:setId': 'set.write', 'DELETE /element-sets/:setId': 'set.write',
+  'POST /review-requests': 'content.submit', 'GET /review-requests': 'content.review', 'GET /review-requests/:id': 'content.review', 'POST /review-requests/:id/approve': 'content.review', 'POST /element-sets': 'set.write', 'PATCH /element-sets/:setId': 'set.write', 'DELETE /element-sets/:setId': 'set.write',
   'GET /usage': 'ref.read', 'POST /usage/:setId': 'usage.write', 'DELETE /usage': 'usage.write',
   'GET /codes': 'ref.read', 'POST /codes': 'code.write', 'POST /codes/:system/:code/live': 'code.write',
   'GET /code-systems': 'ref.read', 'POST /code-systems': 'codesystem.write',

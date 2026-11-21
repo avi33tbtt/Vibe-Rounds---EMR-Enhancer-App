@@ -426,7 +426,9 @@
     enqueue('set:' + s.setId, async () => {
       const cur = S.sets.find((x) => x.setId === s.setId); if (!cur) return;
       const sn = snap['set:' + s.setId];
-      const r = await api('POST', '/element-sets', Object.assign({ setId: cur.setId, kind: cur.kind, body: cur }, sn ? { expectedVersion: sn.ver } : {}));
+      // 42b7: a NEW set that is a fork names its original (id and version only); the server reads the original's hash itself. Later versions leave it out: the server keeps the link.
+      const fk = !sn && cur.forkedFrom && IDENT.test(cur.forkedFrom.setId || '') && Number.isInteger(+cur.forkedFrom.version) && +cur.forkedFrom.version >= 1 ? { forkedFrom: { setId: cur.forkedFrom.setId, version: +cur.forkedFrom.version } } : {};
+      const r = await api('POST', '/element-sets', Object.assign({ setId: cur.setId, kind: cur.kind, body: cur }, sn ? { expectedVersion: sn.ver } : {}, fk));
       snap['set:' + s.setId] = { ver: r.version }; cur.version = r.version;
     });
     return true;
@@ -609,7 +611,7 @@
     const full = await pool(list, 6, (x) => api('GET', '/cases/' + x.id));
     Object.keys(snap).forEach((k) => delete snap[k]);
     S.cases = full.map(fromServerCase);
-    S.sets = sets.filter((s) => s.source === 'user').map((s) => { snap['set:' + s.setId] = { ver: s.version }; return Object.assign({}, s.body, { version: s.version }); });
+    S.sets = sets.filter((s) => s.source === 'user').map((s) => { snap['set:' + s.setId] = { ver: s.version }; return Object.assign({}, s.body, { version: s.version }, s.tier ? { tier: s.tier } : {}, s.forkedFrom ? { forkedFrom: s.forkedFrom } : {}); });   // 42b7: tier and the fork link live in columns, not in the body
     S.usage = usage;
     S.codes = {}; S.codeMeta = {}; codes.forEach((c) => { const k = c.system + '|' + c.code; S.codes[k] = c.display; snap['code:' + k] = c.display; S.codeMeta[k] = { addedBy: c.addedBy, addedAt: c.addedAt, verifiedLive: c.verifiedLive || null }; });
     S.binds = {}; binds.forEach((b) => { S.binds[b.setId + '|' + b.fieldId] = { system: b.system, code: b.code, display: b.display }; });

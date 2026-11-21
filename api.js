@@ -82,8 +82,10 @@ const S = {
   noteSign: z.object({ expectedVersion: ver }).strict(),
   noteAmend: z.object({ reason: z.string().trim().min(3).max(1000), text: z.string().max(200000) }).strict(),
   reviewPost: z.object({ setId: ident, version: z.number().int().min(1) }).strict(),   // 43b3: submit one saved version for review
+  reviewApprove: z.object({ comment: z.string().trim().max(2000).optional() }).strict(),   // 44a2a: the reviewer is the session, never the body
+  reviewQueue: z.object({ status: z.enum(['submitted', 'in_review', 'changes_requested']).optional() }).strict(),   // 44a1b: the review queue, open requests only
   setPost: z.object({ setId: ident, kind: z.enum(['care', 'template', 'disease', 'custom', 'pathway']), body: z.record(z.string(), z.any()).refine(jsonSize(500000), 'set too large'),
-    expectedVersion: ver.optional() }).strict(),
+    expectedVersion: ver.optional(), forkedFrom: z.object({ setId: ident, version: ver }).strict().optional() }).strict(),
   usagePost: z.object({ dx: z.string().max(100).optional(), dxs: z.array(z.string().min(1).max(100)).max(20).optional() }).strict(),
   codePost: z.object({ system: sysEnum, code: z.string().trim().min(1).max(20), display: z.string().trim().min(1).max(300) }).strict().superRefine(codeShape),
   localSysPost: z.object({ id: z.string().regex(LOCAL_SYS_RE).refine((s) => !['local', 'none', 'any'].includes(s), 'this id is reserved'), name: z.string().trim().min(1).max(100),
@@ -900,12 +902,23 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
       const accBefore = cur && cur.body ? cur.body.access : undefined, accAfter = b.body.access;
       const accChanged = !!cur && hashOf({ access: accBefore === undefined ? null : accBefore }) !== hashOf({ access: accAfter === undefined ? null : accAfter });
       if (accChanged && !can(req.actor, 'access.configure')) throw new ApiError(403, 'forbidden', `Your role (${req.actor.role}) may not ${ACTION_LABELS['access.configure']} (action: access.configure).`, { action: 'access.configure' });
+      let forked = null;
+      if (b.forkedFrom) {   // 42b7: a fork is always a NEW local set; the original is only read, and its hash comes from the server, never from the client
+        if (cur) throw new ApiError(409, 'conflict', 'A fork must be a new set');
+        if (!/^local\.[a-z][a-z0-9_]*$/.test(b.setId)) throw new ApiError(422, 'bad_fork_id', 'A fork needs an id like local.my_copy');
+        const o = (await c.query('SELECT set_id, version, content_hash FROM element_sets WHERE set_id=$1 AND version=$2', [b.forkedFrom.setId, b.forkedFrom.version])).rows[0];
+        if (!o) throw new ApiError(404, 'not_found', 'The set being forked was not found');
+        forked = { setId: o.set_id, version: o.version, contentHash: o.content_hash };
+      }
       const v = cur ? cur.version + 1 : 1;
       const body = { ...b.body, setId: b.setId, kind: b.kind, version: v };
-      const saved = (await c.query(`INSERT INTO element_sets (set_id,version,kind,body,source,read_only,tier,content_hash,created_by) VALUES ($1,$2,$3,$4,'user',false,'local-draft',$5,$6) RETURNING *`,
-        [b.setId, v, b.kind, JSON.stringify(body), hashOf(body), req.actor.id])).rows[0];
+      ['source', 'readOnly', 'tier', 'forkedFrom', 'package'].forEach((k) => { delete body[k]; });   // registry fields live in columns, never in the body
+      const saved = (await c.query(`INSERT INTO element_sets (set_id,version,kind,body,source,read_only,tier,content_hash,forked_from,created_by) VALUES ($1,$2,$3,$4,'user',false,'local-draft',$5,$6,$7) RETURNING *`,
+        [b.setId, v, b.kind, JSON.stringify(body), hashOf(body), forked ? JSON.stringify(forked) : (cur ? cur.forked_from : null), req.actor.id])).rows[0];
+      // 43b4: a new version withdraws the older version's waiting request (submitted or changes_requested). One being reviewed (in_review) is left to the reviewer.
+      const withdrawn = cur ? (await c.query(`UPDATE review_requests SET status='withdrawn' WHERE set_id=$1 AND set_version<$2 AND status IN ('submitted','changes_requested') RETURNING id, set_version`, [b.setId, v])).rows : [];
       await audit(c, { action: 'set.save', entity: 'element_set', entity_id: b.setId, before: cur ? { version: cur.version, contentHash: cur.content_hash, ...(accChanged ? { access: accBefore === undefined ? null : accBefore } : {}) } : null,
-        after: { version: v, kind: b.kind, contentHash: saved.content_hash, ...(accChanged ? { access: accAfter === undefined ? null : accAfter } : {}) } });
+        after: { version: v, kind: b.kind, ...(forked ? { forkedFrom: forked } : {}), ...(withdrawn.length ? { withdrawnRequests: withdrawn.map((x) => ({ id: x.id, version: x.set_version })) } : {}), contentHash: saved.content_hash, ...(accChanged ? { access: accAfter === undefined ? null : accAfter } : {}) } });
       return saved;
     });
     res.status(201).json(setOut(out));
@@ -923,6 +936,16 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   // A person submits one saved version of a set or pathway for review. The server lints the stored version again (the client's check is only a convenience) and writes the request and one audit row in one transaction.
   // Only the set id, the version and the content hash are kept: every version in element_sets is immutable, so the reviewer reads the body from there.
   const REVIEW_OPEN = ['submitted', 'in_review', 'changes_requested'];
+  // 44a1c: one lint step for a stored version, shared by the submit route and the get-one route (the browser's check is only a convenience; the server always lints the stored body itself).
+  const lintStoredSet = async (q, cur) => {
+    const content = JSON.parse(JSON.stringify(cur.body));
+    ['provenance', 'source', 'readOnly', 'tier', 'forkedFrom', 'package'].forEach((k) => delete content[k]);
+    const slug = String(cur.set_id).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'x';
+    return PackageLint.lintPackage({ manifest: { id: 'draft.s_' + slug, version: '0.0.1', targetApp: 'emr', kind: cur.kind === 'pathway' ? 'pathway' : 'set' }, content }, {
+      roles: ROLES,
+      verifiedCodes: (await q.query("SELECT system||'|'||code k FROM verified_codes")).rows.map((x) => x.k),
+      knownSetIds: (await q.query('SELECT DISTINCT set_id FROM element_sets')).rows.map((x) => x.set_id) });
+  };
   r.post('/review-requests', wrap(async (req, res) => {
     const b = parse(S.reviewPost, req.body);
     const out = await db.withTx(async (c) => {
@@ -931,13 +954,8 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
       if (!cur) throw new ApiError(404, 'not_found', 'Set not found');
       if (cur.read_only || cur.source !== 'user') throw new ApiError(403, 'read_only', 'Only your own sets and pathways can be submitted for review');
       if (cur.version !== b.version) throw new ApiError(409, 'conflict', 'This set has a newer version', { current: setOut(cur) });
-      const content = JSON.parse(JSON.stringify(cur.body));
-      ['provenance', 'source', 'readOnly', 'tier', 'forkedFrom', 'package'].forEach((k) => delete content[k]);
-      const slug = String(b.setId).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'x';
-      const lint = PackageLint.lintPackage({ manifest: { id: 'draft.s_' + slug, version: '0.0.1', targetApp: 'emr', kind: cur.kind === 'pathway' ? 'pathway' : 'set' }, content }, {
-        roles: ROLES,
-        verifiedCodes: (await c.query("SELECT system||'|'||code k FROM verified_codes")).rows.map((x) => x.k),
-        knownSetIds: (await c.query('SELECT DISTINCT set_id FROM element_sets')).rows.map((x) => x.set_id) });
+      if (cur.tier === 'local-reviewed') throw new ApiError(409, 'already_reviewed', 'This version has already been reviewed and approved');   // 44a2a: an approved version is frozen; edit it to make a new draft version
+      const lint = await lintStoredSet(c, cur);
       if (lint.errors.length) throw new ApiError(422, 'lint_failed', 'This version has problems to fix before it can be submitted', { errors: lint.errors, warnings: lint.warnings });
       const open = (await c.query('SELECT id FROM review_requests WHERE set_id=$1 AND set_version=$2 AND status = ANY($3)', [b.setId, b.version, REVIEW_OPEN])).rows[0];
       if (open) throw new ApiError(409, 'already_submitted', 'This version is already waiting for review', { id: open.id });
@@ -948,6 +966,73 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
       return row;
     });
     res.status(201).json({ id: out.id, setId: out.set_id, version: out.set_version, contentHash: out.content_hash, status: out.status, submittedAt: iso(out.submitted_at) });
+  }));
+
+  // 44a1b: the review queue. Open requests only (submitted, in_review, changes_requested), oldest first. A read that changes nothing, so no audit row (like the audit screen and rules-in-force).
+  // Withdrawn, approved and rejected requests are not queue items. Only ids, status, hash and title are returned: the reviewer reads the body from element_sets (44a1c).
+  r.get('/review-requests', wrap(async (req, res) => {
+    const q = parse(S.reviewQueue, req.query);
+    const rows = (await db.query(`SELECT rr.id, rr.set_id, rr.set_version, rr.status, rr.content_hash, rr.submitted_at, rr.author_id, u.name AS author_name, rr.reviewer_id, es.kind, es.body->>'title' AS title
+      FROM review_requests rr LEFT JOIN users u ON u.id = rr.author_id LEFT JOIN element_sets es ON es.set_id = rr.set_id AND es.version = rr.set_version
+      WHERE rr.status = ANY($1) ORDER BY rr.submitted_at, rr.id`, [q.status ? [q.status] : REVIEW_OPEN])).rows;
+    res.json({ requests: rows.map((x) => ({ id: x.id, setId: x.set_id, version: x.set_version, kind: x.kind || null, title: typeof x.title === 'string' ? x.title : '', status: x.status, contentHash: x.content_hash,
+      authorId: x.author_id, authorName: x.author_name || '', reviewerId: x.reviewer_id, submittedAt: iso(x.submitted_at) })) });
+  }));
+
+  // 44a1c: one request in full, for the reviewer. The stored version is read from element_sets (immutable) and linted again here on the server; hashMatches says whether the stored version still has the hash recorded when it was submitted.
+  // Any status can be read (a decided or withdrawn request stays readable); a read, so no audit row.
+  r.get('/review-requests/:id', wrap(async (req, res) => {
+    const id = idParam(req.params.id);
+    const rr = (await db.query('SELECT rr.*, u.name AS author_name FROM review_requests rr LEFT JOIN users u ON u.id = rr.author_id WHERE rr.id=$1', [id])).rows[0];
+    if (!rr) throw new ApiError(404, 'not_found', 'Review request not found');
+    const cur = (await db.query('SELECT * FROM element_sets WHERE set_id=$1 AND version=$2', [rr.set_id, rr.set_version])).rows[0];
+    if (!cur) throw new ApiError(404, 'not_found', 'The submitted version of this set is not stored');
+    const lint = await lintStoredSet(db, cur);
+    const events = (await db.query('SELECT e.at, e.user_id, u.name AS user_name, e.event, e.detail FROM review_events e LEFT JOIN users u ON u.id = e.user_id WHERE e.request_id=$1 ORDER BY e.id', [id])).rows;
+    res.json({
+      request: { id: rr.id, setId: rr.set_id, version: rr.set_version, status: rr.status, contentHash: rr.content_hash, authorId: rr.author_id, authorName: rr.author_name || '', reviewerId: rr.reviewer_id,
+        submittedAt: iso(rr.submitted_at), decidedAt: iso(rr.decided_at), comment: rr.comment, checklist: rr.checklist },
+      set: { setId: cur.set_id, version: cur.version, kind: cur.kind, body: cur.body, source: cur.source, tier: cur.tier, contentHash: cur.content_hash },
+      hashMatches: !!rr.content_hash && rr.content_hash === cur.content_hash,
+      lint: { errors: lint.errors, warnings: lint.warnings },
+      events: events.map((e) => ({ at: iso(e.at), userId: e.user_id, userName: e.user_name || '', event: e.event, detail: e.detail })) });
+  }));
+
+  // 44a2a: approve one request. The reviewer is the session; the author can never approve (403, and the CHECK in 001_core.sql is the second wall).
+  // The request, the version's tier ('local-reviewed': the body and hash never change), one review_events row and one audit row are written in ONE transaction.
+  // A version with rules or bands needs two distinct approving reviewers (44a2b): until that is built the route refuses it (409 needs_two_reviewers) rather than approve it on one signature.
+  const needsTwoReviewers = (body) => {
+    let hit = Array.isArray(body && body.rules) && body.rules.length > 0;
+    const walk = (v, d) => { if (hit || d > 64 || !v || typeof v !== 'object') return; for (const k of Object.keys(v)) { if (k.toLowerCase() === 'bands') { hit = true; return; } walk(v[k], d + 1); } };
+    walk(body, 0);
+    return hit;
+  };
+  r.post('/review-requests/:id/approve', wrap(async (req, res) => {
+    const id = idParam(req.params.id), b = parse(S.reviewApprove, req.body || {});
+    const out = await db.withTx(async (c) => {
+      const first = (await c.query('SELECT set_id FROM review_requests WHERE id=$1', [id])).rows[0];
+      if (!first) throw new ApiError(404, 'not_found', 'Review request not found');
+      await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['set|' + first.set_id]);
+      const rr = (await c.query('SELECT * FROM review_requests WHERE id=$1 FOR UPDATE', [id])).rows[0];
+      if (!['submitted', 'in_review'].includes(rr.status)) throw new ApiError(409, 'bad_status', 'Only a request that is waiting or in review can be approved', { status: rr.status });
+      if (rr.author_id === req.actor.id) throw new ApiError(403, 'own_request', 'You cannot review your own request');
+      const cur = (await c.query('SELECT * FROM element_sets WHERE set_id=$1 AND version=$2', [rr.set_id, rr.set_version])).rows[0];
+      if (!cur) throw new ApiError(404, 'not_found', 'The submitted version of this set is not stored');
+      if (cur.read_only || cur.source !== 'user') throw new ApiError(403, 'read_only', 'Only your own sets and pathways are approved here');
+      const latest = (await c.query('SELECT max(version) v FROM element_sets WHERE set_id=$1', [rr.set_id])).rows[0].v;
+      if (latest !== rr.set_version) throw new ApiError(409, 'conflict', 'This set has a newer version; the request is for an older one', { latestVersion: latest });
+      if (!rr.content_hash || rr.content_hash !== cur.content_hash) throw new ApiError(409, 'hash_mismatch', 'The stored version no longer matches the version that was submitted');
+      if (cur.tier !== 'local-draft') throw new ApiError(409, 'already_reviewed', 'This version is already reviewed');
+      if (needsTwoReviewers(cur.body)) throw new ApiError(409, 'needs_two_reviewers', 'Rules and bands need two different approving reviewers (not built yet)');
+      const lint = await lintStoredSet(c, cur);
+      if (lint.errors.length) throw new ApiError(422, 'lint_failed', 'This version has problems and cannot be approved', { errors: lint.errors, warnings: lint.warnings });
+      await c.query("UPDATE element_sets SET tier='local-reviewed' WHERE set_id=$1 AND version=$2 AND tier='local-draft'", [rr.set_id, rr.set_version]);
+      const row = (await c.query("UPDATE review_requests SET status='approved', reviewer_id=$2, decided_at=now(), comment=$3 WHERE id=$1 RETURNING *", [id, req.actor.id, b.comment || null])).rows[0];
+      await c.query(`INSERT INTO review_events (request_id, user_id, event, detail) VALUES ($1,$2,'approved',$3)`, [id, req.actor.id, JSON.stringify({ setId: rr.set_id, version: rr.set_version, contentHash: rr.content_hash, ...(b.comment ? { comment: b.comment } : {}) })]);
+      await audit(c, { action: 'review.approve', entity: 'review_request', entity_id: id, before: { status: rr.status, tier: cur.tier }, after: { status: 'approved', tier: 'local-reviewed', setId: rr.set_id, version: rr.set_version, contentHash: rr.content_hash, warnings: lint.warnings.length } });
+      return row;
+    });
+    res.json({ id: out.id, setId: out.set_id, version: out.set_version, status: out.status, tier: 'local-reviewed', reviewerId: out.reviewer_id, decidedAt: iso(out.decided_at) });
   }));
 
   // ================= usage (per user) =================
