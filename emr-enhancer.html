@@ -81,6 +81,9 @@ table.ctab th{background:var(--side)}
 .pb{padding:6px 16px;background:var(--chip);font-size:13px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--bd)}
 .nt{border-left:3px solid var(--bd);padding-left:10px}.nt.draft{border-color:var(--a)}.nt.signed{border-color:var(--g)}.nt.discarded{opacity:.5}
 pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
+.gen-err{color:var(--r);font-size:13px;margin:6px 0}
+.dupbox{border:1px solid var(--a);border-left-width:4px;border-radius:6px;padding:8px 12px;margin:8px 0;font-size:13px}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
 </style>
 </head>
 <body>
@@ -89,9 +92,11 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
   <b>EMR Enhancer</b>
   <span class="mu">context-aware · pathways · codes · FHIR</span>
   <span style="flex:1"></span>
+  <span id="who" class="mu"></span>
   <button class="b sec sm" onclick="tg('setPanel')">Settings</button>
   <nav>
     <button class="on" data-t="case">Case</button>
+    <button data-t="patients">Patients</button>
     <button data-t="cases">Cases</button>
     <button data-t="lib">Library</button>
     <button data-t="create">Create / Generate</button>
@@ -156,7 +161,8 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 
     <!-- CASE -->
     <div class="pane on" id="case">
-      <div class="cd"><div class="flex">
+      <div class="cd" id="encBox"><div id="encPanel"></div><div id="enc_err" class="gen-err" role="alert"></div></div>
+      <div class="cd" id="legacyPt"><div class="flex">
         <input id="p_name" placeholder="Patient name (synthetic)" style="flex:2" onchange="savePatient()">
         <input id="p_mrn" placeholder="MRN" style="flex:1" onchange="savePatient()">
         <input id="p_age" placeholder="Age" style="width:80px" onchange="savePatient()">
@@ -243,6 +249,42 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <div id="qSummary" style="margin-top:8px"></div>
       </div>
       <div class="cd"><b>Custom / generated</b><div id="customList" class="mu">None yet.</div></div>
+    </div>
+
+    <!-- PATIENTS (registration; server-backed) -->
+    <div class="pane" id="patients">
+      <h3>Patients</h3>
+      <div id="ptNote" class="note" style="display:none"></div>
+      <div id="ptLogin" class="cd" style="display:none">
+        <b>Sign in</b>
+        <div class="mu">Registration needs the server (<code>npm start</code>). Synthetic data only.</div>
+        <div class="flex" style="margin-top:6px">
+          <input id="lg_u" placeholder="Username" autocomplete="username" style="width:160px">
+          <input id="lg_p" type="password" placeholder="Password" autocomplete="current-password" style="width:160px" onkeydown="if(event.key==='Enter')srvLogin()">
+          <button class="b" onclick="srvLogin()">Sign in</button>
+        </div>
+        <div id="lg_err" class="gen-err" role="alert"></div>
+      </div>
+      <div id="ptMain" style="display:none">
+        <div class="flex">
+          <input id="ptQ" placeholder="Search name or MRN…" style="flex:1" oninput="ptDebounce()">
+          <label style="display:flex;gap:4px;font-weight:400;margin:0"><input type="checkbox" id="ptArch" style="width:auto" onchange="ptLoad()"> show archived</label>
+          <button class="b" id="ptRegBtn" onclick="ptToggleForm()">+ Register patient</button>
+        </div>
+        <div class="cd" id="ptForm" style="display:none">
+          <b>Register patient</b>
+          <div class="form-grid" style="margin-top:6px">
+            <div><label for="r_name">Name</label><input id="r_name" autocomplete="off"></div>
+            <div><label for="r_mrn">MRN</label><input id="r_mrn" autocomplete="off"></div>
+            <div><label for="r_dob">Date of birth</label><input id="r_dob" type="date"></div>
+            <div><label for="r_sex">Sex</label><select id="r_sex"><option value="">Select…</option><option value="M">M</option><option value="F">F</option><option value="O">Other</option><option value="U">Unknown</option></select></div>
+          </div>
+          <div id="ptDup"></div>
+          <div id="pt_err" class="gen-err" role="alert"></div>
+          <div class="flex" style="margin-top:8px"><button class="b" onclick="ptRegister(false)">Register</button><button class="b sec" onclick="ptToggleForm(false)">Cancel</button></div>
+        </div>
+        <div id="ptList"></div>
+      </div>
     </div>
 
     <!-- CASES -->
@@ -522,9 +564,12 @@ function removeSet(id){CASE.applied=CASE.applied.filter(a=>a.setId!==id);save();
 function savePatient(){CASE.patient={name:$('p_name').value.trim(),mrn:$('p_mrn').value.trim(),age:$('p_age').value.trim(),sex:$('p_sex').value};save();renderBanner()}
 function fillPatient(){const p=CASE.patient||{};$('p_name').value=p.name||'';$('p_mrn').value=p.mrn||'';$('p_age').value=p.age||'';$('p_sex').value=p.sex||''}
 function renderBanner(){
-  const p=CASE.patient||{},dx=CASE.applied.map(a=>resolve(a)).filter(s=>s&&s.kind==='disease').map(s=>s.title);
+  const lp=CASE.patientId?Srv.pts[CASE.patientId]:null,p=CASE.patient||{},dx=CASE.applied.map(a=>resolve(a)).filter(s=>s&&s.kind==='disease').map(s=>s.title);
   const pw=[...new Set(CASE.applied.map(a=>a.fromPathway).filter(Boolean))].map(id=>getSet(id)?.title).filter(Boolean);
-  $('pbanner').innerHTML=`<b>${escA(p.name||'Unnamed patient')}</b><span>MRN ${escA(p.mrn||'—')}</span><span>${escA(p.age||'?')}${p.sex?' · '+escA(p.sex):''}</span>`+
+  const head=lp?`<b>${escA(lp.name)}</b><span>MRN ${escA(lp.mrn)}</span><span>${escA(lp.age)}${' · '+escA(SEXL[lp.sex]||lp.sex)}</span>`+(lp.open_bed?`<span class="kind pathway">Bed ${escA(lp.open_bed)}</span>`:'<span class="kind">no open encounter</span>')+(lp.archived?'<span class="kind">patient archived</span>':'')
+    :CASE.patientId?`<b>Registered patient #${escA(CASE.patientId)}</b><span class="mu">sign in to load name, MRN and age</span>`
+    :`<b>${escA(p.name||'Unnamed patient')}</b><span>MRN ${escA(p.mrn||'—')}</span><span>${escA(p.age||'?')}${p.sex?' · '+escA(p.sex):''}</span>`;
+  $('pbanner').innerHTML=head+
     dx.map(x=>`<span class="kind disease">${escA(x)}</span>`).join('')+pw.map(x=>`<span class="kind pathway">${escA(x)}</span>`).join('')+
     (CASE.status==='archived'?'<span class="kind">archived</span>':'')+'<span class="mu">synthetic data only</span>';
 }
@@ -533,6 +578,7 @@ function openCase(id){
   const c=CASES.find(x=>x.id===id);if(!c)return;CASE=c;save(false);
   fillPatient();$('narrative').value=CASE.narrative||'';$('bj').textContent='';$('bchk').textContent='';
   renderAll();document.querySelector('[data-t=case]').click();
+  if(CASE.patientId)refreshPatient(CASE.patientId);
 }
 function archiveCase(){
   if(!confirm('Archive this case? Nothing is deleted; it stays under “show archived”.'))return;
@@ -542,12 +588,12 @@ function restoreCase(id){const c=CASES.find(x=>x.id===id);if(c){c.status='open';
 function renderCases(){
   const q=($('caseQ').value||'').toLowerCase(),showA=$('caseArch').checked;
   const rows=CASES.filter(c=>showA||c.status!=='archived').filter(c=>{
-    const hay=[c.patient.name,c.patient.mrn,...c.applied.map(a=>getSet(a.setId)?.title)].join(' ').toLowerCase();return!q||hay.includes(q)})
+    const hay=[caseName(c),caseMrn(c),...c.applied.map(a=>getSet(a.setId)?.title)].join(' ').toLowerCase();return!q||hay.includes(q)})
     .sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
   $('caseList').innerHTML=rows.map(c=>{
     const dx=c.applied.map(a=>resolve(a)).filter(s=>s&&s.kind==='disease').map(s=>`<span class="kind disease">${escA(s.title)}</span>`).join(' ');
     const dr=c.notes.filter(n=>n.status==='draft').length;
-    return`<div class="item" onclick="openCase('${c.id}')"><div><b>${escA(c.patient.name||'Unnamed patient')}</b> <span class="mu">MRN ${escA(c.patient.mrn||'—')}</span> ${dx}
+    return`<div class="item" onclick="openCase('${c.id}')"><div><b>${escA(caseName(c))}</b> <span class="mu">MRN ${escA(caseMrn(c))}</span> ${dx}
       <div class="meta">${c.applied.length} sets · ${c.notes.length} notes${dr?` (${dr} draft)`:''} · updated ${c.updatedAt.slice(0,16).replace('T',' ')}${c.id===CASE.id?' · open':''}</div></div>
       ${c.status==='archived'?`<button class="b sec sm" onclick="event.stopPropagation();restoreCase('${c.id}')">Restore</button>`:''}</div>`;
   }).join('')||'<div class="empty">No cases.</div>';
@@ -779,7 +825,7 @@ function setVal(id,val){
 }
 
 /* Render */
-function renderAll(){renderBanner();renderApplied();renderLists();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases()}
+function renderAll(){renderBanner();renderEncounter();renderApplied();renderLists();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases()}
 function renderApplied(){
   const box=$('appliedChips'),empty=$('appliedEmpty');box.innerHTML='';
   if(!CASE.applied.length){empty.style.display='block';return}
@@ -1212,14 +1258,132 @@ document.querySelectorAll('nav button').forEach(b=>{
     if(b.dataset.t==='create')renderCustomList();
     if(b.dataset.t==='codes')codesUI();
     if(b.dataset.t==='cases')renderCases();
+    if(b.dataset.t==='patients')ptShow();
     if(b.dataset.t==='notes')renderNotes();
   };
 });
 
+/* ---------- Server: sign-in, patients, encounters (chunk 01) ----------
+   Patient identity comes from the server. A case stores only patientId; name/MRN/age are never copied into the case. */
+const Srv={user:null,pts:{},t:null};
+const SEXL={M:'M',F:'F',O:'Other',U:'Unknown'};
+const srvCan=p=>!!Srv.user&&Srv.user.perms.includes(p);
+const caseName=c=>c.patientId?(Srv.pts[c.patientId]?.name||'Registered patient #'+c.patientId):(c.patient.name||'Unnamed patient');
+const caseMrn=c=>c.patientId?(Srv.pts[c.patientId]?.mrn||'—'):(c.patient.mrn||'—');
+async function api(method,path,body){
+  if(location.protocol==='file:')return{status:0,body:{error:'offline',message:'This page was opened as a file. Start the server (npm start) and open it from http://localhost to use patient registration.'}};
+  try{
+    const r=await fetch(path,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-EMR':'1'},body:body===undefined?undefined:JSON.stringify(body)});
+    let j=null;try{j=await r.json()}catch(e){}
+    if(r.status===401&&Srv.user&&path!=='/api/login'){Srv.user=null;Srv.pts={};renderWho();toast('Session expired — sign in again')}
+    return{status:r.status,body:j||{}};
+  }catch(e){return{status:0,body:{error:'offline',message:'Cannot reach the server.'}}}
+}
+const apiMsg=r=>r.body.message||(r.status===403?'Your role does not have permission for this action.':r.status===0?r.body.message:'Something went wrong ('+(r.body.error||r.status)+').');
+function renderWho(){
+  $('who').innerHTML=Srv.user?`${escA(Srv.user.username)} (${escA(Srv.user.role)}) <a href="#" onclick="srvLogout();return false">Sign out</a>`:'Not signed in';
+  renderBanner();renderEncounter();renderCases();
+}
+async function srvInit(){
+  const r=await api('GET','/api/me');
+  if(r.status===200){Srv.user=r.body.user;await loadLinkedAll()}
+  renderWho();
+}
+async function loadLinkedAll(){
+  const ids=[...new Set(CASES.map(c=>c.patientId).filter(Boolean))];
+  await Promise.all(ids.map(id=>refreshPatient(id,true)));
+}
+async function refreshPatient(id,quiet){
+  if(!Srv.user)return;
+  const r=await api('GET','/api/patients/'+id);
+  if(r.status===200)Srv.pts[id]=r.body.patient;
+  if(!quiet){renderBanner();renderEncounter();renderCases()}
+}
+async function srvLogin(){
+  $('lg_err').textContent='';
+  const r=await api('POST','/api/login',{username:$('lg_u').value.trim(),password:$('lg_p').value});
+  $('lg_p').value='';
+  if(r.status!==200){$('lg_err').textContent=r.status===401?'Wrong username or password.':apiMsg(r);return}
+  Srv.user=r.body.user;await loadLinkedAll();renderWho();ptShow();
+}
+async function srvLogout(){await api('POST','/api/logout');Srv.user=null;Srv.pts={};renderWho();ptShow()}
+
+/* Patients tab */
+function ptShow(){
+  const off=location.protocol==='file:';
+  $('ptNote').style.display=off?'block':'none';
+  $('ptNote').textContent=off?'This page was opened as a file. Start the server (npm start) and open it from http://localhost to use patient registration. The Case tab still works with demo fields.':'';
+  $('ptLogin').style.display=!off&&!Srv.user?'block':'none';
+  $('ptMain').style.display=Srv.user?'block':'none';
+  if(!Srv.user)return;
+  $('ptRegBtn').style.display=srvCan('patients:register')?'':'none';
+  ptLoad();
+}
+function ptDebounce(){clearTimeout(Srv.t);Srv.t=setTimeout(ptLoad,250)}
+async function ptLoad(){
+  const r=await api('GET','/api/patients?q='+encodeURIComponent($('ptQ').value.trim())+($('ptArch').checked?'&archived=1':''));
+  if(r.status!==200){$('ptList').innerHTML=`<div class="gen-err">${escA(apiMsg(r))}</div>`;return}
+  const rows=r.body.patients;rows.forEach(p=>{Srv.pts[p.id]=p});
+  $('ptList').innerHTML=rows.map(p=>`<div class="item" onclick="ptOpenCase(${p.id})"><div><b>${escA(p.name)}</b> <span class="mu">MRN ${escA(p.mrn)}</span>
+      <div class="meta">${escA(p.age)} · ${escA(SEXL[p.sex]||p.sex)} · DOB ${escA(p.dob)}${p.open_bed?' · bed '+escA(p.open_bed):' · no open encounter'}${p.archived?' · archived':''}</div></div>
+      <div>${srvCan('patients:archive')?`<button class="b sec sm" onclick="event.stopPropagation();ptArchive(${p.id},${!p.archived})">${p.archived?'Restore':'Archive'}</button>`:''}
+      <button class="b sm" onclick="event.stopPropagation();ptOpenCase(${p.id})">Open case</button></div></div>`).join('')||'<div class="empty">No patients found.</div>';
+}
+function ptToggleForm(show){
+  const f=$('ptForm');show=show===undefined?f.style.display!=='block':show;f.style.display=show?'block':'none';
+  $('ptDup').innerHTML='';$('pt_err').textContent='';if(show)$('r_name').focus();
+}
+async function ptRegister(confirmDuplicate){
+  $('pt_err').textContent='';
+  const body={name:$('r_name').value,mrn:$('r_mrn').value,dob:$('r_dob').value,sex:$('r_sex').value,confirmDuplicate:confirmDuplicate===true};
+  const r=await api('POST','/api/patients',body);
+  if(r.status===201){$('ptDup').innerHTML='';['r_name','r_mrn','r_dob','r_sex'].forEach(i=>$(i).value='');ptToggleForm(false);toast('Registered '+r.body.patient.name);ptLoad();return}
+  if(r.body.error==='possible_duplicate'){
+    $('ptDup').innerHTML=`<div class="dupbox"><b>Possible duplicate.</b> ${escA(r.body.message)}<ul style="margin:6px 0">`+r.body.duplicates.map(d=>
+      `<li>${escA(d.name)} · MRN ${escA(d.mrn)} · DOB ${escA(d.dob)}${d.archived?' · archived':''} <a href="#" onclick="ptOpenCase(${d.id});return false">open</a></li>`).join('')+
+      `</ul>If this is a different person, register anyway. <button class="b sm" onclick="ptRegister(true)">Register anyway</button></div>`;return}
+  $('ptDup').innerHTML='';$('pt_err').textContent=apiMsg(r);
+}
+async function ptArchive(id,archived){
+  if(archived&&!confirm('Archive this patient? Nothing is deleted; they stay under “show archived”.'))return;
+  const r=await api('PATCH','/api/patients/'+id+'/archive',{archived});
+  if(r.status!==200)return toast(apiMsg(r));
+  Srv.pts[id]=r.body.patient;toast(archived?'Archived':'Restored');ptLoad();
+}
+function ptOpenCase(id){
+  let c=CASES.find(x=>x.patientId===id&&x.status!=='archived');
+  if(!c){c=newCaseObj();c.patientId=id;CASES.push(c)}
+  openCase(c.id);
+}
+
+/* Encounters (case screen) */
+function renderEncounter(){
+  const box=$('encPanel'),legacy=$('legacyPt');if(!box)return;
+  legacy.style.display=CASE.patientId?'none':'';$('enc_err').textContent='';
+  if(!CASE.patientId){box.innerHTML='<span class="mu">Demo patient fields (not linked to a registered patient). To get a real banner and encounters, open a case from <a href="#" onclick="document.querySelector(\'[data-t=patients]\').click();return false">Patients</a>.</span>';return}
+  const lp=Srv.pts[CASE.patientId];
+  if(!lp){box.innerHTML='<span class="mu">Sign in on the <a href="#" onclick="document.querySelector(\'[data-t=patients]\').click();return false">Patients</a> tab to load this patient and manage encounters.</span>';return}
+  const w=srvCan('encounters:write');
+  if(lp.open_encounter_id)box.innerHTML=`<b>Encounter open</b> · bed ${escA(lp.open_bed)} · since ${escA(String(lp.open_since).slice(0,16).replace('T',' '))}`+(w?` <button class="b sec sm" onclick="encClose(${lp.open_encounter_id})">Close encounter</button>`:'');
+  else if(lp.archived)box.innerHTML='<b>No open encounter.</b> <span class="mu">Patient is archived; restore on the Patients tab to open one.</span>';
+  else box.innerHTML='<b>No open encounter</b>'+(w?` <input id="enc_bed" placeholder="Bed (e.g. ICU-1)" aria-label="Bed" style="width:150px" onkeydown="if(event.key==='Enter')encOpen()"> <button class="b sm" onclick="encOpen()">Open encounter</button>`:' <span class="mu">(your role cannot open encounters)</span>');
+}
+async function encOpen(){
+  const r=await api('POST','/api/patients/'+CASE.patientId+'/encounters',{bed:$('enc_bed').value});
+  if(r.status!==201){$('enc_err').textContent=apiMsg(r);return}
+  await refreshPatient(CASE.patientId);toast('Encounter opened');
+}
+async function encClose(id){
+  if(!confirm('Close this encounter?'))return;
+  const r=await api('POST','/api/encounters/'+id+'/close');
+  if(r.status!==200){$('enc_err').textContent=apiMsg(r);return}
+  await refreshPatient(CASE.patientId);toast('Encounter closed');
+}
+
 /* Init */
 loadSet();applyAiState();load();$('narrative').value=CASE.narrative||'';fillPatient();$('n_user').value=localStorage.getItem('vr_user')||'';
 if(!$('c_fields').children.length)addFieldRow();
-renderAll();
+renderAll();srvInit();
 </script>
 </body>
 </html>

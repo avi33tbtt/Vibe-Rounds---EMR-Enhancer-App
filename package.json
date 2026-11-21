@@ -1,0 +1,23 @@
+{
+  "name": "emr-enhancer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EMR Enhancer server (synthetic data only, not for clinical use)",
+  "main": "server.js",
+  "scripts": {
+    "migrate": "node migrate.js",
+    "seed": "node seed.js",
+    "start": "node server.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "5.2.1",
+    "pg": "8.16.3"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}
