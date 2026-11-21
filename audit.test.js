@@ -51,6 +51,7 @@ const aiMock = { name: 'mock', model: 'mock-1', complete: async ({ system }) => 
   : system.startsWith('You help a clinician') ? { suggestions: [{ setId: 'user.t', reason: 'fits' }], pathways: [] }
   : { fieldRef: 'user.t/f', op: '>', threshold: 5, indicator: 'warning', summary: 'Review f' }) };
 const NO_AUDIT = ['POST /import/dry-run', 'PATCH /element-sets/:setId', 'DELETE /element-sets/:setId'];   // write nothing, so there is nothing to audit
+const ALLOW_ADMIN = { view: ['admin'], enter: ['admin'], amend: ['admin'], approve: ['admin'], configure: ['admin'], export: ['admin'] };   // 43b3: the access block shape from VIEWS.md; adjust here if validateAccess wants another shape
 const mkCase = (id, extra = {}) => ({ id, patient: { name: 'Demo', ageSex: '40 F', bed: 'B2', mrn: 'M1' }, narrative: 'n', applied: [], pathways: [], values: {}, notes: [], ...extra });
 
 test('every write route writes exactly one audit row, attributed to the logged-in user', async () => {
@@ -70,11 +71,14 @@ test('every write route writes exactly one audit row, attributed to the logged-i
     ['POST /cases/:id/notes/:nid/sign', 'note.sign', 200, () => P(`${c()}/notes/${st.n.id}/sign`, { expectedVersion: 2 })],
     ['POST /cases/:id/notes/:nid/amend', 'note.amend', 201, () => P(`${c()}/notes/${st.n.id}/amend`, { reason: 'typo fix', text: 'amended' })],
     ['POST /element-sets', 'set.save', 201, () => P('/api/element-sets', { setId: 'user.t', kind: 'custom', body: {} })],
+    ['POST /element-sets', 'set.save', 201, () => P('/api/element-sets', { setId: 'user.sub', kind: 'custom', body: { title: 'Sub', access: ALLOW_ADMIN } })],   // 43b3: a set that passes the server lint, to submit next
+    ['POST /review-requests', 'review.submit', 201, () => P('/api/review-requests', { setId: 'user.sub', version: 1 })],
     ['PUT /emr-views', 'emr_views.set', 200, () => api().put('/api/emr-views').send({ ids: [], expectedVersion: null })],   // V7a2: an empty list is a valid list (every view pathway off); no seed set is needed
     ['PUT /admin/ai', 'ai.setting', 200, () => api().put('/api/admin/ai').send({ enabled: true })],
     ['POST /llm/schema', 'ai.call', 200, () => P('/api/llm/schema', { diagnosis: 'Test disease' })],
     ['POST /llm/suggest', 'ai.call', 200, () => P('/api/llm/suggest', { narrative: 'Test narrative' })],
     ['POST /llm/rule-draft', 'ai.call', 200, () => P('/api/llm/rule-draft', { owner: 'user.t', text: 'Review f when above 5', fields: [{ ref: 'user.t/f', label: 'F', unit: '', type: 'number' }] })],
+    ['POST /llm/feature-request', 'ai.call', 200, () => P('/api/llm/feature-request', { text: 'A form for a made-up condition', output: 'set' })],   // 43a2: the set output reuses the schema stand-in reply above
     ['POST /usage/:setId', 'usage.count', 200, () => P('/api/usage/care.t', {})],
     ['DELETE /usage', 'usage.clear', 204, () => api().delete('/api/usage')],
     ['POST /codes', 'code.add', 201, () => P('/api/codes', { system: 'snomed', code: '123456', display: 'x' })],

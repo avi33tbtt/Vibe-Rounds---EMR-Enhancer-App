@@ -16,8 +16,10 @@ const { audit, auditOnce, auditContext, auditPage, auditOut, csvLine, csvCell, C
 const { mountLlm, createProvider } = require('./llm.js');                  // chunk 36a: AI proxy routes and admin switch
 const { mountPatients } = require('./patients.js');                        // chunk 34a: patients, encounters, link a case to them
 const { validateView, validatePathwayViews, validateSetCoding, codingAllow, validateAccess } = require('./views.js');                          // V2b: view blocks are checked on save
+const PackageLint = require('./package-lint.js');                         // 43b3: the same lint the app runs, run again on the server before a submit
 const Elements = require('./elements.js');                                 // F5: element index and a case's element rows (pure helpers, no set or field ids)
 const CoreElements = require('./core-elements.js');                         // F6: what registration provides (data only)
+const ExportBundle = require('./export-bundle.js');                       // F7c: de-identify and build the analytics export (pure)
 
 class ApiError extends Error {
   constructor(status, code, message, extra) { super(message); this.status = status; this.code = code; this.extra = extra; }
@@ -79,6 +81,7 @@ const S = {
   notePatch: z.object({ expectedVersion: ver, text: z.string().max(200000) }).strict(),
   noteSign: z.object({ expectedVersion: ver }).strict(),
   noteAmend: z.object({ reason: z.string().trim().min(3).max(1000), text: z.string().max(200000) }).strict(),
+  reviewPost: z.object({ setId: ident, version: z.number().int().min(1) }).strict(),   // 43b3: submit one saved version for review
   setPost: z.object({ setId: ident, kind: z.enum(['care', 'template', 'disease', 'custom', 'pathway']), body: z.record(z.string(), z.any()).refine(jsonSize(500000), 'set too large'),
     expectedVersion: ver.optional() }).strict(),
   usagePost: z.object({ dx: z.string().max(100).optional(), dxs: z.array(z.string().min(1).max(100)).max(20).optional() }).strict(),
@@ -536,6 +539,41 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
     await db.withTx((cl) => auditOnce(cl, { action: 'view', entity: 'case', entity_id: id, case_id: id }, VIEW_THROTTLE_MIN));
     res.json({ caseId: id, asOf, elements });
   }));
+  // F7c: the ONLY analytics route in the EMR. It projects, de-identifies and packages; nothing is analysed here. Role: analytics.export (admin, informatician).
+  // Salt: EXPORT_SALT from the environment (never from the request). Each element is also held to its set's own export list (canElement, default deny).
+  const EXPORT_MAX_CASES = 2000;
+  r.get('/analytics/export', wrap(async (req, res) => {
+    const salt = process.env.EXPORT_SALT;
+    if (typeof salt !== 'string' || salt.length < 8) throw new ApiError(500, 'export_not_configured', 'Export is not configured: set EXPORT_SALT to 8 or more characters.');
+    const ward = req.query.ward == null || req.query.ward === '' ? null : String(req.query.ward);
+    if (ward && ward.length > 100) throw new ApiError(400, 'bad_request', 'ward is too long');
+    const from = req.query.from ? isoOf(String(req.query.from)) : null, to = req.query.to ? isoOf(String(req.query.to)) : null;
+    if ((req.query.from && !from) || (req.query.to && !to)) throw new ApiError(400, 'bad_request', 'from and to must be dates or date-times');
+    const cs = (await db.query(
+      `SELECT c.id, c.patient_id, c.encounter_id, e.start_at FROM cases c LEFT JOIN encounters e ON e.id = c.encounter_id
+        WHERE ($1::text IS NULL OR e.ward = $1) AND ($2::timestamptz IS NULL OR e.start_at >= $2) AND ($3::timestamptz IS NULL OR e.start_at < $3)
+        ORDER BY c.id LIMIT ${EXPORT_MAX_CASES + 1}`, [ward, from, to])).rows;
+    if (cs.length > EXPORT_MAX_CASES) throw new ApiError(422, 'too_many_cases', `More than ${EXPORT_MAX_CASES} cases match: narrow the ward or dates.`);
+    const [rowsQ, sets, binds, locals] = await Promise.all([
+      cs.length ? db.query(`SELECT case_id, id, set_id, row, row_time, status FROM case_rows WHERE case_id = ANY($1::uuid[]) AND status='active' ORDER BY row_time NULLS LAST, entered_at, id`, [cs.map((c) => c.id)]) : { rows: [] },
+      latestSets(), bindingRows(), db.query("SELECT id FROM code_systems WHERE kind='local'"),
+    ]);
+    const localIds = locals.rows.map((x) => x.id), mayExport = new Set(sets.filter((s) => canElement(req.actor, { setId: s.setId, access: s.access }, 'export')).map((s) => s.setId));
+    const byCase = new Map(), finalOf = new Map(), starts = {}, out = [];
+    rowsQ.rows.forEach((x) => { if (!byCase.has(x.case_id)) byCase.set(x.case_id, []); byCase.get(x.case_id).push(x); });
+    for (const c of cs) {
+      if (c.patient_id && !finalOf.has(c.patient_id)) { const rec = (await recordsOf(db, c.patient_id, null)).patientRecord; finalOf.set(c.patient_id, rec ? rec.id : c.patient_id); }   // follow mergedInto
+      if (c.encounter_id) starts[c.encounter_id] = iso(c.start_at);
+      Elements.projectCase({ rows: byCase.get(c.id) || [], sets, bindings: binds, localSystems: localIds, patientId: c.patient_id ? finalOf.get(c.patient_id) : null,
+        encounterId: c.encounter_id, caseId: c.id })
+        .filter((e) => mayExport.has(e.source.setId))
+        .forEach((e) => out.push({ ...e, system: e.codings[0] ? e.codings[0].system : null, code: e.codings[0] ? e.codings[0].code : null }));   // deidentify reads one system and code; all codings stay in the projection
+    }
+    const deid = ExportBundle.deidentify(out, { salt, encounterStarts: starts });
+    const bundle = ExportBundle.buildExportBundle(deid), manifest = ExportBundle.buildManifest(deid);
+    await db.withTx((cl) => audit(cl, { action: 'analytics.export', entity: 'export', after: { ward, from, to, cases: cs.length, elements: deid.length } }));   // if this cannot be written, nothing is sent
+    res.json({ bundle, manifest, counts: { cases: cs.length, elements: deid.length } });
+  }));
   // Chunk 33c1: the old versions of rows and values (row_versions, value_versions) plus the current one, newest first. Only rows and values that were ever changed
   // (version above 1) are listed. Rows entered in error, and every version of them, are for case.read_errors holders (doctor, admin) only. Reading this writes no audit row.
   r.get('/cases/:id/history', wrap(async (req, res) => {
@@ -880,6 +918,37 @@ function mountApi(app, { db, getActor, requireAuth, requireCsrf, llm, aiLimiter 
   });
   r.patch('/element-sets/:setId', refuseSetChange);
   r.delete('/element-sets/:setId', refuseSetChange);
+
+  // ================= review requests (43b3) =================
+  // A person submits one saved version of a set or pathway for review. The server lints the stored version again (the client's check is only a convenience) and writes the request and one audit row in one transaction.
+  // Only the set id, the version and the content hash are kept: every version in element_sets is immutable, so the reviewer reads the body from there.
+  const REVIEW_OPEN = ['submitted', 'in_review', 'changes_requested'];
+  r.post('/review-requests', wrap(async (req, res) => {
+    const b = parse(S.reviewPost, req.body);
+    const out = await db.withTx(async (c) => {
+      await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['set|' + b.setId]);
+      const cur = (await c.query('SELECT * FROM element_sets WHERE set_id=$1 ORDER BY version DESC LIMIT 1', [b.setId])).rows[0];
+      if (!cur) throw new ApiError(404, 'not_found', 'Set not found');
+      if (cur.read_only || cur.source !== 'user') throw new ApiError(403, 'read_only', 'Only your own sets and pathways can be submitted for review');
+      if (cur.version !== b.version) throw new ApiError(409, 'conflict', 'This set has a newer version', { current: setOut(cur) });
+      const content = JSON.parse(JSON.stringify(cur.body));
+      ['provenance', 'source', 'readOnly', 'tier', 'forkedFrom', 'package'].forEach((k) => delete content[k]);
+      const slug = String(b.setId).toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'x';
+      const lint = PackageLint.lintPackage({ manifest: { id: 'draft.s_' + slug, version: '0.0.1', targetApp: 'emr', kind: cur.kind === 'pathway' ? 'pathway' : 'set' }, content }, {
+        roles: ROLES,
+        verifiedCodes: (await c.query("SELECT system||'|'||code k FROM verified_codes")).rows.map((x) => x.k),
+        knownSetIds: (await c.query('SELECT DISTINCT set_id FROM element_sets')).rows.map((x) => x.set_id) });
+      if (lint.errors.length) throw new ApiError(422, 'lint_failed', 'This version has problems to fix before it can be submitted', { errors: lint.errors, warnings: lint.warnings });
+      const open = (await c.query('SELECT id FROM review_requests WHERE set_id=$1 AND set_version=$2 AND status = ANY($3)', [b.setId, b.version, REVIEW_OPEN])).rows[0];
+      if (open) throw new ApiError(409, 'already_submitted', 'This version is already waiting for review', { id: open.id });
+      const row = (await c.query(`INSERT INTO review_requests (set_id, set_version, author_id, status, content_hash, submitted_at) VALUES ($1,$2,$3,'submitted',$4,now()) RETURNING *`,
+        [b.setId, b.version, req.actor.id, cur.content_hash])).rows[0];
+      await c.query(`INSERT INTO review_events (request_id, user_id, event, detail) VALUES ($1,$2,'submitted',$3)`, [row.id, req.actor.id, JSON.stringify({ setId: b.setId, version: b.version, contentHash: cur.content_hash })]);
+      await audit(c, { action: 'review.submit', entity: 'review_request', entity_id: row.id, before: null, after: { setId: b.setId, version: b.version, contentHash: cur.content_hash, status: 'submitted', warnings: lint.warnings.length } });
+      return row;
+    });
+    res.status(201).json({ id: out.id, setId: out.set_id, version: out.set_version, contentHash: out.content_hash, status: out.status, submittedAt: iso(out.submitted_at) });
+  }));
 
   // ================= usage (per user) =================
   r.get('/usage', wrap(async (req, res) => {

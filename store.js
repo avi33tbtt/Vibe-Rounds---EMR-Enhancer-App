@@ -411,7 +411,11 @@
     }
     return null;
   };
+  // 42b5. A stored set marked readOnly (a marketplace set) is never changed by saveSet: the save is refused here, not only in the screen.
+  // A set that is not stored yet can still be added. A new version of a read-only set is a local copy (task 42b7), not a save over it.
+  Store.setIsReadOnly = (id) => { const c = S.sets.find((x) => x.setId === id); return !!(c && c.readOnly === true); };
   Store.saveSet = function (s) {
+    if (Store.setIsReadOnly(s.setId)) { Store.hooks.toast('This set is read-only and cannot be changed.'); return false; }
     const i = S.sets.findIndex((x) => x.setId === s.setId); const c = clone(s);
     if (i >= 0 && (+S.sets[i].version || 1) !== (+c.version || 1)) {      // keep the version being replaced
       S.setHist[hk(s.setId, +S.sets[i].version || 1)] = clone(S.sets[i]);
@@ -681,12 +685,12 @@
   // The browser never talks to a model. preview() asks the server for the EXACT text it would send (identifiers already removed) and sends nothing;
   // run() is the real call and must only follow a click on Send. Nothing here is cached or saved: the caller shows the answer and a clinician saves it.
   // Store.me.ai (from /me) is true only when an admin switched AI on and a model is configured; the buttons mirror it, the server still checks every call.
-  const AI_ROUTES = { schema: '/llm/schema', suggest: '/llm/suggest', ruleDraft: '/llm/rule-draft' };
+  const AI_ROUTES = { schema: '/llm/schema', suggest: '/llm/suggest', ruleDraft: '/llm/rule-draft', feature: '/llm/feature-request' };
   const aiRoute = (kind) => { if (Store.mode !== 'server') throw pfail('demo_mode', 'AI needs the server and is not available in demo mode'); if (!AI_ROUTES[kind]) throw pfail('bad_kind', 'Unknown AI request'); return AI_ROUTES[kind]; };
   const aiFail = (er) => { if (er && er.status === 403 && er.code === 'ai_disabled' && Store.me) { Store.me.ai = false; notify(); } throw er; };   // an admin switched it off meanwhile: hide the buttons
   Store.ai = {
     /** True when the AI buttons should be shown: server mode, switched on by an admin, a model configured, and this role may use `kind` (optional). */
-    available: (kind) => Store.mode === 'server' && !!Store.me && Store.me.ai === true && (!kind || Store.can({ schema: 'ai.schema', suggest: 'ai.suggest', ruleDraft: 'ai.rule_draft' }[kind])),
+    available: (kind) => Store.mode === 'server' && !!Store.me && Store.me.ai === true && (!kind || Store.can({ schema: 'ai.schema', suggest: 'ai.suggest', ruleDraft: 'ai.rule_draft', feature: 'ai.feature_request' }[kind])),
     /** -> { sent, removed, removedCount, bytes, note }. Nothing is sent to the model, nothing is audited. */
     preview: async (kind, body) => { const p = aiRoute(kind); try { return await api('POST', p, Object.assign({}, body, { preview: true })); } catch (er) { return aiFail(er); } },
     /** The real call. Answers the validated draft (schema: {schema, warnings}; suggest: {suggestions, pathways}; ruleDraft: {draft}). Never saves anything. */

@@ -3,7 +3,7 @@
 // Phase V, V8a: the client and server code must not name a clinical set id or field id. Every EMR screen is
 // a registered view type plus data in a seed set; code reads ids from that data. Reads element-sets.js (seed
 // sets and their fields) and scans enhancer.html, store.js and api.js for those ids as quoted words or as
-// property names (r.<id>). Any hit not on ALLOW fails. ALLOW can only shrink: it must hold analytics lines
+// property names (r.<id>). F8 adds two checks: elements.js names no seed id, and no EMR file holds an analytics engine. Any hit not on ALLOW fails. ALLOW can only shrink: it must hold analytics lines
 // only (Analytics runs in the other app), every entry must still match a hit, and its size is capped below.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -73,4 +73,61 @@ test('V8a: ALLOW can only shrink, and every entry still matches a line', () => {
     const k = a.indexOf(':');
     assert.ok(hits.some((h) => h.file === a.slice(0, k) && h.line.includes(a.slice(k + 1))), 'unused ALLOW entry: ' + a);
   }
+});
+
+// ---------- F8 (rule E9): elements.js names no sets, and the EMR has no analytics engine ----------
+// (1) elements.js is generic: a seed set id or field id may not appear in it as a quoted word, a property name or a bare word (comments are skipped; tests are not scanned).
+// 'slot' is the compatibility vocabulary of elements.js (a requirement slot), not a field reference; it also happens to be a seed field id. Skipped for this check only.
+const ELEMENT_VOCAB = ['slot'];
+const word = (id) => new RegExp('(?<![\\w-])' + esc(id) + '(?![\\w-])');
+function idHits(text) {
+  const hits = [];
+  text.split('\n').forEach((line, i) => {
+    if (isComment(line)) return;
+    for (const id of [...setIds, ...fieldIds]) if (!ELEMENT_VOCAB.includes(id) && (quoted(id).test(line) || prop(id).test(line) || word(id).test(line))) hits.push(`${i + 1} ${id}  | ${line.trim().slice(0, 100)}`);
+  });
+  return hits;
+}
+// (2) Only analytics.export and /analytics/export may exist. These files must not define any other analytics action or route, or name the Analytics app's masking or element table.
+const ANALYTICS_FILES = ['api.js', 'store.js', 'enhancer.html', 'permissions.js'];
+const BANNED_WORDS = ['maskCounts', 'element_rows'];
+function analyticsHits(text) {
+  const hits = [];
+  text.split('\n').forEach((line, i) => {
+    if (isComment(line)) return;
+    const bad = [];
+    for (const m of line.matchAll(/analytics\.([a-z_]+)/g)) if (m[1] !== 'export') bad.push('analytics.' + m[1]);
+    for (const m of line.matchAll(/\/analytics\/([A-Za-z_-]+)/g)) if (m[1] !== 'export') bad.push('/analytics/' + m[1]);
+    for (const w of BANNED_WORDS) if (line.includes(w)) bad.push(w);
+    bad.forEach((b) => hits.push(`${i + 1} ${b}  | ${line.trim().slice(0, 100)}`));
+  });
+  return hits;
+}
+test('F8: the checks themselves catch made-up bad input and allow the export names', () => {
+  const [anyId] = [...fieldIds];
+  assert.equal(idHits(`var x = '${anyId}';`).length, 1);
+  assert.equal(idHits(`// ${anyId} only in a comment`).length, 0);
+  assert.equal(analyticsHits("a['analytics.run']").length, 1);
+  assert.equal(analyticsHits("r.get('/analytics/patients')").length, 1);
+  assert.equal(analyticsHits('maskCounts(x)').length, 1);
+  assert.equal(analyticsHits('SELECT * FROM element_rows').length, 1);
+  assert.equal(analyticsHits("'analytics.export' and '/analytics/export'").length, 0);
+});
+test('F8: elements.js names no seed set id or field id', () => {
+  assert.deepEqual(idHits(fs.readFileSync('./elements.js', 'utf8')), []);
+});
+test('F8: no analytics engine in the EMR (only analytics.export and /analytics/export)', () => {
+  for (const file of ANALYTICS_FILES) {
+    assert.ok(fs.existsSync('./' + file), file + ' is missing');
+    assert.deepEqual(analyticsHits(fs.readFileSync('./' + file, 'utf8')), [], file);
+  }
+});
+
+// ---------- F9a: ana() is retired ----------
+// The old Analytics tab computed analytics in the browser. Analytics now run only in the Analytics app, so enhancer.html may hold
+// no ana() and no r.temp style property access (the old fever-chart analytics read the temperature field by name).
+test('F9a: enhancer.html has no ana() and no r.temp property access', () => {
+  const text = fs.readFileSync('./enhancer.html', 'utf8');
+  assert.ok(!/(?<![\w$.])ana\(/.test(text), 'ana() is still called or defined');
+  assert.ok(!/(?<![\w$])r\.temp(?![\w$])/.test(text), 'r.temp property access found');
 });

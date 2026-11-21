@@ -383,3 +383,24 @@ test('35b: acknowledgements cannot be changed or deleted, PATCH no longer takes 
   const priv = (await db.query(`SELECT has_table_privilege('emr_app','alert_acks','INSERT') i, has_table_privilege('emr_app','alert_acks','SELECT') s, has_table_privilege('emr_app','alert_acks','UPDATE') u, has_table_privilege('emr_app','alert_acks','DELETE') d, has_table_privilege('emr_app','alert_acks','TRUNCATE') t`)).rows[0];
   assert.deepEqual(priv, { i: true, s: true, u: false, d: false, t: false });
 });
+
+// ---------------------------------------------------------------- 44a1a: the informatician's Phase 6 actions (table only, no route needed)
+test('44a1a: content.review and package.install belong to admin and informatician only; content.submit to the people who may save sets', () => {
+  assert.deepEqual([...P.ACTIONS['content.review']].sort(), ['admin', 'informatician']);
+  assert.deepEqual([...P.ACTIONS['package.install']].sort(), ['admin', 'informatician']);
+  assert.deepEqual([...P.ACTIONS['content.submit']].sort(), [...P.ACTIONS['set.write']].sort());
+  for (const role of ['doctor', 'nurse', 'viewer']) for (const a of ['content.review', 'package.install']) assert.equal(P.can({ role }, a), false, role + ' ' + a);
+  for (const a of ['content.review', 'package.install', 'content.submit']) assert.ok(P.ACTION_LABELS[a], a + ' has a plain label');
+});
+
+test('44a1a: an informatician reviews content and installs packages but never charts, signs, approves a rule or reads identities', () => {
+  const inf = { role: 'informatician' };
+  for (const a of ['content.review', 'package.install', 'content.submit', 'set.write', 'code.write', 'ai.schema', 'analytics.export']) assert.equal(P.can(inf, a), true, a);
+  for (const a of ['row.add', 'row.amend_own', 'case.create', 'case.narrative', 'case.apply', 'note.write', 'note.sign', 'value.write', 'rule.approve', 'protocol.approve', 'patient.read', 'patient.write', 'encounter.write', 'case.export', 'alert.ack', 'handover.mark', 'user.manage', 'audit.read']) assert.equal(P.can(inf, a), false, a);
+});
+
+test('44a1a: the element access check cannot widen review: a role the table refuses stays refused', () => {
+  const acc = (roles) => ({ access: { view: roles, enter: roles, amend: roles, approve: roles, configure: roles, export: roles } });
+  assert.equal(P.canElement({ role: 'nurse' }, acc(['nurse', 'informatician']), 'approve'), false, 'nurse has no rule.approve in the table');
+  assert.equal(P.canElement({ role: 'informatician' }, acc(['informatician']), 'enter'), false, 'informatician has no charting action in the table');
+});

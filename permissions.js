@@ -53,15 +53,17 @@ const ACTIONS = {
   'ai.admin': ['admin'],                             // GET/PUT /admin/ai: the AI switch (chunk 36a). AI is off until an admin turns it on.
   'ai.schema': ['admin', 'doctor', 'informatician'], // POST /llm/schema: draft an element set (same people who author sets)
   'ai.suggest': CLIN,                                // POST /llm/suggest: suggest sets for a case narrative (same people who apply sets)
+  'ai.feature_request': ['admin', 'doctor', 'nurse', 'informatician'], // POST /llm/feature-request (43a2): one sentence -> a DRAFT set, pathway or rule; saves nothing, a draft is never approved. Not viewer.
   'ai.rule_draft': CLIN,                             // POST /llm/rule-draft: draft an alert rule (same people who write rules); a draft is never approved
   'audit.read': ['admin'],                           // GET /audit and /audit.csv: the log itself is admin only (chunk 33d)
-  // user.manage and password.change have routes since chunk 32e1; content.review and package.install arrive with Phase 6
+  // user.manage and password.change have routes since chunk 32e1; content.submit has a route since 43b3; content.review (the queue, reading a request, approve, request changes, reject: one action, 44a1 to 44a2) and package.install (46a2) arrive with their routes
   'user.manage': ['admin'],                          // admin users routes (chunk 32e1)
   'password.change': ALL,                            // your own password only (chunk 32e1); the first-login change uses this too
-  'content.review': ['admin', 'informatician'], 'package.install': ['admin', 'informatician'],
+  'content.review': ['admin', 'informatician'], /* 44a1a: informatician and admin review AND approve content; doctor, nurse and viewer never. Not charting: an informatician has no clinical action. The author of a request can never review it (CHECK reviewer_id <> author_id in 001_core.sql, and 44a2). */ 'package.install': ['admin', 'informatician'],
+  'content.submit': ['admin', 'doctor', 'informatician'], // 43b3: POST /review-requests, submit your own saved version for review (the people who may save sets: set.write). Reviewing is content.review and is separate.
   'handover.mark': ['admin', 'doctor', 'nurse'],     // 37d4: POST /cases/:id/handover, "my last handover on this case is now" (the server's clock). Reading it (GET) is case.read.
   'access.configure': ['admin'],                     // R7: change the access block of an existing element (decision 19 default: admin only). Checked inside POST /element-sets; it has no route of its own.
-  'analytics.export': ['admin', 'informatician'],    // R3: de-identified bundle export (Phase F); no route yet. An element's export list can only narrow this.
+  'analytics.export': ['admin', 'informatician'],    // R3: de-identified bundle export (Phase F): GET /analytics/export (F7c). An element's export list can only narrow this.
 };
 // PATCH /cases/:id changes several things; the route needs any of them, and api.js then checks each field the body touches.
 const CASE_FIELD_ACTION = { patient: 'case.patient', narrative: 'case.narrative', applied: 'case.apply', pathways: 'case.apply', pinned: 'case.pin' };
@@ -74,8 +76,8 @@ const ACTION_LABELS = {
   'row.add': 'add readings', 'row.amend_own': 'amend readings', 'row.amend_any': 'amend other people\'s readings', 'value.write': 'save these values',
   'note.write': 'write notes', 'note.sign': 'sign notes', 'set.write': 'edit element sets and pathways', 'code.write': 'edit verified codes', 'codesystem.write': 'create local code systems or add local codes', 'binding.write': 'edit code bindings',
   'rule.write': 'edit alert rules', 'rule.approve': 'approve alert rules', 'protocol.write': 'edit protocols', 'protocol.approve': 'verify protocols',
-  'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'migrate.run': 'migrate demo patients', 'audit.read': 'read the audit log', 'rules.inforce': 'see the rules in force', 'ai.admin': 'change the AI setting', 'views.admin': 'choose which view pathways are on', 'ai.schema': 'draft an element set with AI', 'ai.suggest': 'get AI suggestions', 'ai.rule_draft': 'draft a rule with AI', 'user.manage': 'manage users', 'password.change': 'change this password',
-  'content.review': 'review content', 'package.install': 'install packages', 'analytics.export': 'export de-identified data', 'access.configure': 'change who may use an element', 'handover.mark': 'mark a handover done',
+  'usage.write': 'save usage', 'pref.write': 'save preferences', 'import.run': 'import data', 'migrate.run': 'migrate demo patients', 'audit.read': 'read the audit log', 'rules.inforce': 'see the rules in force', 'ai.admin': 'change the AI setting', 'views.admin': 'choose which view pathways are on', 'ai.schema': 'draft an element set with AI', 'ai.suggest': 'get AI suggestions', 'ai.rule_draft': 'draft a rule with AI', 'ai.feature_request': 'request a feature with AI', 'user.manage': 'manage users', 'password.change': 'change this password',
+  'content.review': 'review content', 'content.submit': 'submit content for review', 'package.install': 'install packages', 'analytics.export': 'export de-identified data', 'access.configure': 'change who may use an element', 'handover.mark': 'mark a handover done',
   'patient.read': 'see patient records', 'patient.write': 'register or correct patients', 'patient.merge': 'merge patients', 'encounter.write': 'change encounters', 'case.link': 'link a case to a patient', 'case.export': 'export a patient record',
 };
 /** The actions a user may take, in the order of ACTIONS. Sent with GET /me so the screen can hide controls; the server stays the control. */
@@ -85,13 +87,13 @@ const CARE_ONLY_ROLES = ['nurse'];
 
 /** Every route, keyed 'METHOD /path' exactly as registered in api.js. */
 const ROUTE_ACTIONS = {
-  'GET /me': 'session.read', 'GET /emr-views': 'ref.read', 'PUT /emr-views': 'views.admin', 'GET /elements/index': 'ref.read', 'GET /cases/:id/elements': 'case.read',
+  'GET /me': 'session.read', 'GET /emr-views': 'ref.read', 'PUT /emr-views': 'views.admin', 'GET /elements/index': 'ref.read', 'GET /cases/:id/elements': 'case.read', 'GET /analytics/export': 'analytics.export',
   'GET /cases': 'case.read', 'GET /cases/:id': 'case.read', 'GET /cases/:id/history': 'case.history', 'GET /cases/:id/changes': 'case.read', 'POST /cases': 'case.create', 'PATCH /cases/:id': 'case.patch',
   'POST /cases/:id/rows': 'row.add', 'PATCH /cases/:id/rows/:rowId': 'row.amend_own', 'POST /cases/:id/rows/:rowId/error': 'row.amend_own',
   'PUT /cases/:id/values': 'value.write',
   'POST /cases/:id/notes': 'note.write', 'PATCH /cases/:id/notes/:nid': 'note.write', 'POST /cases/:id/notes/:nid/sign': 'note.sign', 'POST /cases/:id/notes/:nid/amend': 'note.write',
   'GET /element-sets': 'ref.read', 'GET /element-sets/:setId': 'ref.read', 'GET /element-sets/:setId/versions': 'ref.read', 'GET /element-sets/:setId/versions/:n': 'ref.read',
-  'POST /element-sets': 'set.write', 'PATCH /element-sets/:setId': 'set.write', 'DELETE /element-sets/:setId': 'set.write',
+  'POST /review-requests': 'content.submit', 'POST /element-sets': 'set.write', 'PATCH /element-sets/:setId': 'set.write', 'DELETE /element-sets/:setId': 'set.write',
   'GET /usage': 'ref.read', 'POST /usage/:setId': 'usage.write', 'DELETE /usage': 'usage.write',
   'GET /codes': 'ref.read', 'POST /codes': 'code.write', 'POST /codes/:system/:code/live': 'code.write',
   'GET /code-systems': 'ref.read', 'POST /code-systems': 'codesystem.write',
@@ -113,7 +115,7 @@ const ROUTE_ACTIONS = {
   'GET /cases/:id/handover': 'case.read', 'POST /cases/:id/handover': 'handover.mark',
   'POST /cases/:id/link': 'case.link', 'GET /cases/:id/alert-acks': 'case.read', 'POST /cases/:id/alert-acks': 'alert.ack', 'GET /cases/:id/export': 'case.export',
   'POST /admin/migrate-demo-patients': 'migrate.run',
-  'GET /admin/ai': 'ai.admin', 'PUT /admin/ai': 'ai.admin', 'POST /llm/schema': 'ai.schema', 'POST /llm/suggest': 'ai.suggest', 'POST /llm/rule-draft': 'ai.rule_draft',
+  'GET /admin/ai': 'ai.admin', 'PUT /admin/ai': 'ai.admin', 'POST /llm/schema': 'ai.schema', 'POST /llm/suggest': 'ai.suggest', 'POST /llm/rule-draft': 'ai.rule_draft', 'POST /llm/feature-request': 'ai.feature_request',
 };
 
 function can(user, action) {

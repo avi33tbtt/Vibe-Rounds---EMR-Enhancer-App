@@ -17,7 +17,7 @@ textarea{min-height:70px}label{display:block;margin:10px 0 3px;font-weight:600}b
 .chip{display:block;width:100%;text-align:left;background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:99px;padding:5px 10px;margin:4px 0;cursor:pointer;font:inherit}.chip:hover,.row:hover{border-color:var(--ac)}
 .row{display:block;width:100%;text-align:left;background:none;color:var(--fg);border:1px solid transparent;border-radius:6px;padding:5px 6px;cursor:pointer;font:inherit}.row .mu{display:block}.row.off{color:var(--mu);cursor:default}
 .kh{margin:10px 0 2px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mu)}.pbar{height:8px;background:var(--bd);border-radius:9px;overflow:hidden;margin:6px 0}.pbar i{display:block;height:100%;background:var(--ac)}.pst td{padding:2px 8px 2px 0;border:0}
-.sh{display:flex;gap:8px;align-items:center}.sec{margin-top:8px;padding-top:6px;border-top:1px solid var(--bd)}button.sm{padding:3px 10px;margin:0;font-size:12px}
+.sh{display:flex;gap:8px;align-items:center}.tier{font-size:11px;border:1px solid var(--bd);border-radius:99px;padding:1px 7px;white-space:nowrap}#pkgPanel,#reqPanel{position:fixed;z-index:60;top:60px;left:50%;transform:translateX(-50%);width:min(760px,94vw);max-height:80vh;overflow:auto;background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:12px}#pkgPanel[hidden],#reqPanel[hidden]{display:none}#reqPanel textarea{width:100%;min-height:90px;box-sizing:border-box}#reqPanel fieldset{border:1px solid var(--bd);border-radius:6px;margin:8px 0}#reqPanel label.ro{display:block;margin:2px 0}.sec{margin-top:8px;padding-top:6px;border-top:1px solid var(--bd)}button.sm{padding:3px 10px;margin:0;font-size:12px}
 .proto{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px}.pt{width:100%;border-collapse:collapse;margin:6px 0}.pt td,.pt th{padding:3px;border:0}.pt input{padding:4px}.pn{min-height:4px;margin:4px 0}.rg{margin-top:6px;overflow-x:auto}.rg td input,.rg td select{min-width:110px}.rg svg{display:block;max-width:440px;width:100%}.tj{margin:10px 0}
 .qb{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}.qb .b{margin:0;background:var(--cd);color:var(--fg);border:1px solid var(--bd)}.qb .b.on{border-color:var(--ac);color:var(--ac)}#td{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0}#td .tdi{background:var(--cd);border:1px solid var(--bd);border-radius:8px;padding:5px 9px;font-size:13px}#pinp,#qr{background:var(--cd);border:1px solid var(--bd);border-radius:8px;padding:8px;margin:6px 0}#pinp:empty,#qr:empty{display:none}#qr td input,#qr td select{min-width:100px}
 #ctl{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px}#ctl .b{margin:0}#sbt{display:none}
@@ -204,11 +204,13 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
   <button class="on" data-shell-t="ov" aria-current="page">Summary</button><button data-shell-t="flw">Flowsheets</button><button data-shell-t="nt">Notes</button><button data-shell-t="pw">Pathway</button><button data-shell-t="al">Alerts</button><button data-shell-t="ex">Export</button>
   <details id="tools"><summary>Tools ▾</summary><div class="toolitems">
     <button data-shell-t="in">Set builder</button><button data-shell-t="fh">Codes</button>
-    <button data-shell-t="an">Analytics</button><button data-shell-t="ab">About</button>
+    <button data-shell-t="an" id="anTool">Export for analytics</button><button data-shell-t="ab">About</button>
     <button type="button" id="rulesTool" hidden>Rules in force</button><button type="button" id="auditTool" hidden>Audit log</button><button type="button" id="usersTool" hidden>Users</button><button type="button" id="pwTool" hidden>Change my password</button>
-    <button type="button" id="settingsTool">Settings</button>
+    <button type="button" id="pkgTool">Import package file</button><button type="button" id="reqTool">Request a feature</button><button type="button" id="settingsTool">Settings</button>
   </div></details>
 </div>
+<div id="pkgPanel" role="dialog" aria-modal="false" aria-labelledby="pkgTitle" hidden><div class="sh"><b id="pkgTitle">Import package file</b><span style="flex:1"></span><button class="b sm" type="button" id="pkgClose">Close</button></div><div class="mu" style="margin:4px 0 8px">Choose a package file (.json). It is checked here. In Demo mode a package that passes can be installed from this screen.</div><input type="file" id="pkgFile" accept=".json,application/json" aria-label="Package file"><div id="pkgOut" aria-live="polite"></div></div>
+<div id="reqPanel" role="dialog" aria-modal="false" aria-labelledby="reqTitle" hidden><div class="sh"><b id="reqTitle">Request a feature</b><span style="flex:1"></span><button class="b sm" type="button" id="reqClose">Close</button></div><div class="mu" style="margin:4px 0 8px">Describe in one or two sentences what the chart should have. Do not type a patient's name, number or other details. A request only starts a draft: nothing becomes part of the chart until a reviewer approves it.</div><label for="reqText"><b>What do you need?</b></label><textarea id="reqText" maxlength="500" aria-describedby="reqCount"></textarea><div class="mu" id="reqCount">0 / 500</div><fieldset><legend><b>What should it make?</b></legend><label class="ro"><input type="radio" name="reqKind" value="set" checked> A form or flowsheet (a set of fields)</label><label class="ro"><input type="radio" name="reqKind" value="pathway"> A pathway (a bundle of sets that already exist)</label><label class="ro"><input type="radio" name="reqKind" value="rule"> An alert rule (disabled until a doctor enables it)</label></fieldset><div id="reqOwnerWrap" hidden><label for="reqOwner"><b>Which set is the rule for?</b></label> <select id="reqOwner" aria-label="Set the rule is for"></select></div><button class="b" type="button" id="reqGo">Prepare request</button><div id="reqOut" aria-live="polite"></div><div id="reqDrafts" class="sec"></div></div>
 <div id="chartbar" aria-label="Chart now shortcuts">
   <b class="chartbar-label">Chart now</b><div id="chartbarItems"></div>
   <button class="b sm" type="button" data-chart-add="1">+ Add context</button>
@@ -257,14 +259,14 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 </div></div>
 <div class="pane" id="ab">
 <div class="cd"><b style="font-size:16px">About EMR Enhancer</b>
-<p>EMR Enhancer is a standalone, multi-user EMR built around <b>context</b>. A clinician opens a patient, writes a short narrative, and adds context to it in the form of <b>element sets</b>: small, reusable groups of fields (for example Vitals, Fever chart, or Snake envenomation). Each context added builds up the patient's <b>trajectory</b>. A trajectory turned into a reusable template becomes a <b>pathway</b>, and a pathway can itself be extended by adding more context. The system keeps everything clinicians enter, draws trends from it, raises only the alerts a named clinician has approved, supports analytics across patients, and can export a record as FHIR R4.</p>
+<p>EMR Enhancer is a standalone, multi-user EMR built around <b>context</b>. A clinician opens a patient, writes a short narrative, and adds context to it in the form of <b>element sets</b>: small, reusable groups of fields (for example Vitals, Fever chart, or Snake envenomation). Each context added builds up the patient's <b>trajectory</b>. A trajectory turned into a reusable template becomes a <b>pathway</b>, and a pathway can itself be extended by adding more context. The system keeps everything clinicians enter, draws trends from it, raises only the alerts a named clinician has approved, exports de-identified data for the separate Analytics app, and can export a record as FHIR R4.</p>
 <p>In short: <b>context &rarr; trajectory &rarr; pathway &rarr; more context.</b></p>
 <p class="mu">It is the system of record: records live in a shared database behind accounts and roles, with an audit trail, backups and a tested restore. It is a standalone EMR, not a plug-in for another system, and it does not launch inside one. <b>Not a regulated medical device and not for real patients until your site's named clinician has signed off the safety review and the restore test has passed.</b> Check your local health-data and medical-device-software rules before go-live.</p></div>
 
 <div class="cd"><b>What is new here</b>
 <ol>
 <li><b>Context first, structure added later.</b> A chart starts as a plain narrative. Structure arrives only when someone applies an element set, so the record grows with the patient instead of starting from a fixed encounter form.</li>
-<li><b>One timed-reading model behind every view.</b> A repeating, timestamped row is the single building block. The same rows feed the flowsheets, the fever chart, the daily insulin grid, trend charts, the Summary, the ward board, the FHIR export and the analytics. A new chart means a new set definition, not new code.</li>
+<li><b>One timed-reading model behind every view.</b> A repeating, timestamped row is the single building block. The same rows feed the flowsheets, the fever chart, the daily insulin grid, trend charts, the Summary, the ward board, the FHIR export and the analytics export. A new chart means a new set definition, not new code.</li>
 <li><b>Pathways that record, not enforce.</b> A pathway is saved from a real case as a list of sets and can be extended and re-versioned. It holds no doses, bands, order or deadlines, so it cannot judge whether care was on time. Pathway status shows only whether data has been entered.</li>
 <li><b>Safety by construction.</b> No clinical number is pre-filled (ranges, targets, thresholds and insulin bands are typed by the clinician). Doses are free text, never calculated. A rule fires only when it is enabled and approved by a named doctor or admin. Unverified codes never reach the export. Every latest value is shown with its age so a stale reading cannot look current.</li>
 <li><b>AI drafts, people approve.</b> A model can draft a set, a pathway skeleton or a rule from a clinician's plain words, but it never approves anything, never sees patient values, and never supplies a dose or threshold the clinician did not type. AI runs on the server, is de-identified, and is off by default. The system is fully usable with no model at all.</li>
@@ -274,7 +276,7 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 </ol></div>
 
 <div class="cd"><b>What has and has not been shown</b>
-<p><b>Delivered by the build:</b> a patient-centred shell; element sets, repeating readings and clinician-defined pathways; a rule evaluator with no shipped rules and a human approval gate; a server with database, REST API with validation and versioning, accounts and roles, append-only audit, patient and encounter records; live multi-user refresh, a ward board and handover; shared analytics with small-count protection; the content review queue and marketplace; an automated safety test pack; and a deployment with backup and a tested restore.</p>
+<p><b>Delivered by the build:</b> a patient-centred shell; element sets, repeating readings and clinician-defined pathways; a rule evaluator with no shipped rules and a human approval gate; a server with database, REST API with validation and versioning, accounts and roles, append-only audit, patient and encounter records; live multi-user refresh, a ward board and handover; a de-identified export for the Analytics app; the content review queue and marketplace; an automated safety test pack; and a deployment with backup and a tested restore.</p>
 <p><b>Not claimed:</b> that it improves outcomes, saves clinician time, or is accepted by any regulator or national programme. Those need evidence from real use. Peer review by informaticians is not regulatory approval, and a FHIR export is not conformant to any national profile until that profile is added and validated.</p>
 <p>Evidence worth collecting once running: time to chart a bedside set compared with the current system, share of fields left empty, FHIR validator pass rate, how often pathways are reused or edited, alert acknowledgement versus override rates, and clinician feedback on whether alerts are trusted and not noisy.</p></div>
 
@@ -311,7 +313,7 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 <tr><td style="vertical-align:top"><b>Alerts</b></td><td>Prompts from approved rules, with acknowledge and a timestamp. They are decision support, not orders.</td></tr>
 <tr><td style="vertical-align:top"><b>Export</b></td><td>The FHIR R4 bundle and its checks for this patient.</td></tr>
 </table>
-<p>A <b>+ Add</b> popover applies sets and pathways. A <b>Tools</b> menu holds the Set builder (including the AI schema draft), Codes, Analytics, the content review queue, the marketplace, and this About page. Clinical wording is used in the chart; terms such as element set, context, trajectory and apply stay in About and the Set builder.</p></div>
+<p>A <b>+ Add</b> popover applies sets and pathways. A <b>Tools</b> menu holds the Set builder (including the AI schema draft), Codes, Export for analytics, the content review queue, the marketplace, and this About page. Clinical wording is used in the chart; terms such as element set, context, trajectory and apply stay in About and the Set builder.</p></div>
 
 <div class="cd"><b>Core ideas</b>
 <div class="kh">Element sets</div>
@@ -381,10 +383,10 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 <li><b>No national profile.</b> The export uses plain base FHIR R4. It is not profiled to US Core or any national or regional profile and claims no conformance. Do not use it to exchange real patient data until the profile your jurisdiction requires is added and the output validated.</li>
 </ul>
 <div class="kh">Adapting to a national profile</div>
-<p>The profile step belongs to whoever deploys this open source project. Export is a separate step that reads a record and builds the bundle, so a profile can be added without changing sets, pathways, charts or analytics. A deployment would typically bind the codes the profile requires, map registration and identifiers to the profile, add element sets for any mandatory elements the record does not yet capture (values not entered are left out, never invented), and validate the bundle with a FHIR validator.</p></div>
+<p>The profile step belongs to whoever deploys this open source project. Export is a separate step that reads a record and builds the bundle, so a profile can be added without changing sets, pathways or charts. A deployment would typically bind the codes the profile requires, map registration and identifiers to the profile, add element sets for any mandatory elements the record does not yet capture (values not entered are left out, never invented), and validate the bundle with a FHIR validator.</p></div>
 
-<div class="cd"><b>Analytics</b>
-<p>Pick what to analyse: all patients, one disease, one pathway or one care set. Only patients who use the chosen item are counted, and only relevant cards are shown. For snake envenomation these include time to antivenom and adverse outcomes by delay band; other disease sets show their own timing and outcome counts; care and pathway scopes show set usage and readings per day. Analytics read the shared store, and <b>small counts are suppressed</b> so individuals cannot be picked out. Everything is <b>descriptive</b>: no causal claims and no judgement of whether care was adequate. Synthetic demo data can be loaded in a demo environment.</p></div>
+<div class="cd"><b>Export for analytics</b>
+<p>Analytics are not run in this app. They run in the separate Analytics app. Under Tools, <b>Export for analytics</b> (administrator and informatician; the server refuses everyone else) builds a de-identified FHIR bundle and a list of the elements it holds, for a ward and a date range. Dates become days since the encounter start, ids are replaced by pseudonyms, and names, MRNs and free text are left out. Each element set decides who may export it. Every export is written to the audit log. Nothing is judged: the data goes out as recorded. Demo mode has no server and cannot export.</p></div>
 
 <div class="cd"><b>Accounts, roles, audit and your data</b>
 <ul>
@@ -421,7 +423,7 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 <li>Sign notes; amend with a reason if something changes.</li>
 <li>Use the ward board and handover during shift change.</li>
 <li>Optionally attach verified codes and export a FHIR bundle.</li>
-<li>Study patterns across patients in Analytics.</li>
+<li>Export de-identified data for study in the Analytics app.</li>
 </ol>
 <p class="mu">Reminder: use only after your site's clinical safety sign-off and restore test. Until then, demo mode with synthetic data only.</p></div>
 </div>
@@ -479,9 +481,9 @@ body:has(#ho.on)::after{content:"Not for clinical use – synthetic data only";p
 <div class="pane" id="ex"><div class="cd"><b>FHIR R4 bundle</b> <span class="mu">(from the current case values; unverified codes are left out, text kept. In server mode each build is recorded in the audit log, and the chart must be linked to a patient.)</span><br>
 <button class="b" onclick="bundle()">Build bundle</button><button class="b" onclick="navigator.clipboard.writeText($('bj').textContent)">Copy</button><button class="b" onclick="dl()">Download</button>
 <div id="bchk" class="mu"></div><pre id="bj"></pre></div></div>
-<div class="pane" id="an"><div class="cd"><button class="b" onclick="synth()">Load 12 synthetic cases</button><button class="b" onclick="clearSyn()">Clear synthetic</button><span id="acnt" class="mu"></span>
-<div class="mu">Synthetic cases are random with a built-in delay/outcome relationship; they demonstrate the dashboard, not real clinical findings.</div></div>
-<div id="adash"></div></div></main>
+<div class="pane" id="an"><div class="cd"><b>Export for analytics</b>
+<p class="mu">This app does not run analytics. It builds a de-identified export (a FHIR bundle and a list of the elements it holds) that you load into the Analytics app. Dates become days since the start of each encounter, and names, MRNs and other identifiers are left out.</p>
+<div id="anBody"></div></div></div></main>
 <script>
 /* element-sets.js : seed registry for EMR Enhancer (Phase 2, chunk 8).
    Load it with a script tag (src="element-sets.js") BEFORE the main script in enhancer.html.
@@ -892,6 +894,7 @@ Object.assign(g,{toCdsCard,generateRuleDraft,ruleBox,pwRuleBoxes,ruleUI,cdsRende
 </script>
 <script src="store.js"></script>
 <script src="views.js"></script>
+<script src="package-lint.js"></script>
 <script src="demo-local.js"></script>
 <script>
 const $=i=>document.getElementById(i);
@@ -911,22 +914,33 @@ document.querySelectorAll('[data-cdraft]').forEach(b=>{b.disabled=!on('ruleDraft
 const n=$('aiNote');if(n)n.textContent=!SRV()?'AI needs the server. Demo mode has no AI.':on()?'AI is on. Text is de-identified on the server before it is sent.':'AI is off.'}
 
 const SEEDS=window.SEED_SETS||[];let SEQ=0;
-const DEMO=SEEDS.find(s=>s.demoCases)||{};
 /* Registry: seed sets (element-sets.js) + user sets (localStorage 'sets') */
 const userSets=()=>Store.userSets();
-const registry=()=>SEEDS.concat(userSets().filter(u=>u&&u.setId&&!SEEDS.some(x=>x.setId==u.setId)));
+const RD=(s,seed)=>window.PackageLint?PackageLint.registryDefaults(s,seed):s;   /* 42b1: source, readOnly, tier, forkedFrom, package get defaults; a missing package-lint.js leaves entries as they were */
+const tierBadgeHtml=s=>{if(!window.PackageLint)return'';const b=PackageLint.tierBadge(s);return`<span class="tier" data-tier="${b.key}" title="${esc(b.title)}">${esc(b.label)}</span>`};   /* 42b2 */
+const registry=()=>SEEDS.map(s=>RD(s,true)).concat(userSets().filter(u=>u&&u.setId&&!SEEDS.some(x=>x.setId==u.setId)).map(u=>RD(u,false)));
 /* getSet(id) = latest. getSet(id, entry) = the version recorded on a case's applied/pathway entry (chunk 30b).
    If that version is not loaded yet, the latest is shown and a notice appears once (the old version is fetched in the background). */
 const OLDV_SEEN={};
 function getSet(id,ref){const cur=registry().find(s=>s.setId==id),v=ref&&+ref.version;if(!cur||!v||v==(+cur.version||1))return cur;
 const o=Store.setVersion(id,v);if(o)return o;const k=id+'@'+v;if(!OLDV_SEEN[k]){OLDV_SEEN[k]=1;toast('Showing the latest version of "'+(cur.title||id)+'" (v'+(+cur.version||1)+'): this case used v'+v+', which is not available yet.')}return cur}
 const flS=s=>(s&&s.sections||[]).flatMap(x=>x.fields);
-function addUserSet(s){if(!Store.saveSet(s))toast('Storage full/blocked')}
+function addUserSet(s){if(!Store.saveSet(s)&&!Store.setIsReadOnly(s.setId))toast('Storage full/blocked')}
+/* 42b7: fork a read-only set to a local draft. The original is never changed; the copy is added to the registry like any set you made. */
+async function forkSet(id){if(!window.PackageLint)return toast('Package tools are not loaded.');const s=registry().find(x=>x.setId==id);if(!s)return toast('Set not found.');
+let c;try{c=PackageLint.forkEntry(s,registry().map(x=>x.setId),await PackageLint.contentHashOf(s))}catch(e){return toast('Could not make a local copy: '+e.message)}
+if(!Store.saveSet(c))return Store.setIsReadOnly(c.setId)?null:toast('Storage full/blocked');toast('Local copy saved as "'+c.title+'". The original is unchanged. Add the copy from the sidebar.');sidebar()}
 function asSet(sc){const t=(sc.diagnosis&&sc.diagnosis.text)||'Untitled',slug=t.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40);
 sc=Object.assign({},sc,{setId:'disease.user.'+slug+'_'+Date.now().toString(36)+(SEQ++).toString(36),kind:'disease',version:1,title:t,description:'Generated from diagnosis',contexts:['disease'],requires:[],suggests:[]});addUserSet(sc);return sc}
 /* Case model: {id,narrative,applied:[{setId,version,addedAt}],values,updatedAt} */
 function newCase(){const t=new Date().toISOString();return{id:crypto.randomUUID(),patient:{name:'',ageSex:'',bed:'',mrn:''},narrative:'',applied:[],pathways:[],alertLog:[],values:{},ns:true,rp:true,updatedAt:t,saved:t}}
-function applySet(c,id){const _s=getSet(id);if(!_s||_s.kind=='pathway')return null;if(!c.applied.some(a=>a.setId==id))c.applied.push({setId:id,version:+_s.version||1,addedAt:new Date().toISOString()});c.updatedAt=new Date().toISOString();return c}
+
+/* 43b2: a draft made from a request (it carries provenance.requestText) and not yet approved (tier is not local-reviewed or marketplace-verified) is never added to a real chart. A chart is synthetic in Demo mode or when it is marked demo:true. Checked in applySet and applyPathway, so every way of adding a set or pathway is covered. */
+const isReqDraft=s=>!!(s&&s.provenance&&typeof s.provenance=='object'&&typeof s.provenance.requestText=='string'&&s.tier!=='local-reviewed'&&s.tier!=='marketplace-verified');
+const caseIsSynthetic=c=>Store.mode==='local'||!!(c&&c.demo===true);
+let APPLY_BLOCK='';
+function draftBlock(c,s){if(isReqDraft(s)&&!caseIsSynthetic(c)){APPLY_BLOCK='\u201c'+(s.title||s.setId)+'\u201d is a draft made from a request and has not been approved. It cannot be added to a real chart. You can try it on a demo or synthetic case.';return true}return false}
+function applySet(c,id){APPLY_BLOCK='';const _s=getSet(id);if(!_s||_s.kind=='pathway')return null;if(draftBlock(c,_s))return null;if(!c.applied.some(a=>a.setId==id))c.applied.push({setId:id,version:+_s.version||1,addedAt:new Date().toISOString()});c.updatedAt=new Date().toISOString();return c}
 function removeSet(c,id){const s=getSet(id);if(!s||!c.applied.some(a=>a.setId==id))return false;
 const pk=vk(id,'__protocol'),own=[...new Set(flS(s).map(f=>f.repeat?vk(id,'@'+(f.group||f.id)):vk(id,f.id)))].concat(pk),filled=own.filter(k=>k==pk?(c.values[k]&&((c.values[k].bands||[]).length||c.values[k].verifiedBy)):has(c,k));
 if(filled.length&&!confirm('Remove "'+(s.title||id)+'"? '+filled.length+' entered value(s) will be deleted.'))return false;
@@ -1001,7 +1015,7 @@ function showShellTab(id){
   document.querySelectorAll('[data-shell-t]').forEach(x=>{const active=x.dataset.shellT===id;x.classList.toggle('on',active);if(x.closest('#shellnav')){if(active)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')}});
   const pane=$(id);if(pane)pane.classList.add('on');
   const tools=$('tools');if(tools&&['in','fh','an','ab'].includes(id))tools.open=false;
-  if(id==='an')ana();if(id==='fh'){codesUI();lcLoad()}if(id==='ov')summaryWorkspace();
+  if(id==='an')anRender();if(id==='fh'){codesUI();lcLoad()}if(id==='ov')summaryWorkspace();
   if(id==='cp')renderCase();if(id==='flw'){renderFlowsheets();renderCase()}if(id==='nt')renderNotes();if(id==='pw')pathwayWorkspace();if(id==='al'){cdsRender();alertsRender()}if(document.querySelector('.pane[data-surface-pane]#'+id))surfaceRender(id);
 }
 document.querySelectorAll('[data-shell-t]').forEach(b=>b.addEventListener('click',()=>{if(!CASE_OPEN)return toast('Open or create a case first.');showShellTab(b.dataset.shellT)}));
@@ -1027,6 +1041,89 @@ function surfaceTabsBuild(){
 }
 try{surfaceTabsBuild()}catch(e){/* registry not ready at load; built again when the chart opens */}
 $('settingsTool').addEventListener('click',()=>{if($('tools'))$('tools').open=false;tg('set');aiPaint();aiAdmin();evPaint()});
+/* 42c1: Tools > Import package file. Reads a package file and shows what lintPackage finds. Nothing is saved here (42c2 stores a package that passes). */
+let PKG_LAST=null;
+function pkgLintShow(text,name){const o=$('pkgOut'),say=h=>{o.innerHTML=h};
+if(!window.PackageLint){say('<div class="cd"><b>Package tools are not loaded.</b></div>');return null}
+let pkg;try{pkg=JSON.parse(text)}catch(e){say('<div class="cd"><b>This is not a JSON file.</b> <span class="mu">'+esc(e.message)+'</span></div>');return null}
+PKG_LAST=pkg;const r=PackageLint.lintPackage(pkg,{roles:ROLE_LIST,verifiedCodes:Object.keys(Store.codes())}),m=pkg&&pkg.manifest&&typeof pkg.manifest==='object'?pkg.manifest:{};
+const tbl=a=>a.length?'<div style="overflow-x:auto"><table class="pt pst">'+a.map(x=>`<tr><td><code>${esc(x.code)}</code></td><td class="mu">${esc(x.path)}</td><td>${esc(x.message)}</td></tr>`).join('')+'</table></div>':'';
+say(`<div class="cd"><b>${esc(name||'package file')}</b><div class="mu">${esc(String(m.id||'no id'))} · version ${esc(String(m.version||'none'))}</div>`+(r.errors.length?`<div style="margin-top:6px"><b>${r.errors.length} error${r.errors.length==1?'':'s'}: this file cannot be imported.</b></div>`+tbl(r.errors):'<div style="margin-top:6px"><b>No errors.</b></div>')+(r.warnings.length?`<div style="margin-top:6px"><b>${r.warnings.length} warning${r.warnings.length==1?'':'s'}</b> <span class="mu">(a warning does not block an import)</span></div>`+tbl(r.warnings):'')+(r.errors.length?'<div class="mu" style="margin-top:6px">Nothing is saved from this screen.</div>':Store.mode==='local'?'<div style="margin-top:8px"><button class="b sm" id="pkgInstall" type="button">Install (Demo mode)</button> <span class="mu">Checks the hash, then stores the set read-only.</span></div>':'<div class="mu" style="margin-top:6px">Installing from a file in server mode comes with the marketplace.</div>')+'</div>');return r}
+/* end pkgLintShow */
+/* 42c2: install a package that passed (Demo mode only). The hash is recomputed here; nothing is replaced; rules arrive disabled. */
+async function pkgInstall(){const o=$('pkgOut');if(!PKG_LAST||Store.mode!=='local')return;
+let res;try{res=await PackageLint.prepareInstall(PKG_LAST,{roles:ROLE_LIST,verifiedCodes:Object.keys(Store.codes()),existingIds:registry().map(x=>x.setId)})}catch(e){o.innerHTML='<div class="cd"><b>Could not check the package.</b> <span class="mu">'+esc(e.message)+'</span></div>';return}
+if(!res.ok){o.innerHTML='<div class="cd"><b>Not installed.</b>'+res.problems.map(p=>`<div>${esc(p.message)}</div>`).join('')+'</div>';return}
+if(!Store.saveSet(res.entry)){o.innerHTML='<div class="cd"><b>Not installed.</b> <span class="mu">The set could not be saved.</span></div>';return}
+PKG_LAST=null;sidebar();o.innerHTML=`<div class="cd"><b>Installed: ${esc(res.entry.title||res.entry.setId)}</b><div class="mu">Read-only, tier Marketplace-verified, hash ${esc(res.hash.slice(0,12))}. The hash matches the one in the file. The file itself was not signed, so nothing was checked against a signed index.</div></div>`}
+$('pkgOut').addEventListener('click',e=>{if(e.target&&e.target.id==='pkgInstall')pkgInstall()});
+$('pkgTool').addEventListener('click',()=>{if($('tools'))$('tools').open=false;$('pkgPanel').hidden=false;$('pkgOut').innerHTML='';$('pkgFile').value='';$('pkgFile').focus()});
+$('pkgClose').addEventListener('click',()=>{$('pkgPanel').hidden=true});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('pkgPanel').hidden)$('pkgPanel').hidden=true});
+$('pkgFile').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];if(!f)return;if(f.size>2*1048576){$('pkgOut').innerHTML='<div class="cd"><b>The file is larger than 2 MB.</b></div>';return}
+const r=new FileReader();r.onload=()=>pkgLintShow(String(r.result),f.name);r.onerror=()=>{$('pkgOut').innerHTML='<div class="cd"><b>The file could not be read.</b></div>'};r.readAsText(f)});
+
+/* 43a1/43a2c: Tools > Request a feature. Sends the sentence (after the user sees the de-identified preview) to /llm/feature-request and shows the validated draft. Nothing is saved here (43a3 saves a draft). Server mode only. */
+let REQ_DRAFT=null;
+function reqOwnerFill(){const w=$('reqOwnerWrap'),k=(document.querySelector('input[name=reqKind]:checked')||{}).value;w.hidden=k!=='rule';if(k!=='rule')return;const sel=$('reqOwner'),keep=sel.value;sel.innerHTML=registry().filter(s=>s.kind!='pathway').map(s=>`<option value="${esc(s.setId)}">${esc(s.title||s.setId)}</option>`).join('');if(keep)sel.value=keep}
+function reqDraftHtml(k,r,owner){const d=r.draft||{};let h='';
+if(k==='set'){h='<div><b>'+esc(d.diagnosis&&d.diagnosis.text||'')+'</b> <span class="mu">(draft form, no codes)</span></div>'+(d.sections||[]).map(sc=>'<div style="margin-top:4px"><b>'+esc(sc.title||'')+'</b></div><div class="mu">'+(sc.fields||[]).map(f=>esc(f.label)+' ('+esc(f.type)+(f.unit?', '+esc(f.unit):'')+')').join(' · ')+'</div>').join('')}
+else if(k==='pathway'){h='<div><b>'+esc(d.title||'')+'</b> <span class="mu">(draft pathway)</span></div><div class="mu">'+(d.setIds||[]).map(id=>{const s=getSet(id);return esc(s?s.title||s.setId:id)}).join(' · ')+'</div>'}
+else{const os=getSet(owner);let lab=d.fieldRef||'';(os&&os.sections||[]).forEach(sc=>(sc.fields||[]).forEach(f=>{if(os.setId+'/'+f.id===d.fieldRef)lab=f.label||f.id}));h='<div><b>Draft rule</b> <span class="mu">(disabled until a doctor enables it)</span></div><div>'+esc(lab)+' '+esc(d.op)+' '+esc(d.threshold)+(d.unit?' '+esc(d.unit):'')+' · '+esc(d.indicator)+'</div><div class="mu">'+esc(d.summary||'')+'</div>'}
+const w=(r.warnings||[]).map(x=>'<div class="mu">'+esc(x)+'</div>').join('');return h+w}
+async function reqShow(){const t=$('reqText').value.trim(),k=(document.querySelector('input[name=reqKind]:checked')||{}).value||'set',o=$('reqOut');
+if(t.length<10){REQ_DRAFT=null;o.innerHTML='<div class="cd"><b>Please write a little more.</b> <span class="mu">At least 10 characters.</span></div>';return}
+if(aiBlocked('feature'))return;const owner=$('reqOwner').value;if(k==='rule'&&!owner){o.innerHTML='<div class="cd"><b>Choose the set the rule is for.</b></div>';return}
+const body={text:t,output:k};if(k==='rule')body.owner=owner;REQ_DRAFT=null;$('reqGo').disabled=true;o.innerHTML='<div class="mu">Working…</div>';
+try{const r=await aiCall('feature',body,'Request a feature');if(!r){o.innerHTML='<div class="cd"><b>Cancelled.</b> <span class="mu">Nothing was sent.</span></div>';return}
+const vd=window.PackageLint&&PackageLint.validateDraft?PackageLint.validateDraft(r.draft,k,{requestText:t,knownSetIds:registry().map(x=>x.setId),fieldRefs:registry().flatMap(s=>(s.sections||[]).flatMap(sc=>(sc.fields||[]).map(f=>s.setId+'/'+f.id))),ownerSetId:k==='rule'?owner:null}):null;
+if(!vd||!vd.ok){o.innerHTML='<div class="cd"><b>The draft was not accepted.</b> <span class="mu">Nothing was saved.</span>'+(vd?vd.errors.slice(0,5).map(x=>'<div class="mu">'+esc(x.message)+'</div>').join(''):'<div class="mu">The check could not run.</div>')+'</div>';return}
+REQ_DRAFT={requestText:t,output:k,owner:k==='rule'?owner:null,draft:r.draft,warnings:r.warnings||[],provenance:r.provenance||null,at:new Date().toISOString()};
+o.innerHTML='<div class="cd"><b>Draft ready (not saved).</b><div class="mu">Check it before it is used. Nothing becomes part of the chart until it is reviewed.</div><div style="margin-top:6px">'+reqDraftHtml(k,r,owner)+'</div>'+(k!=='rule'&&r.provenance?'<div style="margin-top:6px"><button class="b sm" type="button" id="reqSave">Save as local draft</button></div>':'<div class="mu" style="margin-top:6px">Rules are not saved from here: write the rule in the rule form, using this draft as a guide.</div>')+'</div>'}
+catch(e){o.innerHTML='<div class="cd"><b>No draft was made.</b> <span class="mu">'+esc((e&&e.message)||'The request failed.')+' Nothing was saved.</span></div>'}
+finally{$('reqGo').disabled=false}}
+document.querySelectorAll('input[name=reqKind]').forEach(x=>x.addEventListener('change',reqOwnerFill));
+/* 43a3: save a validated set or pathway draft as a local draft, with provenance {requestText, model, at}. The server marks every user set tier local-draft. Rule drafts are not saved here. */
+function reqSave(){const d=REQ_DRAFT,o=$('reqOut');if(!d||d.saved||!d.draft||d.output==='rule'||!d.provenance)return;const prov=Object.assign({},d.provenance);let id,title;
+if(d.output==='set'){const s=asSet(Object.assign({},d.draft,{provenance:prov}));id=s.setId;title=s.title}
+else{title=String(d.draft.title||'Untitled').slice(0,80);id='pathway.user.'+(title.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40)||'pathway')+'_'+Date.now().toString(36);
+addUserSet({setId:id,kind:'pathway',version:1,title,description:'Draft from a request (not reviewed)',contexts:['care'],requires:[],suggests:[],members:(d.draft.setIds||[]).map(x=>({setId:x,optional:false})),rules:[],provenance:prov})}
+if(!registry().some(x=>x.setId==id))return toast('The draft could not be saved.');
+d.saved=true;const b=$('reqSave');if(b)b.disabled=true;sidebar();reqDraftsPaint();o.insertAdjacentHTML('beforeend','<div class="mu" style="margin-top:6px">Saved as a local draft: '+esc(title)+'. It has not been reviewed.</div>')}
+$('reqOut').addEventListener('click',e=>{if(e.target&&e.target.id==='reqSave')reqSave()});
+/* 43b1: live lint of a saved draft. The draft is wrapped in a made-up manifest (draft.s_<id>, 0.0.1, emr) and run through PackageLint.lintPackage with this app's roles, verified codes and registry ids. Provenance and registry fields are not part of a package, so they are left out. Recomputed every time the list is painted. This is a check of shape, not a review. */
+const LINT_PLAIN={bad_access:'It has no valid access list yet: say which roles may view, enter, amend, approve, configure and export it.',patient_like:'Some text looks like patient data (a long number, phone, e-mail, name or MRN). Remove it.',missing_references:'It has rules, bands or dose-like text but lists no source. Add a reference.',bad_reference:'A reference entry is incomplete or repeated.',unknown_field_type:'A field has a type this app does not know.',bad_view:'The display settings (view) of this set are not valid.',bad_pathway_view:'The display settings or members of this pathway are not valid.',banned_key:'It contains a key that is not allowed (eval or function).',content_too_large:'It is larger than 1 MB.',too_deep:'It is nested too deeply.',bad_rules:'The rules list is not valid.',bad_rule_op:'A rule uses an operator this app does not allow.',bad_rule_threshold:'A rule threshold is not a number.',content_not_json:'It holds a value that cannot be stored.',no_role_list:'The check could not run completely: this app has no role list.',no_validator:'The check could not run completely: a validator is not loaded.',unverified_coding:'A code on a field is not in the verified codes list.',empty_rationale:'A field has an empty rationale.',duplicate_field_id:'Two fields share the same id.'};
+function draftLint(s){if(!window.PackageLint||!s)return null;try{const c=JSON.parse(JSON.stringify(s));['provenance','source','readOnly','tier','forkedFrom','package'].forEach(k=>delete c[k]);
+const slug=String(s.setId||'x').toLowerCase().replace(/[^a-z0-9_]+/g,'_').replace(/^_+|_+$/g,'')||'x';
+return PackageLint.lintPackage({manifest:{id:'draft.s_'+slug,version:'0.0.1',targetApp:'emr',kind:s.kind==='pathway'?'pathway':'set'},content:c},{roles:ROLE_LIST,verifiedCodes:Object.keys(Store.codes()),knownSetIds:registry().map(x=>x.setId)})}catch(e){return null}}
+function draftLintHtml(s){const r=draftLint(s);if(!r)return'';const li=a=>a.map(x=>'<div>'+esc(LINT_PLAIN[x.code]||x.message)+' <span class="mu">('+esc(x.path)+')</span></div>').join('');
+return'<details style="margin-top:4px"><summary class="mu">'+(r.errors.length?'<b>'+r.errors.length+' problem'+(r.errors.length==1?'':'s')+' to fix before review</b>':'No problems found')+(r.warnings.length?' · '+r.warnings.length+' note'+(r.warnings.length==1?'':'s'):'')+'</summary>'+li(r.errors)+li(r.warnings)+'<div class="mu">This checks the shape of the draft only. It is not a review.</div></details>'}
+/* 43b4: Submit for review. Shown for a draft in My drafts. Needs the server and a role with content.submit; the button is enabled only when the live lint finds no errors (the server lints again and decides). Sends {setId, version} to POST /review-requests. Nothing is applied or approved: a submitted version only waits for a reviewer. SUBMITTED remembers this session only; reopening the app shows the button again and the server answers "already waiting" if it is. Editing a submitted draft makes a new version, which is submitted separately: withdrawing the older request is not built yet. */
+const SUBMITTED=new Set();
+function reqSubmitHtml(s){const key=s.setId+'@'+(s.version||1);
+if(!SRV())return'<div class="mu" style="margin-top:4px">Review needs the server. Demo mode cannot submit.</div>';
+if(!(Store.can&&Store.can('content.submit')))return'<div class="mu" style="margin-top:4px">Your role may not submit for review.</div>';
+if(SUBMITTED.has(key))return'<div class="mu" style="margin-top:4px"><b>Submitted for review</b> (version '+esc(s.version||1)+'). It has not been reviewed.</div>';
+const r=draftLint(s),bad=!r||r.errors.length>0;
+return'<div style="margin-top:4px"><button class="b sm" type="button" data-submit="'+esc(s.setId)+'" data-v="'+esc(s.version||1)+'"'+(bad?' disabled title="Fix the problems listed above first."':'')+'>Submit for review</button></div>'}
+async function reqSubmit(btn){const id=btn.dataset.submit,v=+btn.dataset.v,key=id+'@'+v;btn.disabled=true;
+try{await Store.api('POST','/review-requests',{setId:id,version:v});SUBMITTED.add(key);toast('Submitted for review. It has not been reviewed yet.')}
+catch(e){const m=String((e&&e.message)||'');
+if(/already waiting/i.test(m)){SUBMITTED.add(key);toast('This version is already waiting for review.')}
+else if(e&&e.status===409)toast('This draft has a newer version. Submit the newest one.');
+else if(e&&e.status===422)toast('The server found problems in this draft. Fix them and try again.');
+else if(e&&e.status===403)toast('Your role may not submit for review.');
+else toast('Could not submit: '+(m||'error'))}
+reqDraftsPaint()}
+/* 43a3c: My drafts. Sets and pathways saved from a request (they carry provenance.requestText), newest first. Read-only list: a draft is not reviewed and nothing here applies it. */
+function reqDraftsPaint(){const e=$('reqDrafts');if(!e)return;const L=userSets().filter(s=>s&&s.provenance&&typeof s.provenance=='object'&&typeof s.provenance.requestText=='string').sort((a,b)=>String(b.provenance.at||'').localeCompare(String(a.provenance.at||'')));
+e.innerHTML='<b>My drafts</b>'+(L.length?L.map(s=>{const p=s.provenance,d=p.at&&!isNaN(new Date(p.at))?new Date(p.at).toLocaleString():'';return'<div class="cd" style="margin:4px 0"><div class="sh"><b>'+esc(s.title||s.setId)+'</b><span class="mu">'+esc(s.kind||'')+' · v'+esc(s.version||1)+'</span>'+tierBadgeHtml(s)+'</div><div class="mu">'+esc(String(p.requestText).slice(0,160))+'</div><div class="mu">'+esc(d)+(p.model?' · '+esc(p.model):'')+' · not reviewed</div>'+draftLintHtml(s)+reqSubmitHtml(s)+'</div>'}).join(''):'<div class="mu">No drafts yet.</div>')}
+$('reqDrafts').addEventListener('click',e=>{const b=e.target&&e.target.closest&&e.target.closest('[data-submit]');if(b&&!b.disabled)reqSubmit(b)});
+$('reqTool').addEventListener('click',()=>{if($('tools'))$('tools').open=false;$('reqPanel').hidden=false;$('reqOut').innerHTML='';reqOwnerFill();reqDraftsPaint();$('reqText').focus()});
+$('reqClose').addEventListener('click',()=>{$('reqPanel').hidden=true});
+$('reqText').addEventListener('input',()=>{$('reqCount').textContent=$('reqText').value.length+' / 500'});
+$('reqGo').addEventListener('click',reqShow);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('reqPanel').hidden)$('reqPanel').hidden=true});
 
 // Chunk 25G: a local presentation preference; it never changes clinical data.
 function setDensity(compact){document.body.classList.toggle('compact',!!compact);const b=$('densityToggle');if(b){b.setAttribute('aria-pressed',compact?'true':'false');b.textContent=compact?'Comfortable view':'Compact view'}try{localStorage.setItem('emrDensity',compact?'compact':'comfortable')}catch(e){}}
@@ -1209,7 +1306,7 @@ if(!CUR.applied.length)h+='<div class="cd mu">No element sets yet. Add one from 
 CUR.applied.forEach(a=>{const s=getSet(a.setId,a);
 if(s&&(s.kind==='disease'||s.kind==='template'))return;
 if(!s){h+=`<div class="cd"><span class="mu">Set not found in registry: ${esc(a.setId)}</span> <button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div>`;return}
-h+=`<div class="cd" id="cd_${esc(a.setId)}"><div class="sh"><b>${esc(s.title||s.setId)}</b><span class="mu">${esc(s.kind||'')} · v${esc(s.version||1)}</span><span style="flex:1"></span><button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div>${accLine(s)?`<div class="mu" style="margin:2px 0 4px">${esc(accLine(s))}</div>`:''}<details open><summary class="mu">Fields</summary>${setForm(s)}</details></div>`});
+h+=`<div class="cd" id="cd_${esc(a.setId)}"><div class="sh"><b>${esc(s.title||s.setId)}</b><span class="mu">${esc(s.kind||'')} · v${esc(s.version||1)}</span>${tierBadgeHtml(s)}<span style="flex:1"></span>${s.readOnly?`<button class="b sm" onclick="forkSet('${esc(s.setId)}')" title="Copy this set into a local draft you can edit. The original stays unchanged.">Make local copy</button>`:''}<button class="b sm" data-rm="${esc(a.setId)}">Remove</button></div>${accLine(s)?`<div class="mu" style="margin:2px 0 4px">${esc(accLine(s))}</div>`:''}<details open><summary class="mu">Fields</summary>${setForm(s)}</details></div>`});
 $('cbody').innerHTML=h;
 Object.keys(CUR.values).forEach(k=>{const e=$('f_'+k),v=CUR.values[k];if(e&&!Array.isArray(v))e.value=v});
 drawAll();calc();codesUI();sidebar();picker();qbar();cdsRender();pathwayWorkspace()}
@@ -1218,14 +1315,14 @@ const chip=s=>`<button class="chip" data-add="${esc(s.setId)}" title="${esc(s.de
 $('chips').innerHTML=sg.length?sg.map(chip).join(''):'<span class="mu">No suggestions yet. Pick a set below; the most used ones appear here.</span>';
 const r=registry().filter(s=>inCtx(s)&&!isEmrView(s)&&(!q||[s.title,s.description,s.kind,s.setId].join(' ').toLowerCase().includes(q)));let h='';
 const sgp=SUGG.id==CUR.id?(SUGG.pw||[]).filter(x=>isPw(getSet(x.pathwayId))&&!(CUR.pathways||[]).some(p=>p.pathwayId==x.pathwayId)):[],sgpIds=new Set(sgp.map(x=>x.pathwayId));
-K.forEach(k=>{const m=r.filter(s=>kd(s)==k);if(!m.length)return;const head=(k=='template'||k=='disease')?'Forms':k=='care'?'Flowsheets':k=='pathway'?'Pathways':'Other';if(k=='template'||k=='care'||k=='pathway'||k=='custom')h+=`<div class="kh">${head}</div>`+m.map(s=>k=='pathway'?pwRow(s)+(PWPV==s.setId&&!sgpIds.has(s.setId)?pwPrev(s):''):done.has(s.setId)?`<div class="row off">✓ ${esc(s.title||s.setId)}</div>`:`<button class="row" data-add="${esc(s.setId)}">${esc(s.title||s.setId)}<span class="mu">${esc(s.description||'')}</span></button>`).join('')});
+K.forEach(k=>{const m=r.filter(s=>kd(s)==k);if(!m.length)return;const head=(k=='template'||k=='disease')?'Forms':k=='care'?'Flowsheets':k=='pathway'?'Pathways':'Other';if(k=='template'||k=='care'||k=='pathway'||k=='custom')h+=`<div class="kh">${head}</div>`+m.map(s=>k=='pathway'?pwRow(s)+(PWPV==s.setId&&!sgpIds.has(s.setId)?pwPrev(s):''):done.has(s.setId)?`<div class="row off">✓ ${esc(s.title||s.setId)}</div>`:`<button class="row" data-add="${esc(s.setId)}">${esc(s.title||s.setId)} ${tierBadgeHtml(s)}<span class="mu">${esc(s.description||'')}</span></button>`).join('')});
 $('slist').innerHTML=h||'<span class="mu">No matching sets.</span>';
 const sg2=SUGG.id==CUR.id?SUGG.items.filter(x=>getSet(x.setId)&&!done.has(x.setId)):[];
 $('sugs').innerHTML=sg2.map(x=>{const t=getSet(x.setId);return`<button class="chip" data-add="${esc(x.setId)}" title="${esc(x.reason)}">+ ${esc(t.title||x.setId)}</button><div class="mu" style="margin:-2px 0 4px 8px">${esc(x.reason)}</div>`}).join('')+sgp.map(x=>{const t=getSet(x.pathwayId);return`<button class="chip" data-pw="${esc(x.pathwayId)}" title="${esc(x.reason)}">Preview pathway: ${esc(t.title||x.pathwayId)}</button><div class="mu" style="margin:-2px 0 4px 8px">${esc(x.reason)}</div>`+(PWPV==x.pathwayId?pwPrev(t):'')}).join('')}
 $('sb').addEventListener('click',e=>{const a=e.target.closest('[data-add]');if(a){addSet(a.dataset.add);$('addPanel').classList.remove('open');return}const pw=e.target.closest('[data-pw]');if(pw){pwOpen(pw.dataset.pw);return}const pg=e.target.closest('[data-pwgo]');if(pg){pwGo(pg.dataset.pwgo);$('addPanel').classList.remove('open');return}const pc=e.target.closest('[data-pwcl]');if(pc){pwOpen('');return}});
 function picker(){const c=getC().filter(x=>!x.syn),lab=x=>(pvLabel(x)+(x.saved||x.updatedAt||'').slice(0,10))+' · '+((x.narrative||'').trim().slice(0,28)||(x.applied||[]).map(a=>{const s=getSet(a.setId);return s&&s.title}).filter(Boolean).join(', ').slice(0,28)||'(empty)');
 $('cpick').innerHTML='<option value="">— current / new case —</option>'+c.map(x=>`<option value="${esc(x.id)}">${esc(lab(x))}</option>`).join('');$('cpick').value=c.some(x=>x.id==CUR.id)?CUR.id:''}
-function addSet(id){const had=CUR.applied.some(a=>a.setId==id);if(!applySet(CUR,id))return toast('Set not found: '+id);if(!had)bumpUsage(id);persist();renderCase();renderPatientBanner()}
+function addSet(id){const had=CUR.applied.some(a=>a.setId==id);if(!applySet(CUR,id))return toast(APPLY_BLOCK||'Set not found: '+id);if(!had)bumpUsage(id);persist();renderCase();renderPatientBanner()}
 function rmSet(id){if(!getSet(id))CUR.applied=CUR.applied.filter(a=>a.setId!=id);else if(!removeSet(CUR,id))return;persist();renderCase();renderPatientBanner()}
 function ensureRowIds(c){Object.keys(c.values||{}).forEach(k=>{if(/\/@[^/]+$/.test(k)&&Array.isArray(c.values[k]))c.values[k].forEach(r=>{if(r&&typeof r=='object'&&!Array.isArray(r)&&!r.__id)r.__id=crypto.randomUUID()})})}
 /* Deleting a reading = mark it entered in error with a required reason. It leaves the chart; the server keeps it, hidden, with the reason. */
@@ -1312,19 +1409,19 @@ toast('Code verified and added to the verified list.');try{await Store.refreshCo
 const CODING_NAMES=()=>{const m={local:'My own local codes',none:'No code'};Store.codeSystems().forEach(x=>{m[x.id]=x.name||x.id});return m};
 const codingAllowOf=f=>f&&f.coding&&Array.isArray(f.coding.allow)&&f.coding.allow.length?f.coding.allow:['none'];
 function codingCell(s,f){const al=codingAllowOf(f),nm=CODING_NAMES(),isSeed=SEEDS.some(x=>x.setId==s.setId),cur=registry().find(x=>x.setId==s.setId);
-if(isSeed||!cur||(+cur.version||1)!=(+s.version||1))return`${al.map(a=>esc(nm[a]||a)).join(', ')} <span class="mu" style="font-size:11px">(${isSeed?'seed set, read-only':'older version of the set, read-only'})</span>`;
+if(isSeed||!cur||cur.readOnly||(+cur.version||1)!=(+s.version||1))return`${al.map(a=>esc(nm[a]||a)).join(', ')} <span class="mu" style="font-size:11px">(${isSeed?'seed set, read-only':cur&&cur.readOnly?'read-only set':'older version of the set, read-only'})</span>`;
 const ids=Store.codeSystems().filter(x=>x.kind!='local').map(x=>x.id).concat(['local','none']),sk=s.setId+'|'+f.id;
 return`<span data-cc="${esc(sk)}">${ids.map(a=>`<label style="margin-right:6px;white-space:nowrap"><input type="checkbox" value="${esc(a)}"${al.includes(a)?' checked':''} onchange="codingTick(this)"> ${esc(nm[a]||a)}</label>`).join('')}</span> <button class="b sm" onclick="codingSave('${esc(sk)}')">Save</button>`}
 function codingTick(el){if(!el.checked)return;el.closest('[data-cc]').querySelectorAll('input').forEach(i=>{if(i!==el&&(el.value=='none'||i.value=='none'))i.checked=false})}
 function codingSave(k){const[sid,fid]=k.split('|'),cur=registry().find(x=>x.setId==sid);
-if(!cur||SEEDS.some(x=>x.setId==sid))return toast('This set is read-only. Its coding choices change with a new version of the set.');
+if(!cur||cur.readOnly||SEEDS.some(x=>x.setId==sid))return toast('This set is read-only. Its coding choices change with a new version of the set.');
 const box=[...document.querySelectorAll('[data-cc]')].find(e=>e.dataset.cc==k);if(!box)return;
 let a=[...box.querySelectorAll('input:checked')].map(i=>i.value);if(!a.length)a=['none'];
 const b=binds()[k];if(b&&!(a.includes(b.system)||(lsys(b.system)&&a.includes('local'))))return toast('This field has a '+b.system+' code attached. Detach it first, or keep that system ticked.');
 const n=cur,f=flS(n).find(y=>y.id==fid);if(!f)return;
 if(f.coding&&f.coding.code)return toast('This field has a draft code. Verify and attach it in the form below, or detach it, before changing the choices.');
 if(a.length==1&&a[0]=='none')delete f.coding;else f.coding={allow:a};
-n.version=(+cur.version||1)+1;if(!Store.saveSet(n))return toast('Storage full/blocked');applyBinds();toast('Coding choices saved as version '+n.version+' of this set.');codesUI()}
+n.version=(+cur.version||1)+1;n.tier='local-draft';if(!Store.saveSet(n))return Store.setIsReadOnly(n.setId)?null:toast('Storage full/blocked');applyBinds();toast('Coding choices saved as version '+n.version+' of this set.');codesUI()}
 function unbind(k){const b=binds();delete b[k];Store.saveBinds(b);const[sid,fid]=k.split('|'),s=getSet(sid),f=s&&flS(s).find(y=>y.id==fid);if(f){const al=f.coding&&f.coding.allow;if(al)f.coding={allow:al};else delete f.coding}codesUI()}
 /* P4d: attach a verified local code to a field. Only a code already in the verified list can be attached, and its verified display is the one kept. Nothing typed here creates a code. */
 function attachLocal(sys,code){const k=$('afld').value;if(!k)return toast('Choose a field to attach to. A local code is attached to a field, it is not added to a list here.');
@@ -1349,6 +1446,8 @@ Store.saveCodes(t);confirmed.forEach(([sy,cd,d])=>Store.saveLiveResult(sy,cd,tru
 /* FHIR bundle: Patient, optional Composition (narrative), Condition per disease set, one resource per value / per repeat row, Provenance.
    Protocol data (setId/__protocol bands) is never read here, so sliding-scale bands cannot reach the bundle. Doses are copied exactly as typed. */
 const isoOf=(f,x)=>{if(f.type=='date')return String(x);const d=new Date(x);return isNaN(d)?null:d.toISOString()};
+/* 42c3: provenance tail for one set or pathway: its tier, and for a package its id, version and full content hash. Read from the registry entry, never typed. */
+const provTail=s=>{const p=s&&s.package&&typeof s.package=='object'?s.package:null;return ', tier '+((s&&s.tier)||'local-draft')+(p?', package '+p.id+' v'+p.version+', hash '+String(p.contentHash||'none'):'')};
 /* Chunk 34d: in server mode the Patient (MRN, name, gender, birth date) and the Encounter come from GET /cases/:id/export, which writes an audit row for every build.
    A chart with no patient is refused there (never an invented one). Demo mode keeps the synthetic placeholder. Everything below the Patient and Encounter is built here as before. */
 const ENC_FIELD={Observation:'encounter',Procedure:'encounter',Composition:'encounter',Condition:'encounter',CarePlan:'encounter',MedicationAdministration:'context'};
@@ -1420,7 +1519,7 @@ category:[{text:'Care pathway'}],subject:{reference:pid}};
 if(x.startedAt&&!isNaN(new Date(x.startedAt)))cp.period={start:new Date(x.startedAt).toISOString()};
 if(acts.length)cp.activity=acts;add(cp);cps++});
 add({resourceType:'Provenance',target:E.map(e=>({reference:e.fullUrl})),recorded:new Date().toISOString(),agent:[{who:{display:'EMR Enhancer (synthetic data)'}}],
-entity:sets.map(s=>({role:'source',what:{display:(s.title||s.setId)+' ['+(s.kind||'custom')+', v'+(s.version||1)+', '+s.setId+']'}})).concat(pws.map(x=>{const p=getSet(x.pathwayId,x);return{role:'source',what:{display:'Pathway: '+(p?p.title||p.setId:x.pathwayId)+' [pathway, v'+(+x.version||1)+', '+x.pathwayId+', started '+x.startedAt+']'}}}))});
+entity:sets.map(s=>({role:'source',what:{display:(s.title||s.setId)+' ['+(s.kind||'custom')+', v'+(s.version||1)+', '+s.setId+provTail(s)+']'}})).concat(pws.map(x=>{const p=getSet(x.pathwayId,x);return{role:'source',what:{display:'Pathway: '+(p?p.title||p.setId:x.pathwayId)+' [pathway, v'+(+x.version||1)+', '+x.pathwayId+', started '+x.startedAt+provTail(p)+']'}}}))});
 const B={resourceType:'Bundle',type:'transaction',entry:E};$('bj').textContent=JSON.stringify(B,null,1);
 const bad=E.filter(e=>{const r=e.resource,t=r.resourceType;return !t||(['Observation','Procedure'].includes(t)&&(!r.code||!r.subject))||(t=='MedicationAdministration'&&(!r.medicationCodeableConcept||!r.subject))||(t=='Provenance'&&!(r.target||[]).length)||(t=='CarePlan'&&(!r.subject||!r.status||!r.intent))}).length;
 $('bchk').innerHTML=`${X?'Patient and Encounter from the registered record; this export was written to the audit log · ':'Demo mode: placeholder patient · '}${E.length} entries · per set: ${sets.map(x=>esc(x.title||x.setId)+' '+(per[x.setId]||0)).join(' · ')} · ${noteRecords.length?'Notes '+noteRecords.length:(nar?'Composition 1':'no narrative, no Composition')} · CarePlans ${cps}${pwMiss?' ('+pwMiss+' pathway not in registry, listed without activities)':''} · ${sk} resources without verified coding (text only)${skipped?' · <b>'+skipped+' row value(s) skipped: no valid row timestamp (administrations need a time)</b>':''}${nots?' · '+nots+' resource(s) emitted without effectiveDateTime (no timestamp)':''} · structural problems: ${bad}. Run through a FHIR validator before real use.`}
@@ -1428,114 +1527,13 @@ function dl(){const t=$('bj').textContent;if(!t)return toast('Build a bundle fir
 /* chunk 29c: cases live in Store (memory cache + queued server writes, or Demo-mode localStorage). Same shapes as before. */
 const getC=()=>Store.getCases();
 const setC=c=>Store.setCases(c);
-function synth(){let x=42;const R=()=>(x=(x*1664525+1013904223)%4294967296)/4294967296;const base=new Date('2026-01-10T08:00');
-const out=getC().filter(c=>!c.syn);const loc=n=>new Date(n-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16);
-for(let i=0;i<12;i++){const gap=Math.round(25+Math.pow(R(),1.6)*560),bite=+base+i*864e5*2+R()*36e5*6,p=gap/600,r=R();
-const o=r<p*.12?'Death':r<p*.35?'Amputation':r<p*.75?'AKI':'Recovered';const b=(a)=>R()<.1?'':a;
-const v={bite:loc(bite),arr:loc(bite+gap*.55*6e4),asv:loc(bite+gap*6e4),gap:String(gap),wbct:b(R()<.3+p*.5?'Unclotted':'Clotted'),swell:b(String(Math.min(3,Math.floor(R()*2+p*2.5)))),neuro:b(R()<.2?'Yes':'No'),vials:b(String(Math.round(8+R()*12))),rxn:b(R()<.15?'Yes':'No'),out:o};
-{const iso=new Date(+base+i*864e5*2).toISOString();out.push({id:crypto.randomUUID(),syn:true,saved:iso,narrative:'',applied:[{setId:DEMO.setId,addedAt:iso}],values:ns(DEMO.setId,v),ns:true,rp:true,updatedAt:iso})}}
-setC(out);ana()}
-function clearSyn(){setC(getC().filter(c=>!c.syn));ana()}
-const SNK=DEMO.setId;
 const fl=c=>(c.applied||[]).flatMap(a=>flS(getSet(a.setId)).map(f=>Object.assign({},f,{_s:a.setId,_k:f.repeat?vk(a.setId,'@'+(f.group||f.id)):vk(a.setId,f.id)})));
 const filled=(c,x)=>x.repeat?rowsOf(c,x._s,x.group||x.id).some(r=>r[x.id]!==undefined&&r[x.id]!==''):has(c,x._k);
-const med=a=>{if(!a.length)return null;a=[...a].sort((p,q)=>p-q);const m=a.length>>1;return a.length%2?a[m]:(a[m-1]+a[m])/2};
-const qt=(a,q)=>{a=[...a].sort((p,r)=>p-r);return a[Math.min(a.length-1,Math.floor(q*a.length))]};
-function gapOf(c){const s=getSet(SNK),f=s&&flS(s).find(x=>x.derived&&x.derived.op==='minutes_between'&&Array.isArray(x.derived.from)&&x.derived.from.length===2);if(!f)return null;const[a,b]=f.derived.from;let g=parseFloat(val(c,f.id,SNK));if(isNaN(g)&&val(c,a,SNK)&&val(c,b,SNK))g=Math.round((new Date(val(c,b,SNK))-new Date(val(c,a,SNK)))/6e4);return isNaN(g)?null:g}
-let ANS=null,ANU=false;
-function anScopes(A){const o={d:{},c:{},p:{}};A.forEach(c=>{(c.applied||[]).forEach(a=>{const s=getSet(a.setId);if(!s||isPw(s))return;const k=s.kind=='disease'?'d':s.direct?'c':null;if(k)o[k][a.setId]=(o[k][a.setId]||0)+1});(c.pathways||[]).forEach(x=>{if(x&&x.pathwayId)o.p[x.pathwayId]=(o.p[x.pathwayId]||0)+1})});return o}
-const inScope=(c,sc)=>sc=='all'||(sc.startsWith('pw:')?(c.pathways||[]).some(x=>x.pathwayId==sc.slice(3)):(c.applied||[]).some(a=>a.setId==sc.slice(4)));
-function diseaseCards(C,sid){const s=getSet(sid);if(!s)return'';let h='';
-flS(s).filter(f=>f.derived&&f.derived.op=='minutes_between').forEach(f=>{const g=C.map(c=>{let x=parseFloat(val(c,f.id,sid));if(isNaN(x)){const[a,b]=f.derived.from.map(i=>val(c,i,sid));if(a&&b)x=Math.round((new Date(b)-new Date(a))/6e4)}return isNaN(x)?null:x}).filter(x=>x!=null),[lo,hi]=f.derived.flag||[60,240];
-h+=`<div class="cd"><b>${esc(f.label)}</b><br>${g.length?`<b>${Math.round(med(g))} min</b> median (IQR ${Math.round(qt(g,.25))}–${Math.round(qt(g,.75))}) · ${Math.round(100*g.filter(x=>x<=lo).length/g.length)}% within ${lo} min · ${Math.round(100*g.filter(x=>x>hi).length/g.length)}% over ${hi} min · n=${g.length}`:'<span class="mu">No timing data.</span>'}</div>`});
-const of=flS(s).find(f=>f.id=='out');if(of){const k={};C.forEach(c=>{const v=val(c,'out',sid);if(v)k[v]=(k[v]||0)+1});const n=Object.values(k).reduce((a,b)=>a+b,0);
-h+=`<div class="cd"><b>${esc(of.label)}</b> <span class="mu">(descriptive counts)</span><br>${n?Object.keys(k).map(v=>`${esc(v)}: ${k[v]}`).join(' · '):'<span class="mu">No outcomes recorded.</span>'}</div>`}return h}
-function ana(){const A=getC();$('acnt').textContent=' '+A.length+' cases ('+A.filter(c=>c.syn).length+' synthetic)';
-if(!A.length){$('adash').innerHTML='<p class="mu">No cases yet. Add a case in the Case tab or load synthetic ones.</p>';return}
-const SC=anScopes(A),valid=k=>k=='all'||(k.startsWith('set:')&&(SC.d[k.slice(4)]||SC.c[k.slice(4)]))||(k.startsWith('pw:')&&SC.p[k.slice(3)]);
-if(ANS==null||!valid(ANS)||!ANU){const d=CUR&&(CUR.applied||[]).map(a=>a.setId).find(id=>SC.d[id]),p=CUR&&(CUR.pathways||[]).map(x=>x.pathwayId).find(id=>SC.p[id]);ANS=d?'set:'+d:p?'pw:'+p:'all'}
-const ti=id=>{const t=getSet(id);return esc(t&&t.title||id)},og=(l,o,pre)=>Object.keys(o).length?`<optgroup label="${l}">`+Object.keys(o).map(id=>`<option value="${pre}${esc(id)}"${ANS==pre+id?' selected':''}>${ti(id)} (${o[id]})</option>`).join('')+'</optgroup>':'';
-const scSel=`<div class="cd"><label for="ansc"><b>Analyse</b></label> <select id="ansc" style="width:auto;max-width:320px" onchange="ANS=this.value;ANU=true;ana()"><option value="all"${ANS=='all'?' selected':''}>All cases (${A.length}): general only</option>${og('Diseases',SC.d,'set:')}${og('Pathways',SC.p,'pw:')}${og('Care sets',SC.c,'set:')}</select> <span class="mu">Only cases that use the chosen disease, pathway or set are counted, and only that scope's cards are shown.</span></div>`;
-const C=A.filter(c=>inScope(c,ANS)),sid=ANS.startsWith('set:')?ANS.slice(4):'',sset=sid?getSet(sid):null,isDis=!!(sset&&sset.kind=='disease'),isSnake=sid==SNK,isCare=ANS=='all'||ANS.startsWith('pw:')||(sset&&!isDis);
-let SS=null;if(sid)SS=new Set([sid]);else if(ANS.startsWith('pw:')){const p=getSet(ANS.slice(3));SS=new Set(p&&isPw(p)?pwMembers(p).map(m=>m.setId):[])}
-const cov=C.map(c=>{const f=fl(c).filter(x=>!x.derived&&(!SS||SS.has(x._s)));return f.filter(x=>filled(c,x)).length/(f.length||1)}),ov=C.length?Math.round(100*cov.reduce((a,b)=>a+b,0)/C.length):0;
-let bind='n/a';const cf=fl(CUR).filter(x=>!SS||SS.has(x._s));if(cf.length)bind=Math.round(100*cf.filter(x=>st(x)=='verified').length/cf.length)+'% verified (current case, this scope)';else bind='n/a: current case has no fields in this scope';
-let dz='';
-if(isSnake){const gaps=C.map(gapOf).filter(g=>g!=null);let tm='<div class="mu">No timing data.</div>';
-if(gaps.length)tm=`<b>${Math.round(med(gaps))} min</b> median (IQR ${Math.round(qt(gaps,.25))}–${Math.round(qt(gaps,.75))}) · ${Math.round(100*gaps.filter(g=>g<=60).length/gaps.length)}% within 60 min · ${Math.round(100*gaps.filter(g=>g>240).length/gaps.length)}% over 240 min`;
-const bands=[['<1h',g=>g<60],['1–4h',g=>g>=60&&g<=240],['>4h',g=>g>240]].map(([n,t])=>{const m=C.filter(c=>{const g=gapOf(c);return g!=null&&val(c,'out',SNK)&&t(g)});const bad=m.filter(c=>val(c,'out',SNK)!='Recovered').length;return{n,k:m.length,pct:m.length?100*bad/m.length:0}});
-const bars=bands.map((b,i)=>`<rect x="${60+i*110}" y="${130-b.pct*1.1}" width="70" height="${b.pct*1.1}" fill="var(--ac)"/><text x="${95+i*110}" y="${125-b.pct*1.1}" text-anchor="middle" font-size="12" fill="currentColor">${Math.round(b.pct)}% (n=${b.k})</text><text x="${95+i*110}" y="148" text-anchor="middle" font-size="12" fill="currentColor">${b.n}</text>`).join('');
-dz=`<div class="cd"><b>Time to ASV</b><br>${tm}</div><div class="cd"><b>Adverse outcome rate by delay band</b> <span class="mu">(AKI, amputation or death)</span><svg viewBox="0 0 400 160" style="width:100%;max-width:420px"><line x1="40" y1="130" x2="390" y2="130" stroke="currentColor" opacity=".3"/>${bars}</svg>
-<div class="mu">Small numbers per band: descriptive only, no causal claim.</div></div>`}
-else if(isDis)dz=diseaseCards(C,sid);
-const opts=A.map((c,i)=>inScope(c,ANS)?`<option value="${i}">${c.syn?'[syn] ':''}${i+1} · ${(c.saved||c.updatedAt||'').slice(0,10)}</option>`:'').join('');
-$('adash').innerHTML=scSel+`<div class="cd"><b>Data coverage</b><br>This scope: <b>${ov}%</b> of high-yield fields filled (across ${C.length} case${C.length==1?'':'s'})</div>
-${dz}<div class="cd"><b>Ontology binding</b><br>${bind}</div>
-${isCare?careCards(C)+pathwayCards(C)+directCards(C):''}
-<div class="cd"><b>Single case</b> <select id="cs" style="width:auto" onchange="one()">${opts}</select><div id="one"></div></div>`;one()}
-function careCards(C){const dist={};C.forEach(c=>{const n=(c.applied||[]).length;dist[n]=(dist[n]||0)+1});const mx=Math.max(...Object.values(dist));
-const dr=Object.keys(dist).sort((a,b)=>a-b).map(k=>`<tr><td>${k} set${k==1?'':'s'}</td><td><span style="display:inline-block;height:10px;width:${Math.max(4,Math.round(160*dist[k]/mx))}px;background:var(--ac);border-radius:3px"></span> ${dist[k]} case${dist[k]==1?'':'s'}</td></tr>`).join('');
-const use={};C.forEach(c=>new Set((c.applied||[]).map(a=>a.setId)).forEach(id=>use[id]=(use[id]||0)+1));
-const top=Object.entries(use).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([id,k])=>{const s=getSet(id);return`<li>${esc(s?s.title||id:id)}: ${k} case${k==1?'':'s'}</li>`}).join('');
-const rf={};C.forEach(c=>(c.applied||[]).forEach(a=>{const s=getSet(a.setId);if(!s)return;flS(s).filter(f=>f.repeat).forEach(f=>{const g=f.group||f.id;if(f===tcol(grp(s,g)))return;
-const k=a.setId+'|'+f.id,n=rowsOf(c,a.setId,g).filter(r=>r[f.id]!==undefined&&r[f.id]!=='').length,o=rf[k]=rf[k]||{s,f,tot:0,cs:0};o.tot+=n;if(n)o.cs++})}));
-const rr=Object.values(rf).map(o=>`<tr><td>${esc(o.s.title||o.s.setId)} · ${esc(o.f.label)}</td><td>${o.tot}</td><td>${o.cs}</td></tr>`).join('');
-const hb={};C.forEach((c,i)=>(c.applied||[]).forEach(a=>{const u=followUpOf(getSet(a.setId));if(!u||!u.h)return;const H=u.h;
-const ts=rowsOf(c,a.setId,H.group).filter(r=>fnum(r[H.valueField])!=null&&r[H.dateField]).map(r=>new Date(r[H.dateField]).getTime()).filter(t=>!isNaN(t));
-const d=ts.length?Math.round((new Date(nowStr('date')).getTime()-Math.max(...ts))/864e5):null;
-(hb[u.label]=hb[u.label]||[]).push(`<li>Case ${i+1}${c.syn?' [syn]':''}: ${d==null?'no '+esc(u.label)+' reading yet':d<0?'last date is in the future':d+' days'}</li>`)}));
-return`<div class="cd"><b>Care pathway</b> <span class="mu">(descriptive counts only)</span>
-<div class="kh">Element sets per case</div><table class="pt">${dr}</table>
-<div class="kh">Most used sets</div><ul>${top||'<li class="mu">none</li>'}</ul>
-<div class="kh">Readings per repeat field</div>${rr?`<table class="pt"><tr><th>Field</th><th>Readings</th><th>Cases with data</th></tr>${rr}</table>`:'<div class="mu">No repeat-field sets applied yet.</div>'}
-${Object.keys(hb).map(l=>'<div class="kh">Days since last '+esc(l)+'</div><ul>'+hb[l].join('')+'</ul>').join('')}</div>`}
-/* Pathway analytics: descriptive counts only. "Has data" means a value was entered (hasData); it never judges whether care was adequate.
-   Members are read from the CURRENT registry version. Time to first value uses repeat-row timestamps only; sets with no timestamped rows are reported as such. */
-function pathwayCards(C){const P={};
-C.forEach(c=>(Array.isArray(c.pathways)?c.pathways:[]).forEach(x=>{if(x&&typeof x.pathwayId=='string'&&x.pathwayId)(P[x.pathwayId]=P[x.pathwayId]||[]).push({c,x})}));
-const ids=Object.keys(P);if(!ids.length)return'';
-const firstT=(c,s)=>{let best=NaN;[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))].forEach(g=>{const fs=grp(s,g),tc=tcol(fs);if(!tc)return;
-rowsOf(c,s.setId,g).forEach(r=>{const t=rowT(r,tc);if(isNaN(t))return;if(!fs.some(f=>f!==tc&&!f.meta&&r[f.id]!==undefined&&String(r[f.id]).trim()!==''))return;if(isNaN(best)||t<best)best=t})});return best};
-let top='',det='';
-ids.forEach(id=>{const p=getSet(id),en=P[id],ttl=esc(p&&isPw(p)?p.title||id:id+' (not in registry)'),ms=p&&isPw(p)?pwMembers(p).map(m=>getSet(m.setId)).filter(t=>t&&!isPw(t)):[];
-let pc='n/a',bar='';
-if(ms.length){const per=en.map(e=>100*ms.filter(t=>hasData(e.c,t.setId)).length/ms.length),m=per.reduce((a,b)=>a+b,0)/per.length;pc=Math.round(m)+'%';bar=`<span style="display:inline-block;height:10px;width:${Math.max(2,Math.round(1.2*m))}px;background:var(--ac);border-radius:3px"></span> `}
-top+=`<tr><td>${ttl}</td><td>${en.length}</td><td>${bar}${pc}</td></tr>`;
-if(!ms.length){det+=`<div class="kh">${ttl}</div><div class="mu">No member sets found in the registry.</div>`;return}
-const rows=ms.map(t=>{const d=[];en.forEach(e=>{const st=new Date(e.x.startedAt).getTime(),ft=firstT(e.c,t);if(!isNaN(st)&&!isNaN(ft))d.push((ft-st)/864e5)});
-const hasRep=flS(t).some(f=>f.repeat);
-return`<tr><td>${esc(t.title||t.setId)}</td><td>${d.length}</td><td>${d.length?r1(med(d)):'<span class="mu">'+(hasRep?'no timed values yet':'no timestamps in this set')+'</span>'}</td></tr>`}).join('');
-det+=`<div class="kh">${ttl}</div><table class="pt"><tr><th>Member set</th><th>Cases with a timed value</th><th>Median days from start</th></tr>${rows}</table>`});
-return`<div class="cd"><b>Pathways</b> <span class="mu">(descriptive counts only; "has data" is not a judgement of care)</span>
-<div class="kh">Cases per pathway</div><table class="pt"><tr><th>Pathway</th><th>Cases</th><th>Mean % of member sets with data</th></tr>${top}</table>
-<div class="kh">Median days from pathway start to first timed value</div>${det}
-<div class="mu">Uses repeat-row timestamps only. A negative number means the earliest timed value is dated before the pathway was started. Members come from the current registry version.</div></div>`}
-/* Direct-element analytics: descriptive counts only; no judgement, no dose arithmetic */
-function directCards(C){const dayOf=(r,tc)=>{if(!tc||!r[tc.id])return null;const v=r[tc.id];if(tc.type=='date')return/^\d{4}-\d{2}-\d{2}/.test(v)?String(v).slice(0,10):null;const t=new Date(v).getTime();return isNaN(t)?null:dayKey(t)};
-const li=[],fv=[],ins=[];
-C.forEach((c,i)=>{const nm='Case '+(i+1)+(c.syn?' [syn]':'');(c.applied||[]).forEach(a=>{const s=getSet(a.setId);if(!s||!s.direct)return;
-const gs=[...new Set(flS(s).filter(f=>f.repeat).map(f=>f.group||f.id))];let n=0,nv=0;const days=new Set();
-gs.forEach(g=>{const tc=tcol(grp(s,g));rowsOf(c,a.setId,g).forEach(r=>{n++;const d=dayOf(r,tc);if(d){nv++;days.add(d)}})});
-if(n)li.push(`<li>${esc(nm)} · ${esc(s.title||s.setId)}: ${n} row${n==1?'':'s'}; ${days.size?days.size+' day'+(days.size==1?'':'s')+' with a valid time, '+r1(nv/days.size)+' per day':'no valid timestamps'}</li>`);
-const V=s.view||{};
-if(V.type=='fever'){const tf=flS(s).find(f=>f.id==V.tempField);if(!tf)return;const g=tf.group||tf.id,tc=tcol(grp(s,g)),tv=fnum(c.values[vk(a.setId,V.thresholdField)]),tu=c.values[vk(a.setId,V.thresholdUnitField)];
-if(tv==null||(tu!='°C'&&tu!='°F')){fv.push(`<li>${esc(nm)}: no threshold (with unit) entered, so not counted</li>`);return}
-const thr=toC(tv,tu),d=new Set();rowsOf(c,a.setId,g).forEach(r=>{const x=fnum(r[V.tempField]),k=dayOf(r,tc);if(x==null||!k)return;if(toC(x,r[V.unitField]=='°F'?'°F':'°C')>=thr-1e-6)d.add(k)});
-fv.push(`<li>${esc(nm)}: ${d.size} day${d.size==1?'':'s'} with a reading at or above the threshold entered</li>`)}
-if(V.type=='dailygrid'){const gf=flS(s).find(f=>f.id==V.glucoseField);if(!gf)return;const g=gf.group||gf.id,tc=tcol(grp(s,g)),sl=V.slots||[],m={};
-rowsOf(c,a.setId,g).forEach(r=>{const k=dayOf(r,tc);if(!k||!sl.includes(r[V.slotField]))return;if(fnum(r[V.glucoseField])!=null||String(r[V.doseField]||'').trim())(m[k]=m[k]||new Set()).add(r[V.slotField])});
-const full=Object.values(m).filter(x=>x.size==sl.length).length;ins.push(`<li>${esc(nm)}: ${full} of ${Object.keys(m).length} charted day${Object.keys(m).length==1?'':'s'} with all ${sl.length} slots filled</li>`)}})});
-if(!li.length&&!fv.length&&!ins.length)return'';
-return`<div class="cd"><b>Direct elements</b> <span class="mu">(descriptive counts only)</span>
-<div class="kh">Readings per day</div><ul>${li.join('')||'<li class="mu">none</li>'}</ul>
-${fv.length?`<div class="kh">Fever days</div><ul>${fv.join('')}</ul>`:''}${ins.length?`<div class="kh">Insulin charting</div><ul>${ins.join('')}</ul>`:''}</div>`}
 function cleanRefs(c){if(!c||typeof c!='object')return;if(c.pinned!==undefined&&!(Array.isArray(c.pinned)&&c.pinned.every(x=>typeof x=='string')))delete c.pinned;
 if(c.values&&typeof c.values=='object')Object.keys(c.values).forEach(k=>{if(!/\/__ref$/.test(k))return;const o=c.values[k],n={};
 if(o&&typeof o=='object'&&!Array.isArray(o))Object.keys(o).forEach(f=>{const r=o[f];if(r&&typeof r=='object'){const lo=fnum(r.low),hi=fnum(r.high);if(lo!=null||hi!=null)n[f]={low:lo,high:hi}}});
 if(Object.keys(n).length)c.values[k]=n;else delete c.values[k]})}
 function mergePins(p){if(!Array.isArray(p)||!p.every(x=>typeof x=='string'))return;if(Store.pref('pinned',null))return;Store.setPref('pinned',p)}
-function one(){const c=getC()[+$('cs').value];if(!c){$('one').innerHTML='<p class="mu">No case in this scope.</p>';return}const miss=fl(c).filter(x=>!x.derived&&!filled(c,x)).map(x=>x.label),sn=(c.applied||[]).some(a=>a.setId==SNK),g=sn?gapOf(c):null;
-$('one').innerHTML=(sn?`<p>Bite → ASV: <b>${g==null?'unknown':g+' min'}</b> ${g==null?'':g<60?'(within 1h)':g<=240?'(1–4h)':'(over 4h: delayed)'} · Outcome: ${val(c,'out',SNK)||'—'}</p>`:'')+`<p class="mu">Applied: ${(c.applied||[]).map(a=>{const t=getSet(a.setId);return esc(t&&t.title||a.setId)}).join(', ')||'none'}</p><p class="mu">Missing fields: ${miss.length?miss.join(', '):'none'}</p>`}
 function dlf(n,t){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download=n;a.click()}
 function exp(){dlf('enhancer-data.json',JSON.stringify({v:5,rules:cdsExport(),cases:getC(),codes:codes(),sets:userSets(),setUsage:usage(),protocols:Store.protocols(),pinned:Store.pref('pinned',null)}))}
 function unverifyProtocols(c){/* a verified-by mark typed elsewhere is not verification here: imported protocols must be re-verified */
@@ -1552,7 +1550,7 @@ fresh.forEach(unverifyProtocols);fresh.forEach(cleanRefs);fresh.forEach(cleanPw)
 if(!setC(getC().concat(fresh)))throw Error('could not save');
 (Array.isArray(j.sets)?j.sets:[]).forEach(s=>{if(s&&s.setId&&(Array.isArray(s.sections)||(s.kind=='pathway'&&Array.isArray(s.members))))addUserSet(s)});migrateCases();
 if(j.codes&&typeof j.codes=='object')Store.saveCodes(Object.assign(codes(),j.codes));
-const nr=cdsImport(j.rules),np=importProtocols(j.protocols);mergeUsage(j.setUsage);mergePins(j.pinned);toast('Imported '+fresh.length+' case(s)'+(np?', '+np+' protocol(s) (not verified: re-enter verified-by)':'')+(nr?', '+nr+' alert rule(s) (not approved: re-enter verified-by to activate)':'')+(skip?', skipped '+skip+' already present':'')+'. Imported protocols need "verified by" re-entered; imported codes count as verified, so check that list.');ana();picker();sidebar()}catch(e){toast('Import failed: '+e.message)}};r.readAsText(f)}
+const nr=cdsImport(j.rules),np=importProtocols(j.protocols);mergeUsage(j.setUsage);mergePins(j.pinned);toast('Imported '+fresh.length+' case(s)'+(np?', '+np+' protocol(s) (not verified: re-enter verified-by)':'')+(nr?', '+nr+' alert rule(s) (not approved: re-enter verified-by to activate)':'')+(skip?', skipped '+skip+' already present':'')+'. Imported protocols need "verified by" re-entered; imported codes count as verified, so check that list.');picker();sidebar()}catch(e){toast('Import failed: '+e.message)}};r.readAsText(f)}
 function resetRank(){if(!confirm('Reset the sidebar ranking (set usage counts)? Cases are not affected.'))return;Store.resetUsage();SUGG={id:'',items:[]};sidebar();toast('Sidebar ranking reset.')}
 function wipe(){if(Store.mode==='server')return toast('Delete-all is only for Demo mode. Records on the server are never deleted from here.');if(!confirm('Delete all saved cases, generated sets and codes in this browser?'))return;['cases','codes','sets','setUsage','binds','protocols','rules','pinned','cases_backup_v1','cases_backup_v2','cases_backup_v3','cases_backup_v4','cases_backup_v5'].forEach(k=>localStorage.removeItem(k));location.reload()}
 function norm(sc){if(!sc||!Array.isArray(sc.sections))throw Error('Model did not return a sections list');
@@ -1586,7 +1584,7 @@ $('qr').innerHTML=`<b>Quick reading: ${esc(s.title||id)}</b><div class="rg"><tab
 function qrAdd(id,g){const s=getSet(id);if(!s)return;const fs=grp(s,g),tc=tcol(fs),row={};let any=false;
 fs.forEach(f=>{const e=$('qr').querySelector('[data-qf="'+f.id+'"]');const v=e?e.value:'';if(v!==''){row[f.id]=v;if(f!==tc&&!(f.meta&&dflt(f)!==''&&v===dflt(f)))any=true}});
 if(!any)return toast('Enter at least one value.');const k=vk(id,'@'+g),rows=Array.isArray(CUR.values[k])?CUR.values[k]:[];
-if(rows.length>=500)return toast('Row limit reached (500 readings per table).');if(!CUR.applied.some(a=>a.setId==id)){applySet(CUR,id);bumpUsage(id);renderCase()}
+if(rows.length>=500)return toast('Row limit reached (500 readings per table).');if(!CUR.applied.some(a=>a.setId==id)){if(!applySet(CUR,id))return toast(APPLY_BLOCK||'Set not found: '+id);bumpUsage(id);renderCase()}
 rows.push(row);sortRows(rows,tc);CUR.values[k]=rows;$('qr').innerHTML='';persist();if($('rg_'+id+'@'+g))refreshGroup(id,g);protoShow();toast('')}
 function pinEdit(){const el=$('pinp');if(el.innerHTML){el.innerHTML='';return}const cur=new Set(pinList());
 const all=registry().filter(x=>x.direct||x.kind=='care').sort((a,b)=>((a.quick||{}).order||99)-((b.quick||{}).order||99));
@@ -1841,24 +1839,24 @@ const isEmrView=s=>!!s&&Array.isArray(s.contexts)&&s.contexts.includes('emr');
 function emrSurfaces(type){const act=typeof Store!=='undefined'&&Store.emrViews?Store.emrViews():null;return registry().filter(s=>isPw(s)&&isEmrView(s)&&(!act||act.includes(s.setId))&&s.surface&&s.surface.type===type)}
 function boardColumnIds(c){const sf=emrSurfaces('patients_columns')[0];if(!sf||sf.surface.columnsFrom==='pinned')return pinListFor(c);return pwMembers(sf).map(m=>m.setId)}
 const pwMembers=p=>(Array.isArray(p&&p.members)?p.members:[]).filter(m=>m&&typeof m.setId=='string'&&m.setId);
-function applyPathway(c,id){const p=getSet(id);if(!isPw(p))return null;const added=[],had=[],missing=[];
+function applyPathway(c,id){APPLY_BLOCK='';const p=getSet(id);if(!isPw(p))return null;if(draftBlock(c,p))return null;for(const m of pwMembers(p)){const ms=getSet(m.setId);if(ms&&!isPw(ms)&&draftBlock(c,ms))return null}const added=[],had=[],missing=[];
 pwMembers(p).forEach(m=>{const s=getSet(m.setId);if(!s||isPw(s)){missing.push(m.setId);return}
 if(c.applied.some(a=>a.setId==m.setId)){had.push(m.setId);return}applySet(c,m.setId);added.push(m.setId)});
 c.pathways=Array.isArray(c.pathways)?c.pathways:[];const first=!c.pathways.some(x=>x.pathwayId==id);
 if(first)c.pathways.push({pathwayId:id,version:p.version||1,startedAt:new Date().toISOString()});
 if(first)bumpUsage(id,c);added.forEach(x=>bumpUsage(x,c));c.updatedAt=new Date().toISOString();return{added,had,missing,first}}
 function removePathway(c,id){const n=(c.pathways||[]).length;c.pathways=(c.pathways||[]).filter(x=>x.pathwayId!=id);c.updatedAt=new Date().toISOString();return c.pathways.length<n}
-function addPathway(id){const r=applyPathway(CUR,id),p=getSet(id);if(!r)return toast('Pathway not found: '+id);persist();renderCase();
+function addPathway(id){const r=applyPathway(CUR,id),p=getSet(id);if(!r)return toast(APPLY_BLOCK||'Pathway not found: '+id);persist();renderCase();
 toast('Pathway "'+(p.title||id)+'": '+r.added.length+' set(s) added'+(r.had.length?', '+r.had.length+' already applied':'')+(r.missing.length?'. Not in the registry, skipped: '+r.missing.join(', '):'')+'.')}
 function rmPathway(id){if(!removePathway(CUR,id))return;persist();renderCase();toast('Pathway record removed. Its sets and all entered values were kept.')}
 function pwRow(s){const on=(CUR.pathways||[]).some(x=>x.pathwayId==s.setId),n=pwMembers(s).length;
-return`<button class="row" data-pw="${esc(s.setId)}">${on?'✓ ':''}${esc(s.title||s.setId)}<span class="mu">${esc(s.description||'')} ${n} set${n==1?'':'s'}${on?' · on this case. Click to preview':' · click to preview'}</span></button>`}
+return`<button class="row" data-pw="${esc(s.setId)}">${on?'✓ ':''}${esc(s.title||s.setId)} ${tierBadgeHtml(s)}<span class="mu">${esc(s.description||'')} ${n} set${n==1?'':'s'}${on?' · on this case. Click to preview':' · click to preview'}</span></button>`}
 function pwOpen(id){PWPV=(id&&PWPV!=id)?id:'';sidebar();pathwayWorkspace()}
 function pwGo(id){PWPV='';addPathway(id)}
 function pwPrev(s){const ms=pwMembers(s),ap=new Set(CUR.applied.map(a=>a.setId)),on=(CUR.pathways||[]).some(x=>x.pathwayId==s.setId);let add=0;
 const li=ms.map(m=>{const t=getSet(m.setId),ok=t&&!isPw(t),st=!ok?'not in registry, will be skipped':ap.has(m.setId)?'already applied':'will add';if(ok&&!ap.has(m.setId))add++;
 return`<tr><td>${esc(ok?t.title||t.setId:m.setId)}${m.optional?' <span class="mu">(optional)</span>':''}</td><td class="mu">${st}</td></tr>`}).join('');
-return`<div class="cd" style="margin:4px 0 8px"><b>${esc(s.title||s.setId)}</b> <span class="mu">v${esc(s.version||1)}</span><table class="pt pst">${li||'<tr><td class="mu">No member sets.</td></tr>'}</table><div class="mu">Adds sets only. No values, doses or thresholds are added and nothing is deleted.</div><div style="margin-top:6px"><button class="b sm" data-pwgo="${esc(s.setId)}">${on?(add?'Add '+add+' missing set'+(add==1?'':'s'):'Nothing missing'):'Apply pathway'}</button> <button class="b sm" data-pwcl="1">Close</button></div></div>`}
+return`<div class="cd" style="margin:4px 0 8px"><b>${esc(s.title||s.setId)}</b> <span class="mu">v${esc(s.version||1)}</span> ${tierBadgeHtml(s)}<table class="pt pst">${li||'<tr><td class="mu">No member sets.</td></tr>'}</table><div class="mu">Adds sets only. No values, doses or thresholds are added and nothing is deleted.</div><div style="margin-top:6px"><button class="b sm" data-pwgo="${esc(s.setId)}">${on?(add?'Add '+add+' missing set'+(add==1?'':'s'):'Nothing missing'):'Apply pathway'}</button> <button class="b sm" data-pwcl="1">Close</button></div></div>`}
 /* Data presence only: a set "has data" when a non-derived, non-meta, non-timestamp field holds a value. It never judges adequacy of care. */
 function hasData(c,sid){const s=getSet(sid);if(!s)return false;const F={},pre=sid+'/';flS(s).forEach(f=>{F[f.id]=f});
 return Object.keys(c.values||{}).some(k=>{if(k.indexOf(pre)!==0)return false;const r=k.slice(pre.length);if(r.indexOf('__')==0)return false;const v=c.values[k];
@@ -1872,7 +1870,7 @@ const p=getSet(x.pathwayId,x),d=new Date(x.startedAt),dy=isNaN(d)?null:Math.max(
 rows=pwMembers(p).map(m=>{const t=getSet(m.setId),ok=!!t&&!isPw(t);return{m,t,ok,st:!ok?'missing':!ap.has(m.setId)?'na':hasData(CUR,m.setId)?'ip':'ns'}}),
 ok=rows.filter(r=>r.ok),n=ok.filter(r=>r.st=='ip').length,miss=ok.filter(r=>r.st=='na').length,
 ver=+x.version||1,when=dy==null?'start date unknown':dy==0?'started today':'started '+dy+' day'+(dy==1?'':'s')+' ago';
-return`<div class="sec"><div class="sh"><b>${esc(p?p.title||p.setId:x.pathwayId+' (not in registry)')}</b><span class="mu">v${esc(ver)}${p&&(+p.version||1)!=ver?' (registry now v'+esc(p.version||1)+')':''} · ${when}</span><span style="flex:1"></span>${miss?`<button class="b sm" data-pwgo="${esc(x.pathwayId)}">Add missing sets (${miss})</button>`:''}<button class="b sm" data-pwx="${esc(x.pathwayId)}">Remove pathway record</button></div>`
+return`<div class="sec"><div class="sh"><b>${esc(p?p.title||p.setId:x.pathwayId+' (not in registry)')}</b><span class="mu">v${esc(ver)}${p&&(+p.version||1)!=ver?' (registry now v'+esc(p.version||1)+')':''} · ${when}</span>${p?tierBadgeHtml(p):''}<span style="flex:1"></span>${miss?`<button class="b sm" data-pwgo="${esc(x.pathwayId)}">Add missing sets (${miss})</button>`:''}<button class="b sm" data-pwx="${esc(x.pathwayId)}">Remove pathway record</button></div>`
 +(ok.length?`<div class="pbar"><i style="width:${Math.round(100*n/ok.length)}%"></i></div><div class="mu">${n} of ${ok.length} sets have data</div>`:'')
 +'<table class="pt pst">'+rows.map(r=>`<tr><td>${esc(r.ok?r.t.title||r.t.setId:r.m.setId)}${r.m.optional?' <span class="mu">(optional)</span>':''}</td><td class="mu">${LAB[r.st]}</td></tr>`).join('')+'</table></div>'}).join('')+'</div>'}
 if(CUR.applied.length)h+='<div class="cd"><button class="b sm" data-pwsave="1">Save applied sets as my pathway</button> <span class="mu">saves set ids only, never values</span></div>';
@@ -2468,7 +2466,7 @@ async function boot(){
   try{
     await Store.init();
     if(!BOOTED){startApp();BOOTED=true}
-    paintMode();paintSave(Store.status());riTool();auTool();usTool();pwTool();paintWho();
+    paintMode();paintSave(Store.status());riTool();anTool();auTool();usTool();pwTool();paintWho();
     $('boot').hidden=true;$('login').hidden=true;
   }catch(e){
     if(e&&e.status===401){showLogin('');return}   /* not signed in: the login screen (chunk 32d1) */
@@ -2669,6 +2667,23 @@ $('histClose').addEventListener('click',histClose);
 $('histErr').addEventListener('change',histRender);
 document.addEventListener('keydown',e=>{if(e.key==='Escape')histClose()});
 /* chunk 35c: Rules in force (server mode, admin and doctor; the server refuses everyone else). Read-only list of approved rules and verified protocols. */
+/* F9b: Export for analytics. The server route (F7c, action analytics.export: admin and informatician) does the work; this screen only asks for it and saves the two files. Demo mode has no server, so it explains that (decision 31). */
+const anAllowed=()=>Store.mode==='server'&&!!Store.me&&Store.can('analytics.export');
+function anTool(){const b=$('anTool');if(b)b.hidden=Store.mode==='server'&&!anAllowed()}
+function anRender(){const b=$('anBody');if(!b)return;
+  if(!SRV()){b.innerHTML='<p>Export needs the server. Demo mode has no shared records to export, and analytics are not run in this app. Run the Analytics app on an export from a server.</p>';return}
+  if(!anAllowed()){b.innerHTML='<p>Your role ('+esc(Store.me.role)+') may not export for analytics. Ask an administrator or informatician.</p>';return}
+  b.innerHTML='<label>Ward (leave empty for all)</label><input id="anWard" maxlength="80" placeholder="e.g. Medical ward"> <label>From</label><input id="anFrom" type="date"> <label>To</label><input id="anTo" type="date"> <button type="button" class="b" id="anGo">Export</button><p class="mu" id="anMsg" role="status"></p><p class="mu">The export is limited to 2000 cases and is recorded in the audit log with the filter you used. Choose the ward and dates by when the encounter started. Only elements the sets allow to be exported are included.</p>'}
+document.addEventListener('click',async e=>{const g=e.target.closest&&e.target.closest('#anGo');if(!g)return;
+  const m=$('anMsg');if(!anAllowed()){m.textContent='Your role may not export for analytics.';return}
+  const q=[['ward',$('anWard').value.trim()],['from',$('anFrom').value],['to',$('anTo').value]].filter(x=>x[1]).map(x=>x[0]+'='+encodeURIComponent(x[1])).join('&');
+  g.disabled=true;m.textContent='Exporting...';
+  try{const r=await Store.api('GET','/analytics/export'+(q?'?'+q:''));
+    if(!r||!r.bundle||!r.manifest){m.textContent='The server answered without a bundle and a manifest.';return}
+    const d=new Date().toISOString().slice(0,10);dlf('analytics-bundle-'+d+'.json',JSON.stringify(r.bundle,null,2));dlf('analytics-manifest-'+d+'.json',JSON.stringify(r.manifest,null,2));
+    const k=r.counts||{},n=Array.isArray(r.bundle.entry)?r.bundle.entry.length:0;m.textContent='Done: '+(k.cases!=null?k.cases+' cases, ':'')+(k.elements!=null?k.elements:n)+' elements. Two files were saved: the bundle and the manifest.'}
+  catch(er){m.textContent=er.status===403?'Your role may not export for analytics.':er.status===422?'Too many cases. Narrow the ward or the dates and try again.':er.code==='export_not_configured'?'Export is not set up. Ask an administrator to set EXPORT_SALT on the server.':'Export failed: '+((er&&er.message)||'error')}
+  finally{g.disabled=false}});
 const RI={seq:0};
 const riAllowed=()=>Store.mode==='server'&&!!Store.me&&Store.can('rules.inforce');
 function riTool(){$('rulesTool').hidden=!riAllowed()}

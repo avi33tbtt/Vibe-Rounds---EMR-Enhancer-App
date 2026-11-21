@@ -92,7 +92,7 @@ async function migrate(db, dir) {
 
 // ---------- app ----------
 // Only these files are public. The folder also holds server.js, .env and SQL, which must never be served.
-const STATIC_FILES = ['enhancer.html', 'element-sets.js', 'cds-rules.js', 'store.js', 'demo-local.js', 'demo-data.js', 'demo-personas.json'];
+const STATIC_FILES = ['enhancer.html', 'element-sets.js', 'cds-rules.js', 'store.js', 'views.js', 'package-lint.js', 'demo-local.js', 'demo-data.js', 'demo-personas.json'];
 
 function createApp({ db, getActor, authOptions, llm, aiLimiter }) {
   const app = express();

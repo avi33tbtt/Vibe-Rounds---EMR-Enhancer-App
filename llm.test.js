@@ -330,3 +330,99 @@ test('the page no longer talks to a model provider or holds a prompt: only the s
   for (const must of ['Store.ai.preview', 'data processing agreement', 'id="aiSent"', 'Not for clinical use']) assert.ok(html.includes(must), must);
   const src = fs.readFileSync(__dirname + '/store.js', 'utf8'); assert.ok(!/api\.anthropic\.com|openrouter\.ai/.test(src));
 });
+
+// ---------------------------------------------------------------- 43a2: POST /llm/feature-request (one sentence -> a DRAFT set, pathway or rule; saves nothing)
+const FR = { text: 'A simple form for a made-up condition', output: 'set' };
+const goodSetReply = () => JSON.stringify({ sections: [{ title: 'S', fields: [{ id: 'a_b', label: 'A', type: 'number', unit: 'mg' }] }] });
+const elementCount = async () => Number((await db.query('SELECT count(*) n FROM element_sets')).rows[0].n);
+async function numSet() { await db.query(`INSERT INTO element_sets (set_id, kind, body) VALUES ('care.num','care','{"title":"Num","sections":[{"fields":[{"id":"k","label":"Potassium","type":"number","unit":"mmol/L"}]}]}') ON CONFLICT DO NOTHING`); }
+
+test('43a2: AI off is 403 "AI disabled" with nothing sent and no audit row; viewer is always 403', async () => {
+  await setAi(false);
+  const m = await maxId(), r = await as('doctor').post('/api/llm/feature-request', FR);
+  assert.equal(r.status, 403); assert.equal(r.body.error.code, 'ai_disabled');
+  assert.equal(calls.length, 0); assert.equal((await auditSince(m)).length, 0);
+  await setAi(true);
+  assert.equal((await as('viewer').post('/api/llm/feature-request', FR)).status, 403);
+});
+
+test('43a2: roles: admin, doctor, nurse and informatician may ask; viewer may not', async () => {
+  await setAi(true); reply = goodSetReply;
+  for (const role of ['admin', 'doctor', 'nurse', 'informatician']) assert.equal((await as(role).post('/api/llm/feature-request', FR)).status, 200, role);
+  assert.equal((await as('viewer').post('/api/llm/feature-request', FR)).status, 403);
+});
+
+test('43a2: inputs are validated before anything is sent: unknown key, short text, bad output, rule without an owner, unknown owner', async () => {
+  await setAi(true); reply = goodSetReply;
+  const bad = [{ ...FR, extra: 1 }, { ...FR, text: 'too short' }, { ...FR, output: 'order' }, { text: FR.text, output: 'rule' }, { ...FR, text: 'x'.repeat(501) }];
+  for (const b of bad) assert.equal((await as('doctor').post('/api/llm/feature-request', b)).status, 400, JSON.stringify(b).slice(0, 60));
+  assert.equal((await as('doctor').post('/api/llm/feature-request', { text: 'Review potassium when above 5.5', output: 'rule', owner: 'no.such' })).status, 404);
+  assert.equal(calls.length, 0);
+});
+
+test('43a2: a set draft keeps no code, says so, carries provenance, and saves nothing; one audit row without the sentence or the answer', async () => {
+  await setAi(true);
+  reply = () => JSON.stringify({ sections: [{ title: 'S', fields: [{ id: 'a_b', label: 'A', type: 'number', coding: { system: 'snomed', code: '123456' } }] }] });
+  const n = await elementCount(), m = await maxId();
+  const r = await as('doctor').post('/api/llm/feature-request', FR);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.output, 'set');
+  assert.equal(r.body.draft.diagnosis.snomed.code, '');
+  for (const s of r.body.draft.sections) for (const f of s.fields) assert.equal(f.coding, undefined);
+  assert.ok(r.body.warnings.some((w) => /Codes were left empty/.test(w)));
+  assert.equal(r.body.provenance.model, 'mock-1'); assert.equal(r.body.provenance.requestText, FR.text); assert.ok(!isNaN(Date.parse(r.body.provenance.at)));
+  assert.equal(await elementCount(), n, 'the route saves nothing');
+  const rows = await auditSince(m); assert.equal(rows.length, 1);
+  assert.equal(rows[0].action, 'ai.call'); assert.equal(rows[0].entity_id, 'feature_set'); assert.equal(rows[0].after.outcome, 'ok');
+  assert.ok(!JSON.stringify(rows[0]).includes(FR.text), 'the sentence is not in the audit row'); assert.ok(!JSON.stringify(rows[0]).includes('123456'));
+});
+
+test('43a2: the sentence is de-identified before the model sees it, and the same text is the provenance', async () => {
+  await setAi(true); reply = goodSetReply;
+  const r = await as('doctor').post('/api/llm/feature-request', { text: 'A form for follow up, call 9820011111 about it', output: 'set' });
+  assert.equal(r.status, 200);
+  assert.ok(!calls[0].user.includes('9820011111')); assert.ok(!r.body.provenance.requestText.includes('9820011111'));
+});
+
+test('43a2: preview shows the exact text, sends nothing and writes no audit row', async () => {
+  await setAi(true);
+  const m = await maxId(), r = await as('doctor').post('/api/llm/feature-request', { ...FR, preview: true });
+  assert.equal(r.status, 200); assert.equal(r.body.preview, true); assert.ok(r.body.sent.includes(FR.text));
+  assert.equal(calls.length, 0); assert.equal((await auditSince(m)).length, 0);
+});
+
+test('43a2: a pathway draft keeps only registry sets (no pathway, no invented id); an answer with none is 422 and audited as invalid', async () => {
+  await setAi(true);
+  reply = () => JSON.stringify({ title: 'My path', setIds: ['care.one', 'nope', 'pathway.p', 'care.one'] });
+  const r = await as('doctor').post('/api/llm/feature-request', { text: 'A pathway for a made-up condition', output: 'pathway' });
+  assert.equal(r.status, 200, JSON.stringify(r.body)); assert.deepEqual(r.body.draft.setIds, ['care.one']); assert.equal(r.body.draft.title, 'My path');
+  reply = () => JSON.stringify({ title: 'Empty', setIds: ['nope'] });
+  const m = await maxId(), bad = await as('doctor').post('/api/llm/feature-request', { text: 'A pathway for a made-up condition', output: 'pathway' });
+  assert.equal(bad.status, 422); assert.equal(bad.body.error.code, 'ai_invalid_output');
+  const rows = await auditSince(m); assert.equal(rows.length, 1); assert.equal(rows[0].after.outcome, 'invalid_output');
+});
+
+test('43a2: a rule draft needs a threshold the person typed, a known field and an allowed operator; a set with no numeric field is 422', async () => {
+  await setAi(true); await numSet();
+  const ask = (text, extra) => as('doctor').post('/api/llm/feature-request', { text, output: 'rule', owner: 'care.num', ...extra });
+  reply = () => JSON.stringify({ fieldRef: 'care.num/k', op: '>', threshold: 5.5, indicator: 'warning', summary: 'Review potassium' });
+  const ok = await ask('Review potassium when above 5.5');
+  assert.equal(ok.status, 200, JSON.stringify(ok.body)); assert.equal(ok.body.output, 'rule'); assert.equal(ok.body.draft.fieldRef, 'care.num/k'); assert.equal(ok.body.draft.op, '>');
+  reply = () => JSON.stringify({ fieldRef: 'care.num/k', op: '>', threshold: 9, indicator: 'warning', summary: 'x' });
+  assert.equal((await ask('Review potassium when above 5.5')).status, 422, 'a threshold that is not in the sentence');
+  reply = () => JSON.stringify({ fieldRef: 'care.num/k', op: 'contains', threshold: 5.5, indicator: 'warning', summary: 'x' });
+  assert.equal((await ask('Review potassium when above 5.5')).status, 422, 'an operator that is not allowed');
+  reply = () => JSON.stringify({ fieldRef: 'care.other/z', op: '>', threshold: 5.5, indicator: 'warning', summary: 'x' });
+  assert.equal((await ask('Review potassium when above 5.5')).status, 422, 'a field that is not in the set');
+  const none = await as('doctor').post('/api/llm/feature-request', { text: 'Review something when above 5', output: 'rule', owner: 'care.one' });
+  assert.equal(none.status, 422); assert.equal(none.body.error.code, 'no_fields');
+});
+
+test('43a2: an answer that is not JSON twice is 422, and a provider failure is a generic 502 (each audited once)', async () => {
+  await setAi(true); reply = () => 'not json at all';
+  let m = await maxId(), r = await as('doctor').post('/api/llm/feature-request', FR);
+  assert.equal(r.status, 422); assert.equal((await auditSince(m)).length, 1);
+  const bare = createApp({ db, getActor, llm: { name: 'bad', model: 'bad-1', complete: async () => { throw new L.ProviderError('secret detail'); } }, aiLimiter: L.createLimiter({ perMinute: 1000, perHour: 1000 }) });
+  m = await maxId(); r = await as('doctor', bare).post('/api/llm/feature-request', FR);
+  assert.equal(r.status, 502); assert.ok(!JSON.stringify(r.body).includes('secret detail')); assert.equal((await auditSince(m)).length, 1);
+});

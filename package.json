@@ -12,7 +12,7 @@
     "db:down": "docker compose down",
     "seed": "node seed.js",
     "create-admin": "node create-admin.js",
-    "test": "node --test --test-concurrency=1 server.test.js api.test.js auth.test.js permissions.test.js audit.test.js versions.test.js audit-admin.test.js rules-inforce.test.js users.test.js audit-auth.test.js e2e32f.test.js patients.test.js alert-acks.test.js llm.test.js changes.test.js store.test.js store-live.test.js io-set.test.js sum-by-type.test.js board-no-reading.test.js handover-data.test.js handover-view.test.js handover-print.test.js"
+    "test": "node --test --test-concurrency=1 server.test.js api.test.js auth.test.js permissions.test.js audit.test.js versions.test.js audit-admin.test.js rules-inforce.test.js users.test.js audit-auth.test.js e2e32f.test.js patients.test.js alert-acks.test.js llm.test.js changes.test.js store.test.js store-live.test.js io-set.test.js sum-by-type.test.js board-no-reading.test.js handover-data.test.js handover-view.test.js handover-print.test.js package-lint.test.js"
   },
   "dependencies": {
     "express": "^4.21.2",

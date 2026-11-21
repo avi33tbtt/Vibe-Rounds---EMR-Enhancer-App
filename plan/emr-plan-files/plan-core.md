@@ -2,13 +2,13 @@
 
 *v6 split into files, 20 Nov 2026. EMR repo: github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App. Analytics repo: github.com/avi33tbtt/VibeRounds-Clinical-Analytics-App. Registry repo: `emr-enhancer-registry` (built in this project).*
 
-**Latest `npm test` (EMR repo, after V0a, 20 Nov 2026): 312 tests, 312 pass.** *(Out of date: P1a to P4c added tests since. Replace this line with the count `npm test` prints after P4c.)* Tests now run one file at a time (`--test-concurrency=1`) because the test files share one database role (`emr_app`). The database must be running first (`npm run db:up`, with `POSTGRES_PASSWORD` in `.env`).
+**Latest `npm test` (EMR repo, after V0a, 20 Nov 2026): 312 tests, 312 pass.** *(Out of date: P1a to P4c, F4, F5, F7a to F7c, F8 and F9a added tests since. Replace this line with the count `npm test` prints after this run.)* Tests now run one file at a time (`--test-concurrency=1`) because the test files share one database role (`emr_app`). The database must be running first (`npm run db:up`, with `POSTGRES_PASSWORD` in `.env`).
 
 ## How to use (every chat, nothing to remember)
 
 1. Find the **first row below that is not ticked**. That is your step.
 2. Open a **new chat**. Attach **this file** and the **file(s) named in that row**. Nothing else.
-3. Say: **"Do the next task."** Claude picks the first unticked task in that file inside the row's task range, and tells you which `grep` or `sed` output to paste.
+3. Say: **"Do the next task."** Claude picks the first unticked task in that file inside the row's task range, and tells you which `grep` or `sed` output to paste. (On Windows PowerShell there is no `grep`: use `Select-String`, or attach the source files so Claude can read them.)
 4. Apply the edits, run `npm test`, commit.
 5. Tick the task `[x]` in the phase file. When every task in the row is ticked, tick the row here. If a row has a gate or a manual check, do it before moving on.
 6. Rows marked *Analytics repo* are built in the Analytics repo with **Context block B** (below). All other rows use Context block A.
@@ -32,8 +32,8 @@ Steps 5, 11, 14 and 16 are different from the old order in section 15.3. The old
 | 9 | [ ] | `plan-D-demo.md` | D0 to D5b1 (all done, 20 Nov 2026; D5b2 moved to step 10) | 35, 36 | **Do now: run `npm test` (D5b1 was only run on a stand-in persona file), then Gate D.** **Gate D:** ten demo patients load on a fresh database and in Demo mode and match `demo-expected.json`. Then (manual) open each demo patient on the ward board, handover and flowsheets and confirm everything is marked synthetic. |
 | 10 | [x] | `plan-F.md`, then `plan-D-demo.md` | F4, then D5b2 (both done, 20 Nov 2026) | 28 | **Do now: run `npm test` (F4 added `elements.project.test.js`; D5b2 was only syntax-checked).** The export half of D5b2 is a `test.todo` until F7b; D7a covers it. |
 | 11 | [x] | `plan-P-coding.md` | P2c | - | P2c needs F4, so it moved here from step 5. **Done 20 Nov 2026. Do now: run `npm test`, then step 12 (F5 to F9b); F7c must pass `localSystems` to `projectCase`.** |
-| 12 | [ ] | `plan-F.md` | F5 to F9b | 22, 29, 31, 33 | After F7 (manual): export a de-identified bundle from synthetic data, import it into the Analytics app as a batch and run Data quality and completeness in V1, V2 and V4. |
-| 13 | [ ] | `plan-6-marketplace.md` | 42a1 to 47b2 | 1, 2, 3, 6, 8, 10 | - |
+| 12 | [ ] | `plan-F.md` | F9b (F5 to F9a done 21 Nov 2026) | 22, 29, 31, 33 | **F7c, F8 and F9a done 21 Nov 2026. Do now: set EXPORT_SALT in .env and .env.example, run npm test, then F9b (admin and informatician). Rewrite the About text on analytics in F9b.** F7a and F7b done 20 Nov 2026 (`export-bundle.js`; tests in `export-bundle.test.js` and `export-bundle.build.test.js`). F7c settled its roles: admin and informatician; it passes `localSystems` to `projectCase`, takes its salt from configuration and passes the final (mergedInto) patient id. After F7 (manual): export a de-identified bundle from synthetic data, import it into the Analytics app as a batch and run Data quality and completeness in V1, V2 and V4. |
+| 13 | [ ] | `plan-6-marketplace.md` | 42a1 to 47b2 | 1, 2, 3, 6, 8, 10 | **Started 21 Nov 2026. Done: 42a1 to 42c3 and 43a1 to 43b2 (43b3 is built but not green yet, see its note), except 42a3b (parts ii and iii wait for AA1 and M1) and 42b7 (code is there, tests unconfirmed). Do now: add `package-lint.draft.test.js` and `review-requests.test.js` to the `test` script, run `npm test` (43a3, 43b1 and 43b2 were found already built; 43a2 and 43b3 were not run), then finish 43b3 and do 43b4. If `validateAccess` wants a different access shape, fix `ALLOW_ADMIN` in `audit.test.js` and `ACC` in `review-requests.test.js`.** `server.js` `STATIC_FILES` now also serves `views.js` and `package-lint.js` (enhancer.html loads both). Steps 9 and 12 above are still unticked; finish them when you can. |
 | 14 | [ ] | `plan-M-matching.md` | M1 | - | M1 moved before Phase A: Phase A needs it (section 22 and the Phase A prerequisites). |
 | 15 | [ ] | `plan-A-analytics.md` | AA0 to AA1 | 30, 32 | Analytics repo, use Context block B. |
 | 16 | [ ] | `plan-P-coding.md` | P5b | 42 | Analytics repo. It needs AA1, so it moved here from step 5. |
