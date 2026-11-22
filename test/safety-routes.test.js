@@ -28,6 +28,13 @@ const MATRIX = {
   'GET /api/patients/:id/encounters': { guard: 'patients:read' },
   'POST /api/patients/:id/encounters': { guard: 'encounters:write' },
   'POST /api/encounters/:id/close': { guard: 'encounters:write' },
+  'GET /api/patients/:id/cases':    { guard: 'cases:read' },
+  'POST /api/patients/:id/cases':   { guard: 'cases:write' },
+  'GET /api/cases/:id':             { guard: 'cases:read' },
+  'PATCH /api/cases/:id':           { guard: 'cases:write' },
+  'PATCH /api/cases/:id/archive':   { guard: 'cases:write' },
+  'POST /api/cases/:id/encounters': { guard: 'cases:write' },
+  'POST /api/cases/:id/narrative':  { guard: 'cases:write' },
   'GET /api/audit':                 { guard: 'audit:read' },
   'PUT /api/ai/settings':           { guard: 'ai:admin' },
   'POST /api/ai/preview':           { guard: 'ai:use' },
@@ -40,6 +47,8 @@ const EXPECTED_ROLES = {
   'patients:register': ['admin', 'doctor', 'nurse'],
   'patients:archive':  ['admin', 'doctor'],
   'encounters:write':  ['admin', 'doctor', 'nurse'],
+  'cases:read':        ['admin', 'doctor', 'nurse', 'viewer'],
+  'cases:write':       ['admin', 'doctor', 'nurse'],
   'audit:read':        ['admin'],
   'ai:use':            ['admin', 'doctor'],
   'ai:admin':          ['admin'],
@@ -191,6 +200,28 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/encounters/:id/close', nurse, async () => {
         const r = await nurse.c.post(`/api/encounters/${S.eid}/close`, { ...fake });
         assert.equal(r.status, 200); return ['encounter.close'];
+      }],
+      ['POST /api/patients/:id/cases', nurse, async () => {          // cases refuse forged actor fields, so no `...fake` here (see test/cases.test.js)
+        const r = await nurse.c.post(`/api/patients/${S.pid}/cases`, { title: 'Audit case' });
+        assert.equal(r.status, 201); S.cid = r.body.case.id; S.crv = r.body.case.row_version; return ['case.create'];
+      }],
+      ['POST /api/cases/:id/narrative', nurse, async () => {
+        assert.equal((await nurse.c.post(`/api/cases/${S.cid}/narrative`, { body: 'Audit narrative' })).status, 201);
+        return ['case.narrative_add'];
+      }],
+      ['POST /api/cases/:id/encounters', nurse, async () => {
+        const r = await nurse.c.post(`/api/cases/${S.cid}/encounters`, { encounterId: S.eid, relationType: 'reviewed' });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); return ['case.link_encounter'];
+      }],
+      ['PATCH /api/cases/:id', nurse, async () => {
+        const r = await nurse.c.patch(`/api/cases/${S.cid}`, { status: 'resolved', rowVersion: S.crv });
+        assert.equal(r.status, 200, JSON.stringify(r.body)); S.crv = r.body.case.row_version; return ['case.update'];
+      }],
+      ['PATCH /api/cases/:id/archive', doctor, async () => {
+        const a = await doctor.c.patch(`/api/cases/${S.cid}/archive`, { archived: true, rowVersion: S.crv });
+        assert.equal(a.status, 200, JSON.stringify(a.body));
+        assert.equal((await doctor.c.patch(`/api/cases/${S.cid}/archive`, { archived: false, rowVersion: a.body.case.row_version })).status, 200);
+        return ['case.archive', 'case.restore'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);

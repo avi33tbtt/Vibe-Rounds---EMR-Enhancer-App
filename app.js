@@ -8,6 +8,7 @@ const { audit } = require('./audit');
 const { permsFor } = require('./permissions');
 const A = require('./auth');
 const { mountAi } = require('./ai');
+const { mountCases } = require('./cases');
 const { createLimiter } = require('./ratelimit');
 
 const PATIENT_SELECT = `
@@ -273,6 +274,9 @@ function createApp(pool, opts = {}) {
     });
     res.status(out.status).json(out.body);
   });
+
+  /* ---------- cases (task B1a) ---------- */
+  mountCases(app, pool);
 
   /* ---------- audit (read-only) ---------- */
   app.get('/api/audit', A.requirePerm(pool, 'audit:read'), async (req, res) => {

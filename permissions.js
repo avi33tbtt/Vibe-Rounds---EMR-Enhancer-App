@@ -5,6 +5,8 @@ const PERMS = {
   'patients:register': ['admin', 'doctor', 'nurse'],
   'patients:archive':  ['admin', 'doctor'],
   'encounters:write':  ['admin', 'doctor', 'nurse'],
+  'cases:read':        ['admin', 'doctor', 'nurse', 'viewer'],
+  'cases:write':       ['admin', 'doctor', 'nurse'],   // create, edit title/status, archive/restore, link encounters, add narrative
   'audit:read':        ['admin'],
   'ai:use':            ['admin', 'doctor'],   // draft / rank element sets with the server-side AI
   'ai:admin':          ['admin'],             // the AI on/off switch, model and request limits

@@ -64,8 +64,10 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | 8f | chunk-08f-entered-in-error.md | No hard delete of observation rows | DONE | 2026-11-22 | page + tests | emr-enhancer.html, test/safety-data.test.js, test/safety-escaping.test.js. Rows marked entered_in_error (session user, time), kept, hidden by default, exported as entered-in-error. 148 pass, 2 todo. |
 | | | **TRACK B: canonical clinical context model on the server (book Ch5)** | | | | |
 | B0 | chunk-B0-baseline-contract.md | Baseline contract: prototype objects to entities (docs only) | DONE | 2026-11-22 | 1 markdown file | CLINICAL_CONTEXT_MODEL.md. 29 objects mapped; 6 decisions D1-D6 await your review before B1a. Table names are proposals (Ch5 text not in repo). Found: field ids clash across sets. |
-| B1a | chunk-B1a-cases-server.md | Persistent cases: migration, API, permissions | TODO |  | 1 migration, 1 routes file, tests | Needs: B0. |
-| B1b | chunk-B1b-cases-page.md | Cases in the page via storage adapter | TODO |  | page + 1 test file | Needs: B1a. |
+| B1a | chunk-B1a-cases-server.md | Persistent cases: migration, API, permissions | DONE | 2026-11-22 | 1 migration, 1 routes file, tests | 006_cases.sql, cases.js, app.js, permissions.js, 3 test files, DECISIONS.md. 7 routes; DB-enforced same-patient link. 162 tests (157 pass, 2 todo). B0 names differ: see DECISIONS. |
+| B1b | chunk-B1b-cases-page.md | Cases in the page via storage adapter | SPLIT | 2026-11-22 |  | Replaced by B1b-1 and B1b-2: item 3 (audited import) needs a server route; interim data rule undecided. Nothing built. |
+| B1b-1 | chunk-B1b-cases-page.md | Storage adapter (server/local); signed-in case list, create, open, title/status, narrative; 409 screen | TODO |  | page + 1 test file | Needs: B1a and your decision on interim data (applied sets, values, notes) while signed in, see OPEN QUESTIONS. Chunk items 1, 2, 4. |
+| B1b-2 | chunk-B1b-cases-page.md | Import local demo cases (explicit action, audited as an import) | TODO |  | 1 route in cases.js, matrix, page button, 1 test file | Needs: B1b-1. Chunk item 3. Needs a new server route, so it was outside B1b's size guard. |
 | B2a | chunk-B2a-element-sets-server.md | Versioned element sets (server) | TODO |  | 1 migration, 1 routes file, tests | Needs: B1a. |
 | B2b | chunk-B2b-element-sets-page.md | Library + case pinning use server versions | TODO |  | page + 1 test file | Needs: B2a, B1b. May merge into B3a/B3b (see chunk). |
 | 8b | chunk-08b-submit-snapshot.md | Server: submit set for review (snapshot) | TODO |  | 1 migration, routes, tests | Needs: 8a, B2a. Reordered 2026-11-22: build on server versions (apply chunk-B2r changes here; chunk text says snapshots). |
@@ -141,6 +143,7 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - Cohort engine is built against synthetic fixtures first; the EMR cohort exporter is the last row.
 
 ## OPEN QUESTIONS
+- DECIDE before B1b-1: while signed in, applied sets, values and notes still sit in the case object but have no server table until B3. Option A: keep them in memory only (nothing clinical in localStorage; lost on reload). Option B: keep them in localStorage under a separate key as a temporary, labelled exception, removed in B3b/B3c (synthetic data only). Claude recommends B.
 - Resolved 2026-11-22: re-ordered, review workflow (8b to 8d) now follows B2b and is built on server versions.
 - Where do the CCIS libraries and the Intelligence App live long term: this repo (current plan) or a separate repo after C9?
 - Which clinician owns the snake-envenomation parameters used by the slice?

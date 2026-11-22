@@ -42,6 +42,8 @@ Where the facts came from: `emr-enhancer.html` (lines ~405 to 1000 and 1100 to 1
 
 ## 3. Mapping table: browser object to target
 
+**Names as built (B1a, 2026-11-22):** the chunk's names won over the proposals below: case table `clinical_cases` (with `case_key`, `row_version`, status `active|resolved|closed|archived`), `case_encounters` (with `patient_id` and `relation_type`), narrative table `case_narrative_entries` (author column `author_id`). Later rows below are still proposals.
+
 "Stays" means it never goes to the server.
 
 | # | Browser object (where) | Target entity / table | Identifiers and keys | Lifecycle states | Lost or changed |

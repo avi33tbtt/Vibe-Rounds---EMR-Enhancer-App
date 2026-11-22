@@ -16,7 +16,7 @@ test.after(async () => { await env.close(); });
 
 // ---------- database ----------
 // Every table must be listed here. A new table fails this test until someone decides which kind it is.
-const CLINICAL = ['patients', 'encounters', 'audit_log'];        // never deleted: rows are archived, closed or appended
+const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries'];        // never deleted: rows are archived, closed or appended
 const NOT_CLINICAL = ['users', 'sessions', 'schema_migrations', 'ai_settings'];   // accounts, logins, bookkeeping, settings
 
 test('every table is classified, and every clinical table refuses DELETE', async () => {
@@ -27,6 +27,10 @@ test('every table is classified, and every clinical table refuses DELETE', async
   const p = await a.post('/api/patients', { name: 'Keep Me', mrn: 'KEEP-1', dob: '1980-01-01', sex: 'F' });
   assert.equal(p.status, 201);
   assert.equal((await a.post(`/api/patients/${p.body.patient.id}/encounters`, { bed: 'KEEP-BED' })).status, 201);
+  // a case opened while the encounter is open links to it; one narrative entry: every case table has rows to protect (task B1a)
+  const kc = await a.post(`/api/patients/${p.body.patient.id}/cases`, { title: 'Keep case' });
+  assert.equal(kc.status, 201);
+  assert.equal((await a.post(`/api/cases/${kc.body.case.id}/narrative`, { body: 'Keep narrative' })).status, 201);
 
   for (const t of CLINICAL) {
     const n = Number((await env.pool.query(`SELECT count(*) n FROM ${t}`)).rows[0].n);
@@ -58,15 +62,22 @@ test('patients are archived, not deleted: archive and restore keep the row, who 
 
 // Chunk 06c closes the old gap: TRUNCATE is refused by trigger for everyone, and the app's database role cannot delete or alter anything.
 test('patients and encounters refuse TRUNCATE even for the owner connection (trigger), like audit_log', async () => {
-  await assert.rejects(env.pool.query('TRUNCATE encounters'), /append-only/);
-  await assert.rejects(env.pool.query('TRUNCATE patients, encounters'), /append-only/);
+  // encounters is now also referenced by case_encounters (B1a), and Postgres refuses a referenced table before any trigger runs: still a refusal
+  await assert.rejects(env.pool.query('TRUNCATE encounters'), /append-only|cannot truncate a table referenced/);
+  await assert.rejects(env.pool.query('TRUNCATE patients, encounters'), /append-only|cannot truncate a table referenced/);
   await assert.rejects(env.pool.query('TRUNCATE patients CASCADE'), /append-only/);
   // patients is also held by a foreign key, which hides its own trigger; drop the FK inside a rolled-back transaction to prove the trigger alone refuses it
   const c = await env.pool.connect();
   try {
     await c.query('BEGIN');
     await c.query('ALTER TABLE encounters DROP CONSTRAINT encounters_patient_id_fkey');
+    await c.query('ALTER TABLE clinical_cases DROP CONSTRAINT clinical_cases_patient_id_fkey');   // cases also reference patients (B1a)
     await assert.rejects(c.query('TRUNCATE patients'), /patients is append-only; TRUNCATE is not allowed/);
+  } finally { await c.query('ROLLBACK'); }
+  try {   // same proof for encounters: drop the case link's foreign key (a failed statement aborts a transaction, so this is a second one)
+    await c.query('BEGIN');
+    await c.query('ALTER TABLE case_encounters DROP CONSTRAINT case_encounters_encounter_id_patient_id_fkey');
+    await assert.rejects(c.query('TRUNCATE encounters'), /encounters is append-only; TRUNCATE is not allowed/);
   } finally { await c.query('ROLLBACK'); c.release(); }
 });
 
