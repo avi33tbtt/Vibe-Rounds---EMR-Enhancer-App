@@ -25,12 +25,12 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 
 ---
 
-**Added 2026-11-22 (plan extension).** Rows B0 to D8b extend the plan toward the book's Chapters 5 to 10. Rules that apply to every new row: use the next free migration number (never a fixed one); every new route updates the permission matrix and audit tests on purpose; every new table gets only the grants `emr_app` needs and no DELETE/TRUNCATE on clinical data; CCIS libraries (`ccis-*.js`) are pure JS with no database access; data files live in `ccis/`; tests are `test/ccis-*.test.js`. The "Needs:" text in Notes lists prerequisite rows: do not start a row whose prerequisites are not DONE.
+**Added 2026-11-22 (plan extension).** Rows B0 to B5 extend the plan toward the book's Chapter 5 (clinical context on the server). Rules that apply to every new row: use the next free migration number (never a fixed one); every new route updates the permission matrix and audit tests on purpose; every new table gets only the grants `emr_app` needs and no DELETE/TRUNCATE on clinical data. The CCIS app (spec, schemas, validator, runtime, analytics, cohorts) is a SEPARATE repo with its own tracker: https://github.com/avi33tbtt/Vibe-Rounds---CCIS . Only B5 (context envelope) and D8b (cohort exporter) stay here. The old Track C/D rows are marked MOVED; their chunk files in `emr-plan-chunks/` are left in place as reference and are not to be built here.
 
 ---
 
 ## STATUS LEGEND
-`TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` | `SKIPPED` | `SPLIT` (replaced by sub-tasks)
+`TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` | `SKIPPED` | `SPLIT` (replaced by sub-tasks) | `MOVED` (now tracked in the CCIS repo)
 
 ## TASK LIST
 
@@ -80,45 +80,14 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | B3b | chunk-B3b-observations-page.md | Values and trajectories via server; entered-in-error UI | TODO |  | page + 1 test file | Needs: B3a, 8f. Closes todo (b). Also does B2b-2: pin, diff, explicit update, export from pin. |
 | B3c | chunk-B3c-notes-server.md | Notes and signing on the server | TODO |  | 1 migration, routes, page notes, tests | Needs: B3a, 8e. Closes todos (a) and (d). |
 | B4 | chunk-B4-pathways.md | Pathway versions and composition | TODO |  | 1 migration, routes, page, tests | Needs: B3a. Split server/page if large. |
-| B5 | chunk-B5-context-service.md | Context service: versioned minimal envelope | TODO |  | 1 module, 1 route, tests | Needs: B3a, B4. Input contract for CCIS. |
-| | | **TRACK C: CCIS schemas, validators and first vertical slice (book Ch9)** | | | | |
-| C0 | chunk-C0-ccis-spec.md | CCIS spec baseline (docs only) | TODO |  | 3 markdown files | Can start any time after 8f; DB-free. User approves freeze. |
-| C1a | chunk-C1a-schemas-core.md | Schemas: manifest, element, terminology binding | TODO |  | 3 schemas + module + tests | Needs: C0. Adds Ajv (pinned). |
-| C1b | chunk-C1b-schemas-pathway-node.md | Schemas: pathway, decision node | TODO |  | 2 schemas + tests | Needs: C1a. |
-| C1c | chunk-C1c-schemas-analytics.md | Schemas: analytics package, execution manifest, validation record, run result | TODO |  | 4 schemas + tests | Needs: C1b. |
-| C2a | chunk-C2a-reference-valid.md | Reference artefacts (valid) + synthetic fixtures | TODO |  | JSON files + 1 test | Needs: C1c. Use case: snake envenomation process metrics. |
-| C2b | chunk-C2b-reference-invalid.md | Research candidate, FHIR Mode example, invalid per layer | TODO |  | JSON files | Needs: C2a. |
-| C3a | chunk-C3a-validator-1.md | Validator layers 1 to 3 | TODO |  | 1 module + CLI + tests | Needs: C2b. |
-| C3b | chunk-C3b-validator-2.md | Validator layers 4 to 5 (semantic, graph) | TODO |  | 1 module + tests | Needs: C3a. |
-| C3c | chunk-C3c-validator-3.md | Validator layers 6 to 8 (safety, tests, governance) | TODO |  | 1 module + tests | Needs: C3b. |
-| C4 | chunk-C4-compiler.md | Compiler: canonical form, checksum, equivalence | TODO |  | 1 module + tests | Needs: C3c. |
-| C5a | chunk-C5a-runtime-import.md | Runtime: import context envelope | TODO |  | 1 module + tests | Needs: B5, C4. |
-| C5b | chunk-C5b-compatibility.md | Runtime: compatibility resolver | TODO |  | 1 module + tests | Needs: C5a. |
-| C5c | chunk-C5c-executor.md | Runtime: constrained executor + decision path | TODO |  | 1 module + tests | Needs: C5b. No eval. |
-| C6 | chunk-C6-run-records.md | Immutable run records + API | TODO |  | 1 migration, 1 routes file, tests | Needs: C5c, B5. |
-| C7 | chunk-C7-test-marketplace.md | Local test marketplace: publish, resolve, pin | TODO |  | 1 module + index + tests | Needs: C4. |
-| C8 | chunk-C8-result-viewer.md | Result viewer (ci.html) | TODO |  | 1 page + route + tests | Needs: C6. |
-| C9 | chunk-C9-vertical-slice.md | First conformant vertical slice + CCIS 0.1 baseline | TODO |  | 1 test file + docs | Needs: C6, C7, C8. User reviews limitations. |
-| | | **TRACK D: analytics catalogue, decision graphs, cohorts, FHIR, governance (book Ch8, Ch10)** | | | | |
-| D1a | chunk-D1a-templates-core.md | Analytics templates 1 to 3 (threshold, trend, score) | TODO |  | 3 templates + fixtures | Needs: C9. |
-| D1b | chunk-D1b-templates-more.md | Templates 4 to 6 (monitoring gap, eligibility, follow-up due) | TODO |  | 3 templates + fixtures | Needs: D1a. Medication-safety and staging BLOCKED until a clinician owner supplies rules. |
-| D1c | chunk-D1c-catalogue-discovery.md | Catalogue discovery + status labels | TODO |  | 1 module + tests | Needs: D1b, C7. |
-| D2a | chunk-D2a-decision-graph-engine.md | Decision graph: schema, static checks, executor | TODO |  | 1 schema + executor + tests | Needs: C5c. |
-| D2b | chunk-D2b-graph-code-authoring.md | Decision graph authoring: code/structured editor | TODO |  | 1 page section/CLI + tests | Needs: D2a. Visual node builder is later. |
-| D2c | chunk-D2c-llm-drafting.md | LLM drafting for graphs/templates (drafts only) | TODO |  | 1 route file + tests | Needs: D2b. |
-| D3 | chunk-D3-research-to-package.md | Research paper to traceable analytics package | TODO |  | 1 module + route + tests | Needs: D2c, D1a. |
-| D4a | chunk-D4a-cohort-definition.md | Cohort definition schema + validator | TODO |  | 1 schema + rules + tests | Needs: C9. |
-| D4b | chunk-D4b-cohort-evaluator.md | Cohort evaluator (3-valued) on synthetic data | TODO |  | 1 module + fixtures + tests | Needs: D4a. |
-| D4c | chunk-D4c-cohort-analytics.md | Cohort analytics execution + aggregation + provenance | TODO |  | 1 module + tests | Needs: D4b, D1a. |
-| D4d | chunk-D4d-cohort-access.md | Population-level access, purpose, small-cell control | TODO |  | 1 routes file + permissions + tests | Needs: D4c, B5. |
-| D5a | chunk-D5a-fhir-capability.md | FHIR Mode profile + capability matrix | TODO |  | docs + 1 test | Needs: C9. |
-| D5b | chunk-D5b-fhir-roundtrip.md | FHIR Mode round-trip + negative tests | TODO |  | tests + fixtures | Needs: D5a. |
-| D6 | chunk-D6-governance.md | External review + release governance | TODO |  | docs + 1 script + tests | Needs: C9, D1c. |
-| D7 | chunk-D7-evaluation.md | Quality + reliability evaluation (CI job) | TODO |  | 1 workflow edit + script + docs | Needs: D4c. |
-| D8a | chunk-D8a-cohort-package-contract.md | Cohort data package contract + import acceptance | TODO |  | 1 spec + schema + module + tests | Needs: D4d, B5. |
-| D8b | chunk-D8b-emr-cohort-exporter.md | EMR Enhancer cohort exporter | TODO |  | 1 routes file + page dialog + tests | Needs: D8a, B3c, D4d. Last row. |
+| B5 | chunk-B5-context-service.md | Context service: versioned minimal envelope | TODO |  | 1 module, 1 route, tests | Needs: B3a, B4. The envelope must conform to `docs/IMPORT-CONTRACT.md` of the CCIS repo (CCIS row 0.3) and pass its fixtures. Until that file exists, wait or write to the draft contract. |
+| | | **TRACK C and D: MOVED to the CCIS repo** (https://github.com/avi33tbtt/Vibe-Rounds---CCIS) | | | | |
+| C0 to C9 | (CCIS repo) | CCIS spec, schemas, validator, compiler, runtime, run records, marketplace, viewer, first slice | MOVED | 2026-11-22 |  | Replaced by CCIS phases 0 to 3. Do not build here. |
+| D1a to D7 | (CCIS repo) | Templates, decision graphs, cohorts, FHIR Mode, governance, evaluation | MOVED | 2026-11-22 |  | Replaced by CCIS phases 4 to 6. Do not build here. |
+| D8a | (CCIS repo) | Cohort data package contract | MOVED | 2026-11-22 |  | Now CCIS row 6.4. |
+| D8b | chunk-D8b-emr-cohort-exporter.md | EMR Enhancer cohort exporter | BLOCKED |  | 1 routes file + page dialog + tests | Needs: B3c, B5, and CCIS row 6.4 (cohort package contract). Last EMR row. Chunk file predates the CCIS plan: re-read it against CCIS 6.4 first. |
 
-Suggested order: numeric within each track; tracks run A, then B, then C, then D. Exceptions that are safe: 8e and 8f can be done any time after 6a; 6e and 7d can share one session; C0 to C4 are DB-free and may run in parallel with Track B if you want faster progress (C5a onward needs B5).
+Suggested order: numeric within each track; Track A, then B. The EMR side then waits for the CCIS repo: B5 needs CCIS row 0.3 (import contract), D8b needs CCIS row 6.4. Exceptions that are safe: 8e and 8f can be done any time after 6a; 6e and 7d can share one session.
 
 Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged into them (SKIPPED). Next rows in order: 8e, 8f, B0, B1a, B1b, B2a, B2b, 8b, 8c, 8d.
 
@@ -129,9 +98,8 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - Try the app in a real browser with real synthetic data; Node 20 and other PostgreSQL versions are untested.
 - Tick the finished chunks in `emr-plan-chunks/02-roadmap.md` (items 01 to 05 are still unticked there); later items are tracked in `03-roadmap-track-bcd.md`.
 - For 7c: perform the restore on a clean machine yourself and confirm the result.
-- Review and approve: B0 mapping (before B1), C0 spec freeze (before C1), C9 limitations list (before Track D).
-- Name a clinician owner for any clinical rule content (thresholds, bands, medication safety, staging). Until then those templates stay BLOCKED and parameters stay disabled.
-- Arrange an independent clinical reviewer before any package is labelled `validated` (D1c, D6).
+- Review and approve: the B0 mapping (before B1). CCIS approvals (R0, limitations review) are tracked in the CCIS tracker.
+- Name a clinician owner for any clinical rule content (thresholds, bands, medication safety, staging): see the CCIS tracker.
 - Check terminology licences and device-software/health-data rules (go-live gate).
 
 ## KNOWN GAPS (2 `test.todo` tests left) and where they are fixed
@@ -140,14 +108,13 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 ## DECISIONS MADE ON 2026-11-22 (also in DECISIONS.md)
 - Server-side storage is ALWAYS ON for cases, element sets, observations and notes (reverses the snapshot-only idea). Browser storage remains only as the file:// demo fallback behind one storage adapter; signed-in sessions write no clinical data to localStorage.
 - CSP uses option A (delegated listener, no inline handlers), split into 6d-1 and 6d-2a to 6d-2c.
-- CCIS code: root-level `ccis-*.js` (pure, no DB) plus `ccis/` for schemas, examples, fixtures and spec; JSON Schema validated with one pinned dependency (Ajv); runtime is a whitelist interpreter, never `eval`.
-- First vertical-slice use case: snake envenomation process metrics (bite-to-ASV interval, clotting-test documentation completeness). No doses or bands; parameters supplied by a local clinician and disabled by default.
-- Cohort engine is built against synthetic fixtures first; the EMR cohort exporter is the last row.
+- CCIS is a separate app and repo (CCIS decision D-001): standalone, local-first, imports an export file from the EMR. It replaces the old EMR Track C/D plan. This repo keeps only the exporter side (B5, D8b).
+- First CCIS slice (in the CCIS repo): snake envenomation process metrics. No doses or bands; parameters from a local clinician, disabled by default. The EMR cohort exporter is the last EMR row.
 
 ## OPEN QUESTIONS
 - Resolved 2026-11-22: interim data while signed in = option B (`vr_interim`, removed in B3b/B3c). Built in B1b-1.
 - Resolved 2026-11-22: re-ordered, review workflow (8b to 8d) now follows B2b and is built on server versions.
-- Where do the CCIS libraries and the Intelligence App live long term: this repo (current plan) or a separate repo after C9?
+- Resolved 2026-11-22: CCIS lives in its own repo (Vibe-Rounds---CCIS). The snake-envenomation parameter owner question is now tracked there.
 - Which clinician owns the snake-envenomation parameters used by the slice?
 - Who may publish element sets? B2a made `sets:publish` admin-only because no informatician role exists. Add the role (users.role change, seed, role tests) or allow doctors?
 - Adding any API route makes `test/safety-routes.test.js` fail until the permission matrix there is updated on purpose.
