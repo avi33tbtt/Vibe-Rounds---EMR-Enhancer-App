@@ -63,7 +63,7 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | 8e | chunk-08e-signer-from-session.md | Signer/author from session (core-rule gap) | DONE | 2026-11-22 | page + tests | emr-enhancer.html, test/safety-data.test.js, test/safety-escaping.test.js. Signer, amender and FHIR author = signed-in user; no typed box; vr_user purged. 147 pass, 3 todo. Notes still in browser. |
 | 8f | chunk-08f-entered-in-error.md | No hard delete of observation rows | DONE | 2026-11-22 | page + tests | emr-enhancer.html, test/safety-data.test.js, test/safety-escaping.test.js. Rows marked entered_in_error (session user, time), kept, hidden by default, exported as entered-in-error. 148 pass, 2 todo. |
 | | | **TRACK B: canonical clinical context model on the server (book Ch5)** | | | | |
-| B0 | chunk-B0-baseline-contract.md | Baseline contract: prototype objects to entities (docs only) | TODO |  | 1 markdown file | Needs: 8f. Decision 2026-11-22: server is system of record. User reviews before B1. |
+| B0 | chunk-B0-baseline-contract.md | Baseline contract: prototype objects to entities (docs only) | DONE | 2026-11-22 | 1 markdown file | CLINICAL_CONTEXT_MODEL.md. 29 objects mapped; 6 decisions D1-D6 await your review before B1a. Table names are proposals (Ch5 text not in repo). Found: field ids clash across sets. |
 | B1a | chunk-B1a-cases-server.md | Persistent cases: migration, API, permissions | TODO |  | 1 migration, 1 routes file, tests | Needs: B0. |
 | B1b | chunk-B1b-cases-page.md | Cases in the page via storage adapter | TODO |  | page + 1 test file | Needs: B1a. |
 | B2a | chunk-B2a-element-sets-server.md | Versioned element sets (server) | TODO |  | 1 migration, 1 routes file, tests | Needs: B1a. |
