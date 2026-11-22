@@ -108,6 +108,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
   </nav>
 </header>
 <div id="pbanner" class="pb"></div>
+<div id="conflictBox" class="cd" style="display:none" role="alert"></div>
 
 <dialog id="aiDlg">
   <b>Review before sending to the AI provider</b>
@@ -175,6 +176,15 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <input id="p_age" placeholder="Age" style="width:80px" data-act="savePatient" data-ev="change">
         <select id="p_sex" style="width:90px" data-act="savePatient" data-ev="change"><option value="">Sex</option><option value="M">M</option><option value="F">F</option><option value="O">Other</option></select>
       </div></div>
+      <div class="cd" id="srvCaseBox" style="display:none">
+        <label>Case title and status (stored on the server)</label>
+        <div class="flex">
+          <input id="sc_title" maxlength="200" aria-label="Case title" style="flex:2">
+          <select id="sc_status" aria-label="Case status" style="width:130px"><option value="active">Active</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select>
+          <button class="b sm" id="sc_save" data-act="caseSaveMeta">Save</button>
+        </div>
+        <div class="mu" id="sc_info"></div>
+      </div>
       <div class="cd">
         <label>Case narrative</label>
         <textarea class="narrative" id="narrative" placeholder="e.g. 62M with T2DM, CKD 3b, new plantar ulcer…" data-act="saveCase" data-ev="input"></textarea>
@@ -182,6 +192,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
           <button class="b sec sm" data-act="suggest">Suggest</button>
           <button class="b sec sm" data-ai data-act="aiRank">AI rank</button>
           <button class="b sec sm" data-act="archiveCase">Archive case</button>
+          <span id="narSt" class="mu" role="status"></span>
         </div>
       </div>
       <div id="formArea">
@@ -306,8 +317,9 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <div class="pane" id="cases">
       <h3>Cases</h3>
       <div class="flex"><input id="caseQ" placeholder="Search name, MRN, context…" style="flex:1" data-act="renderCases" data-ev="input">
-        <label style="display:flex;gap:4px;font-weight:400;margin:0"><input type="checkbox" id="caseArch" style="width:auto" data-act="renderCases" data-ev="change"> show archived</label>
+        <label style="display:flex;gap:4px;font-weight:400;margin:0"><input type="checkbox" id="caseArch" style="width:auto" data-act="casesReload" data-ev="change"> show archived</label>
         <button class="b" data-act="newCase">+ New case</button></div>
+      <div id="caseMsg" class="mu" role="status"></div>
       <div id="caseList"></div>
     </div>
 
@@ -611,10 +623,16 @@ function load(){
 }
 function save(touch=true){
   if(touch)CASE.updatedAt=nowISO();
+  if(srvMode()){interimWrite();return}   // signed in: vr_traj is never written
   const customs=REGISTRY.filter(s=>!BUILTIN.find(b=>b.id===s.id));
   try{localStorage.setItem('vr_traj',JSON.stringify({cases:CASES,current:CASE.id,customs}))}catch(e){toast('Storage full')}
 }
-function saveCase(){CASE.narrative=$('narrative').value;save()}
+function saveCase(){
+  CASE.narrative=$('narrative').value;
+  if(!srvMode()){save();return}
+  if(!CASE.serverId)return;   // no server case open: nothing is stored
+  Store.dirty=CASE;$('narSt').textContent='unsaved…';clearTimeout(Store.nt);Store.nt=setTimeout(storeFlush,1500);
+}
 const ver=id=>getSet(id)?.version||1;
 function resolve(a){const s=getSet(a.setId);if(!s)return;const av=a.version||1;if(av>=(s.version||1))return s;
   const h=(s.history||[]).find(x=>x.version===av);return h?{...s,title:h.title,desc:h.desc,fields:h.fields,version:av}:s}
@@ -655,30 +673,201 @@ function renderBanner(){
     dx.map(x=>`<span class="kind disease">${escA(x)}</span>`).join('')+pw.map(x=>`<span class="kind pathway">${escA(x)}</span>`).join('')+
     (CASE.status==='archived'?'<span class="kind">archived</span>':'')+'<span class="mu">synthetic data only</span>';
 }
-function newCase(){const c=newCaseObj();CASES.push(c);openCase(c.id)}
-function openCase(id){
+function newCase(){if(srvMode())return newCaseSrv();const c=newCaseObj();CASES.push(c);openCase(c.id)}
+function openCase(id){return srvMode()?openCaseSrv(id):openCaseLocal(id)}
+function openCaseLocal(id){
   const c=CASES.find(x=>x.id===id);if(!c)return;CASE=c;save(false);
   fillPatient();$('narrative').value=CASE.narrative||'';$('bj').textContent='';$('bchk').textContent='';
   renderAll();document.querySelector('[data-t=case]').click();
   if(CASE.patientId)refreshPatient(CASE.patientId);
 }
 function archiveCase(){
+  if(srvMode())return archiveCaseSrv();
   if(!confirm('Archive this case? Nothing is deleted; it stays under “show archived”.'))return;
   CASE.status='archived';save();const o=CASES.find(c=>c.status!=='archived');if(o)openCase(o.id);else newCase();
 }
-function restoreCase(id){const c=CASES.find(x=>x.id===id);if(c){c.status='open';save(false);renderCases();renderBanner()}}
+function restoreCase(id){if(srvMode())return restoreCaseSrv(id);const c=CASES.find(x=>x.id===id);if(c){c.status='open';save(false);renderCases();renderBanner()}}
 function renderCases(){
   const q=($('caseQ').value||'').toLowerCase(),showA=$('caseArch').checked;
   const rows=CASES.filter(c=>showA||c.status!=='archived').filter(c=>{
-    const hay=[caseName(c),caseMrn(c),...c.applied.map(a=>getSet(a.setId)?.title)].join(' ').toLowerCase();return!q||hay.includes(q)})
+    const hay=[caseName(c),caseMrn(c),c.title||'',...c.applied.map(a=>getSet(a.setId)?.title)].join(' ').toLowerCase();return!q||hay.includes(q)})
     .sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
   $('caseList').innerHTML=rows.map(c=>{
     const dx=c.applied.map(a=>resolve(a)).filter(s=>s&&s.kind==='disease').map(s=>`<span class="kind disease">${escA(s.title)}</span>`).join(' ');
     const dr=c.notes.filter(n=>n.status==='draft').length;
-    return`<div class="item" data-act="openCase" data-arg="${escA(c.id)}"><div><b>${escA(caseName(c))}</b> <span class="mu">MRN ${escA(caseMrn(c))}</span> ${dx}
+    return`<div class="item" data-act="openCase" data-arg="${escA(c.id)}"><div><b>${escA(caseName(c))}</b> <span class="mu">MRN ${escA(caseMrn(c))}</span>${c.title?` · ${escA(c.title)}`:''}${c.srvStatus&&c.srvStatus!=='active'?` <span class="kind">${escA(c.srvStatus)}</span>`:''} ${dx}
       <div class="meta">${c.applied.length} sets · ${c.notes.length} notes${dr?` (${dr} draft)`:''} · updated ${c.updatedAt.slice(0,16).replace('T',' ')}${c.id===CASE.id?' · open':''}</div></div>
-      ${c.status==='archived'?`<button class="b sec sm" data-act="restoreCase" data-arg="${escA(c.id)}">Restore</button>`:''}</div>`;
+      ${c.status==='archived'&&(!srvMode()||srvCan('cases:write'))?`<button class="b sec sm" data-act="restoreCase" data-arg="${escA(c.id)}">Restore</button>`:''}</div>`;
   }).join('')||'<div class="empty">No cases.</div>';
+}
+
+/* ---------- Storage adapter (B1b-1) ----------
+   local  = file:// demo or signed out: everything in localStorage 'vr_traj' (unchanged).
+   server = signed in: cases, title, status and narrative live on the server; 'vr_traj' is never written.
+   TEMPORARY exception (decision 2026-11-22, option B): until B3 the applied sets, values and notes of a server case, and custom
+   element sets, sit in localStorage under 'vr_interim' (synthetic data only). B3b/B3c remove it. */
+const srvMode=()=>!!Srv.user;
+const Store={q:Promise.resolve(),nt:null,dirty:null,busy:{},conflict:null};
+const CASE_PATIENT_CAP=50;
+const blankCase=()=>{const c=newCaseObj();c.unsaved=true;return c};
+function interimRead(){
+  try{const d=JSON.parse(localStorage.getItem('vr_interim')||'{}');return{cases:d.cases&&typeof d.cases==='object'?d.cases:{},customs:Array.isArray(d.customs)?d.customs:null}}
+  catch(e){return{cases:{},customs:null}}
+}
+function interimWrite(){
+  const im=interimRead(),cases=im.cases;
+  [CASE,...CASES].forEach(c=>{if(c&&c.serverId)cases[c.serverId]={applied:c.applied,values:c.values,notes:c.notes}});
+  const customs=REGISTRY.filter(s=>!BUILTIN.find(b=>b.id===s.id));
+  try{localStorage.setItem('vr_interim',JSON.stringify({_temporary:'applied sets, values and notes of server cases; synthetic data only; removed in B3',cases,customs}))}catch(e){toast('Storage full')}
+}
+function fromRow(r,old){
+  const im=interimRead().cases[r.id]||{};
+  return{id:'s'+r.id,serverId:r.id,rowVersion:r.row_version,title:r.title,srvStatus:r.status,patientId:r.patient_id,patient:{},
+    narrative:old?old.narrative:'',narrativeSent:old?old.narrativeSent:'',
+    applied:old?old.applied:(im.applied||[]),values:old?old.values:(im.values||{}),notes:old?old.notes:(im.notes||[]),
+    status:r.status==='archived'?'archived':'open',createdAt:r.created_at,updatedAt:r.updated_at}
+}
+function storeEnter(){   // after sign-in: server cases replace the demo cases on screen; the demo data stays in localStorage untouched
+  const im=interimRead();if(im.customs)REGISTRY=[...BUILTIN,...im.customs];
+  CASES=[];CASE=blankCase();Store.dirty=null;clearTimeout(Store.nt);conflictHide();
+  fillPatient();$('narrative').value='';$('narSt').textContent='';renderAll();
+}
+function storeLeave(){   // after sign-out or an expired session: back to the local demo cases
+  clearTimeout(Store.nt);Store.dirty=null;conflictHide();load();
+  fillPatient();$('narrative').value=CASE.narrative||'';$('narSt').textContent='';renderAll();
+}
+function storeFlush(){return Store.q=Store.q.then(doFlush,doFlush)}
+async function doFlush(){
+  clearTimeout(Store.nt);Store.nt=null;
+  const c=Store.dirty;Store.dirty=null;
+  if(!c||!c.serverId||!srvMode())return true;
+  const text=(c.narrative||'').trim();
+  if(!text||text===c.narrativeSent){if(c===CASE)$('narSt').textContent='';return true}   // the server keeps entries, it cannot store an empty one
+  const r=await api('POST','/api/cases/'+c.serverId+'/narrative',{body:text});
+  if(r.status===201){c.narrativeSent=text;if(c===CASE)$('narSt').textContent='saved';return true}
+  if(!Store.dirty)Store.dirty=c;
+  if(c===CASE)$('narSt').textContent='not saved: '+apiMsg(r);
+  return false;
+}
+async function storeLoadCases(){
+  const arch=$('caseArch').checked,q=arch?'?archived=1':'',msg=$('caseMsg');
+  const pr=await api('GET','/api/patients'+q);
+  if(!Srv.user)return;
+  if(pr.status!==200){msg.textContent=apiMsg(pr);return}
+  pr.body.patients.forEach(p=>{Srv.pts[p.id]=p});
+  const pts=pr.body.patients.slice(0,CASE_PATIENT_CAP);
+  const res=await Promise.all(pts.map(p=>api('GET','/api/patients/'+p.id+'/cases'+q)));
+  if(!Srv.user)return;
+  const old=Object.fromEntries(CASES.map(c=>[c.id,c])),rows=[];let denied=0;
+  res.forEach(r=>{if(r.status===200)rows.push(...r.body.cases);else denied++});
+  CASES=rows.map(r=>{const o=old['s'+r.id];if(!o)return fromRow(r);Object.assign(o,fromRow(r,o));return o});
+  if(CASE.serverId){const same=CASES.find(c=>c.id===CASE.id);if(same)CASE=same}
+  msg.textContent=(pr.body.patients.length>pts.length?`Showing cases of the first ${CASE_PATIENT_CAP} patients; search on the Patients tab for others. `:'')+(denied?'Some patients’ cases could not be loaded.':'');
+  renderCases();
+}
+function casesShow(){renderCases();if(srvMode())return storeLoadCases()}
+const caseTitleNow=()=>'Case opened '+nowISO().slice(0,16).replace('T',' ');
+async function openCaseSrv(id){
+  await storeFlush();
+  const c=CASES.find(x=>x.id===id);if(!c)return;
+  const r=await api('GET','/api/cases/'+c.serverId);
+  if(r.status!==200){toast(apiMsg(r));return}
+  Object.assign(c,fromRow(r.body.case,c));
+  c.narrative=r.body.narrative?r.body.narrative.body:'';c.narrativeSent=c.narrative.trim();
+  CASE=c;conflictHide();
+  fillPatient();$('narrative').value=c.narrative;$('narSt').textContent='';$('bj').textContent='';$('bchk').textContent='';
+  renderAll();document.querySelector('[data-t=case]').click();
+  if(c.patientId)refreshPatient(c.patientId);
+}
+async function ptOpenCaseSrv(pid){
+  if(Store.busy[pid])return;Store.busy[pid]=1;
+  try{
+    await storeFlush();
+    const l=await api('GET','/api/patients/'+pid+'/cases');
+    if(l.status!==200)return toast(apiMsg(l));
+    let row=l.body.cases[0];   // newest first, archived excluded
+    if(!row){
+      if(!srvCan('cases:write'))return toast('This patient has no case yet, and your role cannot create one.');
+      const c=await api('POST','/api/patients/'+pid+'/cases',{title:caseTitleNow()});
+      if(c.status!==201)return toast(apiMsg(c));
+      row=c.body.case;
+    }
+    let ex=CASES.find(x=>x.serverId===row.id);
+    if(!ex){ex=fromRow(row);CASES.push(ex)}
+    await openCaseSrv(ex.id);
+  }finally{Store.busy[pid]=0}
+}
+async function newCaseSrv(){
+  const pid=CASE&&CASE.patientId;
+  if(!pid)return toast('Open a patient on the Patients tab first: every case belongs to a registered patient.');
+  if(!srvCan('cases:write'))return toast('Your role cannot create cases.');
+  await storeFlush();
+  const r=await api('POST','/api/patients/'+pid+'/cases',{title:caseTitleNow()});
+  if(r.status!==201)return toast(apiMsg(r));
+  const c=fromRow(r.body.case);CASES.push(c);await openCaseSrv(c.id);
+}
+/* Title, status, archive and restore carry the row version that was loaded. A 409 shows the conflict screen; nothing is overwritten silently. */
+function opSend(c,op){
+  return op.op==='meta'?api('PATCH','/api/cases/'+c.serverId,{rowVersion:c.rowVersion,title:op.title,status:op.status})
+    :api('PATCH','/api/cases/'+c.serverId+'/archive',{rowVersion:c.rowVersion,archived:op.archived});
+}
+async function opRun(c,op){
+  const r=await opSend(c,op);
+  if(r.status===409&&r.body.error==='version_conflict'){conflictShow(c,op);return false}
+  if(r.status!==200){toast(apiMsg(r));if(c===CASE)$('sc_info').textContent=apiMsg(r);return false}
+  Object.assign(c,fromRow(r.body.case,c));return true;
+}
+async function caseSaveMeta(){
+  const c=CASE;if(!c.serverId)return;
+  if(await opRun(c,{op:'meta',title:$('sc_title').value,status:$('sc_status').value})){renderSrvCase();renderBanner();renderCases();toast('Saved')}
+}
+async function archiveCaseSrv(){
+  const c=CASE;if(!c.serverId)return toast('No case is open.');
+  if(!confirm('Archive this case? Nothing is deleted; it stays under “show archived”.'))return;
+  await storeFlush();
+  if(!await opRun(c,{op:'archive',archived:true}))return;
+  const o=CASES.find(x=>x.status!=='archived'&&x.id!==c.id);
+  if(o)await openCaseSrv(o.id);else{CASE=blankCase();fillPatient();$('narrative').value='';renderAll()}
+}
+async function restoreCaseSrv(id){
+  const c=CASES.find(x=>x.id===id);if(!c)return;
+  if(await opRun(c,{op:'archive',archived:false})){renderCases();renderSrvCase();renderBanner();toast('Restored')}
+}
+function renderSrvCase(){
+  const box=$('srvCaseBox');if(!box)return;
+  const on=srvMode()&&!!CASE.serverId;box.style.display=on?'':'none';if(!on)return;
+  const arch=CASE.status==='archived',w=srvCan('cases:write')&&!arch;
+  if(document.activeElement!==$('sc_title'))$('sc_title').value=CASE.title||'';
+  $('sc_status').value=EDITABLE_STATUS.includes(CASE.srvStatus)?CASE.srvStatus:'active';
+  [$('sc_title'),$('sc_status'),$('sc_save')].forEach(e=>{e.disabled=!w});
+  $('sc_info').textContent=arch?'Archived. Restore it from the Cases tab (show archived) to change it.':!srvCan('cases:write')?'Your role can read this case but not change it.':'';
+}
+const EDITABLE_STATUS=['active','resolved','closed'];
+function conflictShow(c,op){
+  Store.conflict={id:c.id,op};
+  const mine=op.op==='meta'?`title “${escA(op.title)}”, status ${escA(op.status)}`:(op.archived?'archive this case':'restore this case');
+  $('conflictBox').style.display='block';
+  $('conflictBox').innerHTML=`<b>This case was changed by someone else.</b> Your change (${mine}) was not saved.<div class="flex" style="margin-top:6px">`+
+    `<button class="b sm" data-act="conflictReload">Reload their version</button> <button class="b sec sm" data-act="conflictKeep">Keep mine</button></div>`+
+    `<div class="mu" style="margin-top:4px">Reload discards your change. Keep mine loads their version and then applies your change on top of it.</div>`;
+}
+function conflictHide(){Store.conflict=null;const b=$('conflictBox');if(b){b.style.display='none';b.innerHTML=''}}
+const conflictCase=()=>{const k=Store.conflict;return k?(CASES.find(x=>x.id===k.id)||(CASE.id===k.id?CASE:null)):null};
+async function conflictFresh(c){
+  const f=await api('GET','/api/cases/'+c.serverId);
+  if(f.status!==200){toast(apiMsg(f));return false}
+  Object.assign(c,fromRow(f.body.case,c));return true;
+}
+async function conflictReload(){
+  const c=conflictCase();if(!c)return;
+  if(!await conflictFresh(c))return;
+  conflictHide();renderSrvCase();renderBanner();renderCases();toast('Reloaded the current version');
+}
+async function conflictKeep(){
+  const c=conflictCase(),op=Store.conflict&&Store.conflict.op;if(!c)return;
+  if(!await conflictFresh(c))return;
+  conflictHide();
+  if(await opRun(c,op)){renderSrvCase();renderBanner();renderCases();toast('Your change was applied on top of their version')}
 }
 
 /* Notes: draft → sign → amend-with-reason (never deleted) */
@@ -959,7 +1148,7 @@ function setVal(id,val){
 }
 
 /* Render */
-function renderAll(){renderBanner();renderEncounter();renderApplied();renderLists();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases()}
+function renderAll(){renderBanner();renderEncounter();renderApplied();renderLists();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases();renderSrvCase()}
 function renderApplied(){
   const box=$('appliedChips'),empty=$('appliedEmpty');box.innerHTML='';
   if(!CASE.applied.length){empty.style.display='block';return}
@@ -1405,7 +1594,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     if(b.dataset.t==='lib')renderLib();
     if(b.dataset.t==='create')renderCustomList();
     if(b.dataset.t==='codes')codesUI();
-    if(b.dataset.t==='cases')renderCases();
+    if(b.dataset.t==='cases')casesShow();
     if(b.dataset.t==='patients')ptShow();
     if(b.dataset.t==='notes')renderNotes();
   };
@@ -1423,7 +1612,7 @@ async function api(method,path,body){
   try{
     const r=await fetch(path,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-EMR':'1'},body:body===undefined?undefined:JSON.stringify(body)});
     let j=null;try{j=await r.json()}catch(e){}
-    if(r.status===401&&Srv.user&&path!=='/api/login'){Srv.user=null;Srv.pts={};renderWho();toast('Session expired — sign in again')}
+    if(r.status===401&&Srv.user&&path!=='/api/login'&&path!=='/api/me'){Srv.user=null;Srv.pts={};storeLeave();renderWho();toast('Session expired — sign in again')}
     return{status:r.status,body:j||{}};
   }catch(e){return{status:0,body:{error:'offline',message:'Cannot reach the server.'}}}
 }
@@ -1431,11 +1620,11 @@ const apiMsg=r=>r.body.message||(r.status===403?'Your role does not have permiss
 function renderWho(){
   if(!Srv.user)Object.assign(AI,{on:false,configured:false,canUse:false,admin:null,left:null});
   $('who').innerHTML=Srv.user?`${escA(Srv.user.username)} (${escA(Srv.user.role)}) <a href="#" data-act="srvLogout">Sign out</a>`:'Not signed in';
-  renderBanner();renderEncounter();renderCases();applyAiState();renderAiPanel();renderNotes();
+  renderBanner();renderEncounter();renderCases();renderSrvCase();applyAiState();renderAiPanel();renderNotes();
 }
 async function srvInit(){
   const r=await api('GET','/api/me');
-  if(r.status===200){Srv.user=r.body.user;await loadLinkedAll();await aiRefresh()}
+  if(r.status===200){Srv.user=r.body.user;storeEnter();await loadLinkedAll();await aiRefresh()}
   renderWho();
 }
 async function loadLinkedAll(){
@@ -1453,9 +1642,9 @@ async function srvLogin(){
   const r=await api('POST','/api/login',{username:$('lg_u').value.trim(),password:$('lg_p').value});
   $('lg_p').value='';
   if(r.status!==200){$('lg_err').textContent=r.status===401?'Wrong username or password.':apiMsg(r);return}
-  Srv.user=r.body.user;await loadLinkedAll();await aiRefresh();renderWho();ptShow();
+  Srv.user=r.body.user;storeEnter();await loadLinkedAll();await aiRefresh();renderWho();ptShow();
 }
-async function srvLogout(){await api('POST','/api/logout');Srv.user=null;Srv.pts={};renderWho();ptShow()}
+async function srvLogout(){await storeFlush();await api('POST','/api/logout');Srv.user=null;Srv.pts={};storeLeave();renderWho();ptShow()}
 
 /* Patients tab */
 function ptShow(){
@@ -1499,7 +1688,8 @@ async function ptArchive(id,archived){
   if(r.status!==200)return toast(apiMsg(r));
   Srv.pts[id]=r.body.patient;toast(archived?'Archived':'Restored');ptLoad();
 }
-function ptOpenCase(id){
+function ptOpenCase(id){return srvMode()?ptOpenCaseSrv(id):ptOpenCaseLocal(id)}
+function ptOpenCaseLocal(id){
   let c=CASES.find(x=>x.patientId===id&&x.status!=='archived');
   if(!c){c=newCaseObj();c.patientId=id;CASES.push(c)}
   openCase(c.id);
@@ -1509,6 +1699,7 @@ function ptOpenCase(id){
 function renderEncounter(){
   const box=$('encPanel'),legacy=$('legacyPt');if(!box)return;
   legacy.style.display=CASE.patientId?'none':'';$('enc_err').textContent='';
+  if(srvMode()&&!CASE.serverId){box.innerHTML='<span class="mu">No case is open. Cases belong to registered patients: open one from <a href="#" data-act="goPatients">Patients</a> or the <b>Cases</b> tab. Nothing entered here is stored.</span>';legacy.style.display='none';return}
   if(!CASE.patientId){box.innerHTML='<span class="mu">Demo patient fields (not linked to a registered patient). To get a real banner and encounters, open a case from <a href="#" data-act="goPatients">Patients</a>.</span>';return}
   const lp=Srv.pts[CASE.patientId];
   if(!lp){box.innerHTML='<span class="mu">Sign in on the <a href="#" data-act="goPatients">Patients</a> tab to load this patient and manage encounters.</span>';return}
@@ -1599,7 +1790,11 @@ const ACT={
   ptRegisterAnyway:()=>ptRegister(true),
   goPatients:()=>{document.querySelector('[data-t=patients]').click();return false},
   encClose:(el,e,a)=>encClose(Number(a)),
-  encOpen:()=>encOpen()
+  encOpen:()=>encOpen(),
+  casesReload:()=>casesShow(),
+  caseSaveMeta:()=>caseSaveMeta(),
+  conflictReload:()=>conflictReload(),
+  conflictKeep:()=>conflictKeep()
 };
 (()=>{
   const MAP={click:['click'],change:['change'],input:['input'],keydown:['enter']};

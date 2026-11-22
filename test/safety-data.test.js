@@ -199,7 +199,8 @@ test('notes are never removed: discarded drafts stay in the list, marked discard
   assert.equal(notes.length, 3, 'no note disappeared');
   assert.deepEqual(notes.map(n => n.status).sort(), ['discarded', 'draft', 'signed']);
   assert.ok(notes.find(n => n.status === 'discarded').discardedAt);
-  // survives a reload (localStorage round trip)
+  // survives a reload (localStorage round trip). Since B1b-1 a signed-in page never writes vr_traj, so go back to demo mode first.
+  signIn(p, null); p.w.save();
   const saved = JSON.parse(p.w.localStorage.getItem('vr_traj'));
   assert.equal(saved.cases.reduce((n, c) => n + c.notes.length, 0), 3);
 });
