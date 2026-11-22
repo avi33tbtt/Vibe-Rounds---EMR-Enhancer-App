@@ -30,6 +30,7 @@ const MATRIX = {
   'POST /api/encounters/:id/close': { guard: 'encounters:write' },
   'GET /api/patients/:id/cases':    { guard: 'cases:read' },
   'POST /api/patients/:id/cases':   { guard: 'cases:write' },
+  'POST /api/patients/:id/cases/import': { guard: 'cases:write' },
   'GET /api/cases/:id':             { guard: 'cases:read' },
   'PATCH /api/cases/:id':           { guard: 'cases:write' },
   'PATCH /api/cases/:id/archive':   { guard: 'cases:write' },
@@ -204,6 +205,10 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/patients/:id/cases', nurse, async () => {          // cases refuse forged actor fields, so no `...fake` here (see test/cases.test.js)
         const r = await nurse.c.post(`/api/patients/${S.pid}/cases`, { title: 'Audit case' });
         assert.equal(r.status, 201); S.cid = r.body.case.id; S.crv = r.body.case.row_version; return ['case.create'];
+      }],
+      ['POST /api/patients/:id/cases/import', nurse, async () => {   // like create: no `...fake` (unknown body keys are refused)
+        const r = await nurse.c.post(`/api/patients/${S.pid}/cases/import`, { title: 'Imported demo case', narrative: 'Imported narrative', localId: 'c_demo1' });
+        assert.equal(r.status, 201); return ['case.import'];
       }],
       ['POST /api/cases/:id/narrative', nurse, async () => {
         assert.equal((await nurse.c.post(`/api/cases/${S.cid}/narrative`, { body: 'Audit narrative' })).status, 201);

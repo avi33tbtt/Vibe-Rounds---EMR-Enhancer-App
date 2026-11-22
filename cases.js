@@ -45,6 +45,31 @@ function mountCases(app, pool) {
     res.status(out.status).json(out.body);
   });
 
+  /* ---------- import a local demo case (B1b-2) ----------
+     Only a title and the narrative text cross over (never the typed patient fields, sets, values or notes), and the import is audited as such.
+     A historical demo case is not linked to the patient's open encounter. */
+  app.post('/api/patients/:id/cases/import', A.requirePerm(pool, 'cases:write'), async (req, res) => {
+    const s = strict(req.body, ['title', 'narrative', 'localId']);
+    if (s.error) return res.status(400).json(s.error);
+    const title = cleanTitle(s.body.title);
+    if (!title || title.length > 200) return bad(res, 'Title is required (max 200 characters).');
+    const narrative = s.body.narrative === undefined ? '' : s.body.narrative;
+    if (typeof narrative !== 'string' || narrative.length > 20000) return bad(res, 'Narrative must be text of at most 20000 characters.');
+    const localId = s.body.localId === undefined ? null : s.body.localId;
+    if (localId !== null && !(typeof localId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(localId))) return bad(res, 'localId must be 1 to 64 letters, digits, - or _.');
+    const text = narrative.trim();
+    const out = await tx(pool, async c => {
+      const p = (await c.query('SELECT id, archived FROM patients WHERE id = $1 FOR UPDATE', [req.params.id])).rows[0];
+      if (!p) return { status: 404, body: { error: 'not_found' } };
+      if (p.archived) return { status: 409, body: { error: 'patient_archived', message: 'Restore the patient before importing a case.' } };
+      const id = (await c.query('INSERT INTO clinical_cases(patient_id, title, created_by) VALUES ($1,$2,$3) RETURNING id', [p.id, title, req.user.id])).rows[0].id;
+      if (text) await c.query('INSERT INTO case_narrative_entries(case_id, body, author_id) VALUES ($1,$2,$3)', [id, text, req.user.id]);
+      await audit(c, req, 'case.import', 'case', id, { patientId: p.id, source: 'local-demo', localId, narrativeLength: text.length });   // length only, never the text
+      return { status: 201, body: { case: await caseById(c, id) } };
+    });
+    res.status(out.status).json(out.body);
+  });
+
   app.get('/api/patients/:id/cases', A.requirePerm(pool, 'cases:read'), async (req, res) => {
     const includeArchived = req.query.archived === '1' || req.query.archived === 'true';
     const { rows } = await pool.query(

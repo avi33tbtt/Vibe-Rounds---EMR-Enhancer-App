@@ -318,7 +318,9 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
       <h3>Cases</h3>
       <div class="flex"><input id="caseQ" placeholder="Search name, MRN, context…" style="flex:1" data-act="renderCases" data-ev="input">
         <label style="display:flex;gap:4px;font-weight:400;margin:0"><input type="checkbox" id="caseArch" style="width:auto" data-act="casesReload" data-ev="change"> show archived</label>
-        <button class="b" data-act="newCase">+ New case</button></div>
+        <button class="b" data-act="newCase">+ New case</button>
+        <button class="b sec" id="impBtn" style="display:none" data-act="importOpen">Import local demo cases</button></div>
+      <div id="importBox" class="cd" style="display:none"></div>
       <div id="caseMsg" class="mu" role="status"></div>
       <div id="caseList"></div>
     </div>
@@ -688,6 +690,7 @@ function archiveCase(){
 }
 function restoreCase(id){if(srvMode())return restoreCaseSrv(id);const c=CASES.find(x=>x.id===id);if(c){c.status='open';save(false);renderCases();renderBanner()}}
 function renderCases(){
+  const ib=$('impBtn');if(ib){const on=srvMode()&&srvCan('cases:write');ib.style.display=on?'':'none';if(!on)$('importBox').style.display='none'}
   const q=($('caseQ').value||'').toLowerCase(),showA=$('caseArch').checked;
   const rows=CASES.filter(c=>showA||c.status!=='archived').filter(c=>{
     const hay=[caseName(c),caseMrn(c),c.title||'',...c.applied.map(a=>getSet(a.setId)?.title)].join(' ').toLowerCase();return!q||hay.includes(q)})
@@ -711,14 +714,14 @@ const Store={q:Promise.resolve(),nt:null,dirty:null,busy:{},conflict:null};
 const CASE_PATIENT_CAP=50;
 const blankCase=()=>{const c=newCaseObj();c.unsaved=true;return c};
 function interimRead(){
-  try{const d=JSON.parse(localStorage.getItem('vr_interim')||'{}');return{cases:d.cases&&typeof d.cases==='object'?d.cases:{},customs:Array.isArray(d.customs)?d.customs:null}}
-  catch(e){return{cases:{},customs:null}}
+  try{const d=JSON.parse(localStorage.getItem('vr_interim')||'{}');return{cases:d.cases&&typeof d.cases==='object'?d.cases:{},customs:Array.isArray(d.customs)?d.customs:null,imported:d.imported&&typeof d.imported==='object'?d.imported:{}}}
+  catch(e){return{cases:{},customs:null,imported:{}}}
 }
-function interimWrite(){
-  const im=interimRead(),cases=im.cases;
+function interimWrite(mark){
+  const im=interimRead(),cases=im.cases,imported={...im.imported,...(mark||{})};
   [CASE,...CASES].forEach(c=>{if(c&&c.serverId)cases[c.serverId]={applied:c.applied,values:c.values,notes:c.notes}});
   const customs=REGISTRY.filter(s=>!BUILTIN.find(b=>b.id===s.id));
-  try{localStorage.setItem('vr_interim',JSON.stringify({_temporary:'applied sets, values and notes of server cases; synthetic data only; removed in B3',cases,customs}))}catch(e){toast('Storage full')}
+  try{localStorage.setItem('vr_interim',JSON.stringify({_temporary:'applied sets, values and notes of server cases; synthetic data only; removed in B3',cases,customs,imported}))}catch(e){toast('Storage full')}
 }
 function fromRow(r,old){
   const im=interimRead().cases[r.id]||{};
@@ -868,6 +871,59 @@ async function conflictKeep(){
   if(!await conflictFresh(c))return;
   conflictHide();
   if(await opRun(c,op)){renderSrvCase();renderBanner();renderCases();toast('Your change was applied on top of their version')}
+}
+
+/* ---------- Import local demo cases (B1b-2) ----------
+   One explicit action per case. Only the title and the narrative text are sent; the typed demo patient fields are not.
+   Applied sets, values and notes are copied into the temporary 'vr_interim' key of this browser. 'vr_traj' is only read. */
+const LOCAL_ID=/^[A-Za-z0-9_-]{1,64}$/;
+function localDemoCases(){
+  try{const d=JSON.parse(localStorage.getItem('vr_traj')||'{}');return(Array.isArray(d.cases)?d.cases:[]).filter(c=>c&&typeof c.id==='string'&&LOCAL_ID.test(c.id))}
+  catch(e){return[]}
+}
+const importKeep=c=>(c.applied||[]).filter(a=>getSet(a.setId));
+function importBody(c){const t=$('imp_t_'+c.id);return{title:t?t.value:'',narrative:typeof c.narrative==='string'?c.narrative:'',localId:c.id}}
+async function importOpen(){
+  const b=$('importBox');if(b.style.display==='block'){b.style.display='none';return}
+  if(!Object.keys(Srv.pts).length)await storeLoadCases();   // the patient choices come from the server
+  b.style.display='block';importRender();
+}
+function importRender(){
+  const done=interimRead().imported,list=localDemoCases();
+  const pts=Object.values(Srv.pts).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  $('importBox').innerHTML='<b>Import local demo cases</b>'+
+    '<div class="mu" style="margin:4px 0 8px">These cases are saved in this browser (synthetic data only). Pick one, choose the registered patient it belongs to and check what will be sent. Only the title and the narrative go to the server, once; the import is recorded in the audit log. Sets, values and notes stay in this browser until they get server storage. The typed demo name, MRN, age and sex are not sent.</div>'+
+    (list.map(c=>{
+      const id=escA(c.id),imp=done[c.id],p=c.patient||{},kept=importKeep(c).length,all=(c.applied||[]).length;
+      const sel=`<select id="imp_p_${id}" aria-label="Registered patient" data-act="importPreview" data-arg="${id}" data-ev="change"${imp?' disabled':''}><option value="">Choose a registered patient…</option>`+
+        pts.map(q=>`<option value="${Number(q.id)}"${c.patientId===q.id?' selected':''}>${escA(q.name)} · MRN ${escA(q.mrn)}</option>`).join('')+'</select>';
+      return`<div class="cd"><div><b>${escA(p.name||'Unnamed demo patient')}</b> <span class="mu">demo MRN ${escA(p.mrn||'—')} · ${String(c.narrative||'').length} characters of narrative · ${all} sets · ${(c.notes||[]).length} notes</span></div>`+
+        (imp?`<div class="mu">Imported as server case #${Number(imp)}. It cannot be imported again from this browser.</div>`
+          :`<label>Title on the server</label><input id="imp_t_${id}" maxlength="200" value="${escA('Imported demo case, '+String(c.createdAt||'').slice(0,10))}" data-act="importPreview" data-arg="${id}" data-ev="input">`+
+           `<label>Registered patient</label>${sel}`+
+           (kept<all?`<div class="mu">${all-kept} applied set(s) use custom sets that are not available while signed in and will be left out.</div>`:'')+
+           `<label>This exact request will be sent</label><pre class="raw" id="imp_pre_${id}"></pre>`+
+           `<div class="flex" style="margin-top:6px"><button class="b sm" data-act="importSend" data-arg="${id}">Send this</button></div>`)+`</div>`;
+    }).join('')||'<div class="empty">No local demo cases in this browser.</div>');
+  list.forEach(c=>{if(!done[c.id])importPreview(c.id)});
+}
+function importPreview(id){
+  const c=localDemoCases().find(x=>x.id===id),pre=$('imp_pre_'+id);if(!c||!pre)return;
+  const pid=Number($('imp_p_'+id).value);
+  pre.textContent=`POST /api/patients/${pid||'(choose a patient)'}/cases/import\n`+JSON.stringify(importBody(c),null,2);
+}
+async function importSend(id){
+  const c=localDemoCases().find(x=>x.id===id);if(!c||interimRead().imported[id])return;
+  const pid=Number($('imp_p_'+id).value);if(!pid)return toast('Choose a registered patient first');
+  const body=importBody(c);if(Store.busy['imp'+id])return;Store.busy['imp'+id]=1;
+  try{
+    const r=await api('POST','/api/patients/'+pid+'/cases/import',body);
+    if(r.status!==201)return toast(apiMsg(r));
+    const n=fromRow(r.body.case),cp=v=>JSON.parse(JSON.stringify(v));
+    n.applied=cp(importKeep(c));n.values=cp(c.values||{});n.notes=cp(c.notes||[]);n.narrative=body.narrative;n.narrativeSent=body.narrative.trim();
+    CASES.push(n);interimWrite({[id]:n.serverId});
+    importRender();renderCases();toast('Imported as a server case');
+  }finally{Store.busy['imp'+id]=0}
 }
 
 /* Notes: draft → sign → amend-with-reason (never deleted) */
@@ -1794,7 +1850,10 @@ const ACT={
   casesReload:()=>casesShow(),
   caseSaveMeta:()=>caseSaveMeta(),
   conflictReload:()=>conflictReload(),
-  conflictKeep:()=>conflictKeep()
+  conflictKeep:()=>conflictKeep(),
+  importOpen:()=>importOpen(),
+  importPreview:(el,e,a)=>importPreview(a),
+  importSend:(el,e,a)=>importSend(a)
 };
 (()=>{
   const MAP={click:['click'],change:['change'],input:['input'],keydown:['enter']};
