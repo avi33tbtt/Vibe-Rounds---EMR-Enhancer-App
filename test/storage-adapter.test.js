@@ -83,7 +83,7 @@ async function publishSet(slug) {   // a set the page can pin: created, approved
   assert.equal((await admin.post(`/api/element-sets/${made.body.set.id}/versions/1/publish`, {})).status, 200);
 }
 
-test('signed in: vr_traj is never written; values and notes go to the labelled interim key; applied sets are server pins that come back', async () => {
+test('signed in: vr_traj is never written; notes go to the labelled interim key; applied sets are server pins and values server observations that come back', async () => {
   await publishSet('adapter_set');
   const raw = JSON.stringify({ cases: [{ id: 'c_demo', patient: { name: 'Demo Only', mrn: 'D-0', age: '50', sex: 'M' }, narrative: 'demo narrative', applied: [], values: {}, notes: [], status: 'open', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], current: 'c_demo', customs: [] });
   const a = await openPage({ vr_traj: raw });
@@ -94,10 +94,12 @@ test('signed in: vr_traj is never written; values and notes go to the labelled i
   await a.open(pid);
   const setId = 'adapter_set';   // published on the server above; applying it pins it there (B3b-1)
   a.w.applySet(setId); await until(() => a.ev('CASE.applied.length') === 1, 'pinned'); write(a, 'typed while signed in');
-  a.ev("CASE.values.x = 'value kept in the interim key'; save()");   // values stay on the old path until B3b-2 await a.w.storeFlush();
+  a.w.setVal('x', 'value kept on the server', a.ev('CASE.applied[0].setId')); await until(() => a.ev('Object.keys(CASE.values).length') === 1, 'value stored');   // a server observation since B3b-2
+  a.ev("save()"); await a.w.storeFlush();
   assert.equal(a.ls('vr_traj'), raw, 'vr_traj must be byte-for-byte untouched while signed in');
   const interim = JSON.parse(a.ls('vr_interim')), sid = a.ev('CASE.serverId');
   assert.equal('applied' in interim.cases[sid], false, 'applied sets are not kept in the browser');
+  assert.equal('values' in interim.cases[sid], false, 'values are not kept in the browser'); assert.doesNotMatch(a.ls('vr_interim'), /value kept on the server/);
   assert.doesNotMatch(a.ls('vr_interim'), /Adapter Patient|AD-1/);          // identity is not copied into the browser
   assert.ok(interim._temporary);
   const keys = Object.keys(a.w.localStorage).filter(k => /^vr_/.test(k)).sort();
@@ -111,7 +113,7 @@ test('signed in: vr_traj is never written; values and notes go to the labelled i
 
   // a later session (same browser storage) gets the pin from the server and the interim data from the browser
   const b = await openPage({ vr_interim: saved, vr_traj: raw }); await b.login('nurse1'); await b.open(pid);
-  assert.equal(b.ev('CASE.applied.length'), 1); assert.equal(b.ev('CASE.applied[0].setId'), setId); assert.equal(b.ev('CASE.values.x'), 'value kept in the interim key');
+  assert.equal(b.ev('CASE.applied.length'), 1); assert.equal(b.ev('CASE.applied[0].setId'), setId); assert.equal(b.ev('CASE.values[CASE.applied[0].srvSet + ":x"]'), 'value kept on the server');
   assert.equal(b.ev('CASE.narrative'), 'typed while signed in');           // narrative comes from the server, not the browser
   assert.equal(b.ls('vr_traj'), raw);
   await b.close();
