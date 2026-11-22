@@ -10,6 +10,7 @@ const A = require('./auth');
 const { mountAi } = require('./ai');
 const { mountCases } = require('./cases');
 const { mountSets } = require('./sets');
+const { mountReview } = require('./review');
 const { createLimiter } = require('./ratelimit');
 
 const PATIENT_SELECT = `
@@ -281,6 +282,9 @@ function createApp(pool, opts = {}) {
 
   /* ---------- element sets (task B2a) ---------- */
   mountSets(app, pool);
+
+  /* ---------- submit for review (task 8b) ---------- */
+  mountReview(app, pool);
 
   /* ---------- audit (read-only) ---------- */
   app.get('/api/audit', A.requirePerm(pool, 'audit:read'), async (req, res) => {

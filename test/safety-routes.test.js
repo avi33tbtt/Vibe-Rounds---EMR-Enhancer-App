@@ -41,6 +41,9 @@ const MATRIX = {
   'GET /api/element-sets/:id':      { guard: 'sets:read' },
   'GET /api/element-sets/:id/versions/:version': { guard: 'sets:read' },
   'POST /api/element-sets/:id/versions': { guard: 'sets:write' },
+  'POST /api/element-sets/:id/versions/:version/submit': { guard: 'sets:submit' },
+  'GET /api/element-sets/:id/versions/:version/review': { guard: 'sets:read' },
+  'GET /api/review-queue':          { guard: 'sets:read' },
   'POST /api/element-sets/:id/versions/:version/publish': { guard: 'sets:publish' },
   'POST /api/element-sets/:id/versions/:version/retire': { guard: 'sets:publish' },
   'GET /api/audit':                 { guard: 'audit:read' },
@@ -59,6 +62,7 @@ const EXPECTED_ROLES = {
   'cases:write':       ['admin', 'doctor', 'nurse'],
   'sets:read':         ['admin', 'doctor', 'nurse', 'viewer'],
   'sets:write':        ['admin', 'doctor'],
+  'sets:submit':       ['admin', 'doctor'],
   'sets:publish':      ['admin'],
   'audit:read':        ['admin'],
   'ai:use':            ['admin', 'doctor'],
@@ -245,6 +249,12 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/element-sets/:id/versions', doctor, async () => {
         const r = await doctor.c.post(`/api/element-sets/${S.setId}/versions`, { definition: { title: 'Audit set v2', fields: [{ id: 'a', label: 'A', type: 'text' }] } });
         assert.equal(r.status, 201, JSON.stringify(r.body)); S.setV = r.body.version.version; return ['set.version_create'];
+      }],
+      ['POST /api/element-sets/:id/versions/:version/submit', doctor, async () => {
+        const v = await doctor.c.post(`/api/element-sets/${S.setId}/versions`, { definition: { title: 'Audit set v3', fields: [{ id: 'a', label: 'A', type: 'text' }] } });
+        assert.equal(v.status, 201, JSON.stringify(v.body));
+        const r = await doctor.c.post(`/api/element-sets/${S.setId}/versions/${v.body.version.version}/submit`, {});
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['set.submit'];
       }],
       ['POST /api/element-sets/:id/versions/:version/publish', admin, async () => {
         const r = await admin.c.post(`/api/element-sets/${S.setId}/versions/${S.setV}/publish`, {});
