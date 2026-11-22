@@ -54,12 +54,12 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | 6d-2c | chunk-06d2-handlers.md | Convert the rest; remove unsafe-hashes; zero inline handlers | DONE | 2026-11-22 | about 30 handlers | app.js, emr-enhancer.html, 4 test files. 31 converted; page has 0 inline handlers; script-src-attr 'none'; real-Chrome test shows an injected onclick is blocked. Closes 6d. |
 | 6e | chunk-06e-policy-docs.md | Retention, access, consent notes | DONE | 2026-11-22 | docs only | docs/POLICY.md. Labels BUILT/DECISION/PLACEHOLDER; no patient export route exists yet; scan template added (scan after 7a). Legal points left open. |
 | 7 | chunk-07-backup-deploy.md | Backup, restore, deploy (original) | SPLIT |  |  | Replaced by 7a to 7d. |
-| 7a | chunk-07a-container-tls.md | Container + TLS | IN PROGRESS | 2026-11-22 | Dockerfile, compose, proxy config | Files written; compose validated; app flow checked natively. Docker/Caddy not run (no daemon): user runs the 3 README commands, then marks DONE. |
+| 7a | chunk-07a-container-tls.md | Container + TLS | DONE | 2026-11-22 | Dockerfile, compose, proxy config | Run on Windows Docker Desktop: build, migrate, db-role, app healthy, seed, curl -k https://localhost/ OK. Seed does not reset passwords (wipe with down -v). |
 | 7b | chunk-07b-encrypted-backups.md | Encrypted scheduled backups | TODO |  | 1 script + schedule | Needs: 7a. |
 | 7c | chunk-07c-restore-test.md | Restore script + recorded restore | TODO |  | 1 script + 1 doc; user does the clean-machine run | Needs: 7b. |
 | 7d | chunk-07d-downtime-golive-docs.md | Downtime page + go-live checklist | TODO |  | docs only | Needs: 7c. |
 | 8 | chunk-08-review-workflow.md | Review/approval workflow (original) | SPLIT |  |  | Replaced by 8a to 8f. |
-| 8a | chunk-08a-lint.md | Shared lint module | TODO |  | 1 new module + 1 test |  |
+| 8a | chunk-08a-lint.md | Shared lint module | DONE | 2026-11-22 | 1 new module + 1 test | lint.js, test/lint.test.js, DECISIONS.md. 5 rules + needsTwoReviewers; 27 tests incl. seed-set check. Full suite 142 pass, 4 todo. Page loads lint.js in 8d. |
 | 8b | chunk-08b-submit-snapshot.md | Server: submit set for review (snapshot) | TODO |  | 1 migration, routes, tests | Needs: 8a. Re-pointed at server versions by B2r. |
 | 8c | chunk-08c-review-rules.md | Reviewer rules + frozen approved version | TODO |  | routes, trigger, tests | Needs: 8b. |
 | 8d | chunk-08d-review-ui.md | Review screens + tier badges | TODO |  | page + 1 test file | Needs: 8c. |
