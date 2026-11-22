@@ -96,7 +96,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
   <span class="mu">context-aware · pathways · codes · FHIR</span>
   <span style="flex:1"></span>
   <span id="who" class="mu"></span>
-  <button class="b sec sm" onclick="tg('setPanel')">Settings</button>
+  <button class="b sec sm" data-act="tg" data-arg="setPanel">Settings</button>
   <nav>
     <button class="on" data-t="case">Case</button>
     <button data-t="patients">Patients</button>
@@ -138,7 +138,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
   <label style="display:flex;align-items:center;gap:8px;font-weight:500">
     <input type="checkbox" id="demo" style="width:auto"> Demo mode (no AI call — snake / DKA only)
   </label>
-  <button class="b" onclick="saveSet()">Save settings</button>
+  <button class="b" data-act="saveSet">Save settings</button>
 </div>
 
 <div class="layout">
@@ -154,12 +154,12 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     </div>
     <div>
       <div class="sec-title">Add context / element</div>
-      <input class="search" id="searchEl" placeholder="Search…" oninput="renderLists()">
+      <input class="search" id="searchEl" placeholder="Search…" data-act="renderLists" data-ev="input">
       <div id="elementList"></div>
     </div>
     <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--bd)">
-      <button class="b" style="width:100%" onclick="suggest()">✦ Suggest</button>
-      <button class="b sec sm" style="width:100%;margin-top:6px" data-ai onclick="aiRank()">✦ AI rank</button>
+      <button class="b" style="width:100%" data-act="suggest">✦ Suggest</button>
+      <button class="b sec sm" style="width:100%;margin-top:6px" data-ai data-act="aiRank">✦ AI rank</button>
     </div>
   </aside>
 
@@ -170,18 +170,18 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <div class="pane on" id="case">
       <div class="cd" id="encBox"><div id="encPanel"></div><div id="enc_err" class="gen-err" role="alert"></div></div>
       <div class="cd" id="legacyPt"><div class="flex">
-        <input id="p_name" placeholder="Patient name (synthetic)" style="flex:2" onchange="savePatient()">
-        <input id="p_mrn" placeholder="MRN" style="flex:1" onchange="savePatient()">
-        <input id="p_age" placeholder="Age" style="width:80px" onchange="savePatient()">
-        <select id="p_sex" style="width:90px" onchange="savePatient()"><option value="">Sex</option><option value="M">M</option><option value="F">F</option><option value="O">Other</option></select>
+        <input id="p_name" placeholder="Patient name (synthetic)" style="flex:2" data-act="savePatient" data-ev="change">
+        <input id="p_mrn" placeholder="MRN" style="flex:1" data-act="savePatient" data-ev="change">
+        <input id="p_age" placeholder="Age" style="width:80px" data-act="savePatient" data-ev="change">
+        <select id="p_sex" style="width:90px" data-act="savePatient" data-ev="change"><option value="">Sex</option><option value="M">M</option><option value="F">F</option><option value="O">Other</option></select>
       </div></div>
       <div class="cd">
         <label>Case narrative</label>
-        <textarea class="narrative" id="narrative" placeholder="e.g. 62M with T2DM, CKD 3b, new plantar ulcer…" oninput="saveCase()"></textarea>
+        <textarea class="narrative" id="narrative" placeholder="e.g. 62M with T2DM, CKD 3b, new plantar ulcer…" data-act="saveCase" data-ev="input"></textarea>
         <div class="flex" style="margin-top:8px">
-          <button class="b sec sm" onclick="suggest()">Suggest</button>
-          <button class="b sec sm" data-ai onclick="aiRank()">AI rank</button>
-          <button class="b sec sm" onclick="archiveCase()">Archive case</button>
+          <button class="b sec sm" data-act="suggest">Suggest</button>
+          <button class="b sec sm" data-ai data-act="aiRank">AI rank</button>
+          <button class="b sec sm" data-act="archiveCase">Archive case</button>
         </div>
       </div>
       <div id="formArea">
@@ -201,7 +201,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
       <h3>Create or generate a contextual element</h3>
       <div class="cd" id="cOpts">
         <b>Options for what you create (apply to A and B below)</b>
-        <label class="chk"><input type="checkbox" id="o_sdc" onchange="optsChanged()"> Also author as FHIR SDC Questionnaire</label>
+        <label class="chk"><input type="checkbox" id="o_sdc" data-act="optsChanged" data-ev="change"> Also author as FHIR SDC Questionnaire</label>
         <div id="sdcLimits" class="note" style="display:none"></div>
         <div class="sec-title" style="margin-top:8px">Code systems (global; each field can override or skip)</div>
         <div id="o_sys" class="pick"></div>
@@ -213,27 +213,27 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <label>Primary diagnosis</label>
         <input id="gen_dx" maxlength="200" placeholder="e.g. Acute ischemic stroke">
         <div class="mu">Examples:
-          <a href="#" onclick="return fillDx(this)">Snake envenomation (hemotoxic)</a> ·
-          <a href="#" onclick="return fillDx(this)">Diabetic ketoacidosis</a> ·
-          <a href="#" onclick="return fillDx(this)">Sepsis</a>
+          <a href="#" data-act="fillDx">Snake envenomation (hemotoxic)</a> ·
+          <a href="#" data-act="fillDx">Diabetic ketoacidosis</a> ·
+          <a href="#" data-act="fillDx">Sepsis</a>
         </div>
         <label>Instructions (optional — do not enter patient details)</label>
         <textarea id="gen_ins" maxlength="500" placeholder="e.g. focus on time-critical intervals"></textarea>
         <div class="flex" style="margin-top:10px">
-          <button class="b" id="genBtn" data-ai onclick="generate()">Generate element set</button>
+          <button class="b" id="genBtn" data-ai data-act="generate">Generate element set</button>
           <span class="mu" id="genStatus"></span>
         </div>
         <div id="genPreview" style="display:none;margin-top:12px">
           <div class="flex" style="justify-content:space-between">
             <b>Preview</b>
             <div>
-              <button class="b sm" onclick="applyGenerated()">Apply to case</button>
-              <button class="b sec sm" onclick="saveGenerated()">Save to library</button>
+              <button class="b sm" data-act="applyGenerated">Apply to case</button>
+              <button class="b sec sm" data-act="saveGenerated">Save to library</button>
             </div>
           </div>
           <div id="genSummary" class="mu" style="margin:6px 0"></div>
           <div id="genBind"></div>
-          <button class="b sec sm" id="genVerify" onclick="verifyGenerated()">Verify bindings (tx.fhir.org)</button>
+          <button class="b sec sm" id="genVerify" data-act="verifyGenerated">Verify bindings (tx.fhir.org)</button>
           <details><summary class="mu">Raw JSON</summary><pre class="raw" id="genRaw"></pre></details>
         </div>
       </div>
@@ -246,21 +246,21 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <select id="c_kind"><option value="care">care</option><option value="disease">disease</option><option value="template">template</option><option value="custom">custom</option></select>
         <label>Description</label><input id="c_desc">
         <div style="margin-top:12px"><div class="sec-title">Fields</div><div id="c_fields"></div>
-          <button class="b sec sm" onclick="addFieldRow()">+ Add field</button></div>
+          <button class="b sec sm" data-act="addFieldRow">+ Add field</button></div>
         <div style="margin-top:14px">
-          <button class="b" onclick="saveElement()">Save</button>
-          <button class="b sec" onclick="resetCreate()">Reset</button>
+          <button class="b" data-act="saveElement">Save</button>
+          <button class="b sec" data-act="resetCreate">Reset</button>
         </div>
       </div>
       <div class="cd">
         <b>C · Import a FHIR Questionnaire (SDC)</b>
         <div class="note">Standards-based or curated forms (e.g. a national or ABDM-aligned form pack) become ordinary element sets: they can be applied, mixed with proprietary sets, versioned, and exported back as a Questionnaire. Supported: groups, string/text/integer/decimal/quantity/boolean/date/dateTime, choice with inline options, item codes (SNOMED/LOINC). Not supported yet (flagged on import): conditional display, calculated expressions, value-set options, multi-answer, attachments.</div>
         <label>Questionnaire JSON</label><textarea id="q_json" placeholder='{"resourceType":"Questionnaire", …}'></textarea>
-        <div class="flex" style="margin-top:6px"><input type="file" id="q_file" accept=".json,application/json" style="flex:1" onchange="loadQFile(this)">
-          <input id="q_url" placeholder="…or URL (needs CORS)" style="flex:1"><button class="b sec sm" onclick="loadQUrl()">Fetch</button></div>
+        <div class="flex" style="margin-top:6px"><input type="file" id="q_file" accept=".json,application/json" style="flex:1" data-act="loadQFile" data-ev="change">
+          <input id="q_url" placeholder="…or URL (needs CORS)" style="flex:1"><button class="b sec sm" data-act="loadQUrl">Fetch</button></div>
         <div class="flex" style="margin-top:6px"><select id="q_kind" style="width:130px"><option value="template">template</option><option value="care">care</option><option value="disease">disease</option><option value="custom">custom</option></select>
           <input id="q_label" placeholder="Curation label (optional, e.g. ABDM-aligned · informational only)" style="flex:1">
-          <button class="b" onclick="importQ()">Import to library</button></div>
+          <button class="b" data-act="importQ">Import to library</button></div>
         <div id="qSummary" style="margin-top:8px"></div>
       </div>
       <div class="cd"><b>Custom / generated</b><div id="customList" class="mu">None yet.</div></div>
@@ -275,14 +275,14 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <div class="mu">Registration needs the server (<code>npm start</code>). Synthetic data only.</div>
         <div class="flex" style="margin-top:6px">
           <input id="lg_u" placeholder="Username" autocomplete="username" style="width:160px">
-          <input id="lg_p" type="password" placeholder="Password" autocomplete="current-password" style="width:160px" onkeydown="if(event.key==='Enter')srvLogin()">
-          <button class="b" onclick="srvLogin()">Sign in</button>
+          <input id="lg_p" type="password" placeholder="Password" autocomplete="current-password" style="width:160px" data-act="srvLogin" data-ev="enter">
+          <button class="b" data-act="srvLogin">Sign in</button>
         </div>
         <div id="lg_err" class="gen-err" role="alert"></div>
       </div>
       <div id="ptMain" style="display:none">
         <div class="flex">
-          <input id="ptQ" placeholder="Search name or MRN…" style="flex:1" oninput="ptDebounce()">
+          <input id="ptQ" placeholder="Search name or MRN…" style="flex:1" data-act="ptDebounce" data-ev="input">
           <label style="display:flex;gap:4px;font-weight:400;margin:0"><input type="checkbox" id="ptArch" style="width:auto" onchange="ptLoad()"> show archived</label>
           <button class="b" id="ptRegBtn" onclick="ptToggleForm()">+ Register patient</button>
         </div>
@@ -1516,6 +1516,47 @@ async function encClose(id){
   if(r.status!==200){$('enc_err').textContent=apiMsg(r);return}
   await refreshPatient(CASE.patientId);toast('Encounter closed');
 }
+
+/* Delegated events (chunk 06d-2): data-act names a function in ACT (no eval, no string-built code); data-arg is its text argument.
+   data-ev picks the event: click (default), change, input, or enter (Enter key). An action that returns false cancels the default. */
+const ACT={
+  addFieldRow:()=>addFieldRow(),
+  aiRank:()=>aiRank(),
+  applyGenerated:()=>applyGenerated(),
+  archiveCase:()=>archiveCase(),
+  fillDx:(el)=>fillDx(el),
+  generate:()=>generate(),
+  importQ:()=>importQ(),
+  loadQFile:(el)=>loadQFile(el),
+  loadQUrl:()=>loadQUrl(),
+  optsChanged:()=>optsChanged(),
+  ptDebounce:()=>ptDebounce(),
+  renderLists:()=>renderLists(),
+  resetCreate:()=>resetCreate(),
+  saveCase:()=>saveCase(),
+  saveElement:()=>saveElement(),
+  saveGenerated:()=>saveGenerated(),
+  savePatient:()=>savePatient(),
+  saveSet:()=>saveSet(),
+  srvLogin:()=>srvLogin(),
+  suggest:()=>suggest(),
+  tg:(el,e,a)=>tg(a),
+  verifyGenerated:()=>verifyGenerated()
+};
+(()=>{
+  const MAP={click:['click'],change:['change'],input:['input'],keydown:['enter']};
+  for(const type of Object.keys(MAP))document.addEventListener(type,e=>{
+    const want=type==='keydown'?(e.key==='Enter'?'enter':null):type;
+    if(!want)return;
+    for(let el=e.target instanceof Element?e.target:null;el;el=el.parentElement){
+      const name=el.getAttribute('data-act');
+      if(name===null||(el.getAttribute('data-ev')||'click')!==want||!Object.hasOwn(ACT,name))continue;
+      if(el.disabled)return;
+      if(ACT[name](el,e,el.getAttribute('data-arg'))===false)e.preventDefault();
+      return;
+    }
+  });
+})();
 
 /* Init */
 $('asys').innerHTML=CODESYS.filter(x=>x.verifier&&x.enabled!==false).map(x=>`<option value="${x.key}">${x.label}</option>`).join('');
