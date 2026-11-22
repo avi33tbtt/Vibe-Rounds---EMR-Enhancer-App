@@ -102,7 +102,9 @@ function createApp(pool, opts = {}) {
     const { name, mrn, dob, sex } = v.value;
     const confirm = req.body.confirmDuplicate === true;
     // createdBy is never read from the body: it comes from the session.
-    const out = await tx(pool, async c => {
+    let out;
+    try {
+    out = await tx(pool, async c => {
       const mrnHit = await c.query('SELECT id FROM patients WHERE lower(mrn) = lower($1)', [mrn]);
       if (mrnHit.rows[0]) {
         await audit(c, req, 'patient.register_rejected', 'patient', null, { reason: 'mrn_taken' });
@@ -121,6 +123,13 @@ function createApp(pool, opts = {}) {
       await audit(c, req, 'patient.register', 'patient', id, dupes.length ? { duplicateWarningOverridden: true, matches: dupes.map(d => d.id) } : {});
       return { status: 201, body: { patient: (await c.query(`${PATIENT_SELECT} WHERE p.id = $1`, [id])).rows[0] } };
     });
+    } catch (e) {
+      // Two people registering the same MRN at the same moment: the second one loses the race at the unique index.
+      if (e.code === '23505' && e.constraint === 'patients_mrn_uq') {
+        await audit(pool, req, 'patient.register_rejected', 'patient', null, { reason: 'mrn_taken' });
+        out = { status: 409, body: { error: 'mrn_taken', message: 'That MRN is already registered.' } };
+      } else throw e;
+    }
     res.status(out.status).json(out.body);
   });
 

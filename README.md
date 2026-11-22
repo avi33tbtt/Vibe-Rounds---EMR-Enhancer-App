@@ -44,9 +44,16 @@ The de-identification is a safety net, not a guarantee. Enter the diagnosis only
 
 ## Test
 
-Uses a scratch database that is **wiped** each run:
+One command runs everything (the 54 feature tests and the safety pack):
 
 ```
-export TEST_DATABASE_URL=postgres://USER@localhost:5432/emr_test
+export TEST_DATABASE_URL=postgres://USER@localhost:5432/emr_test   # a scratch database, WIPED each run
+cp env.txt .env                                                    # once; the npm scripts read it
 npm test
 ```
+
+The safety pack (`test/safety-*.test.js`) guards the rules that must never break: the permission matrix (every route x every role), concurrent writers, audit coverage, no rules or bands in seed content, migrations from empty and from every earlier version, verified-only FHIR export, no hard delete and immutable signed notes, and one smoke test in a real browser (sign in, open a case, enter a value, export). A route that is not in the matrix, or a write route with no audit scenario, fails the build until it is added.
+
+The browser test needs Google Chrome (or set `CHROME_PATH`). Without one it is skipped on your machine; with `CI=true` it fails instead of skipping.
+
+**CI:** `.github/workflows/ci.yml` runs `npm test` on every push and pull request against PostgreSQL 16 and fails on any break. To make a red run block merging, turn on branch protection for `main` in GitHub (Settings, Branches) and require the `test` check.

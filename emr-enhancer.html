@@ -446,7 +446,9 @@ const saveMM=()=>{try{localStorage.setItem('vr_mm',JSON.stringify(MM))}catch(e){
 const STAT={verified:'✓ verified',mismatch:'⚠ display mismatch',notfound:'✗ not found',unreachable:'? server unreachable',missing:'no code',nosystem:'no verifier for this system'};
 function normWords(x){return String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').split(' ').filter(w=>w.length>2)}
 function displayMatch(mine,server){
-  const a=normWords(mine);if(!a.length)return true;
+  const a=normWords(mine);
+  /* A display with no word longer than 2 letters (e.g. "HR", "--") has nothing to compare: only an exact match counts. It used to match ANY server display. */
+  if(!a.length){const flat=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,'');return flat(mine)===flat(server)}
   const b=new Set(normWords(server));
   return a.filter(w=>b.has(w)).length/a.length>=0.6;
 }

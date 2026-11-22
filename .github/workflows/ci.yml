@@ -1,0 +1,44 @@
+name: CI
+
+# One job, one command (npm test). Any failing test, or a missing browser, turns the run red.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: emr
+          POSTGRES_PASSWORD: emr
+          POSTGRES_DB: emr_test        # the tests WIPE this database on every run; it exists only for this job
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U emr -d emr_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      CI: 'true'                       # the browser smoke test must run here, it may not be skipped
+      TEST_DATABASE_URL: postgres://emr:emr@localhost:5432/emr_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Create .env (test values only; the npm scripts read it)
+        run: cp env.txt .env
+      - name: Browser used by the smoke test
+        run: google-chrome --version
+      - name: All tests (safety pack included)
+        run: npm test
