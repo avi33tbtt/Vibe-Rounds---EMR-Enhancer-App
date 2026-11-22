@@ -4,7 +4,14 @@ types.setTypeParser(1082, v => v); // keep DATE columns as 'YYYY-MM-DD' strings 
 
 function makePool(url = process.env.DATABASE_URL) {
   if (!url) throw new Error('DATABASE_URL is not set');
-  return new Pool({ connectionString: url });
+
+  // Render Postgres requires SSL. Skip it only for a local database.
+  const isLocal = /@(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(url);
+
+  return new Pool({
+    connectionString: url,
+    ssl: isLocal ? false : { rejectUnauthorized: false },
+  });
 }
 
 // Run fn(client) inside one transaction (action + its audit row commit together).
