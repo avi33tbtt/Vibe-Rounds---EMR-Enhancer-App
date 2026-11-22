@@ -158,10 +158,12 @@ test('a pathway applies only the members that are in the library and says how ma
   assert.deepEqual(setIds(ui), [], 'nothing is in the library until it is reviewed and published');
   await reviewAndPublishAll(); await ui.w.libLoad();
   assert.equal(setIds(ui).length, DEMO.length);
-  ui.ev('CASE.applied.length=0');
+  const pid = (await admin.post('/api/patients', { name: 'Pathway Patient', mrn: 'PW-1', dob: '1980-01-01', sex: 'F' })).body.patient.id;
+  await ui.w.ptOpenCase(pid); await until(() => ui.ev('!!CASE.serverId && CASE.pinsOk === true'), 'case open');
   ui.w.applySet('pw_dm');   // basic_emr, vitals, dm_ctx, glucose_ss, hba1c_mon: dm_ctx and hba1c_mon are not in the library
+  await until(() => ui.ev('CASE.applied.length') === 3, 'members pinned');
   assert.deepEqual(ui.evj('CASE.applied.map(a=>a.setId)'), ['basic_emr', 'vitals', 'glucose_ss']);
-  assert.match(ui.$('toast').textContent, /2 set\(s\) are not in the library/);
+  assert.match(ui.$('toast').textContent, /2 set\(s\) are not in the server library/);
   await ui.close();
 });
 

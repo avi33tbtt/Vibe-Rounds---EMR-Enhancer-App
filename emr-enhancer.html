@@ -699,6 +699,7 @@ const DEMO_DKA={id:'gen_dka',kind:'disease',title:'Diabetic ketoacidosis',desc:'
 
 /* State */
 let REGISTRY=[],CASES=[],CASE=null,LAST_GENERATED=null;
+const PIN={defs:{},busy:false};   // signed in: defs = 'serverSetId:version' -> the exact pinned definition, read from the server (B3b-1)
 /* values: fieldId -> scalar | [{ts, value}] for repeat */
 
 const nowISO=()=>new Date().toISOString();
@@ -729,21 +730,27 @@ function saveCase(){
   Store.dirty=CASE;$('narSt').textContent='unsaved…';clearTimeout(Store.nt);Store.nt=setTimeout(storeFlush,1500);
 }
 const ver=id=>getSet(id)?.version||1;
-function resolve(a){const s=getSet(a.setId);if(!s)return;const av=a.version||1;if(av>=(s.version||1))return s;
+function resolve(a){
+  if(a.srvAs)return PIN.defs[a.srvSet+':'+a.version]||{id:a.setId,kind:'custom',title:a.title||a.setId,desc:'',fields:null,version:a.version,unread:true};   // a server pin is its exact version, never the newest
+  const s=getSet(a.setId);if(!s)return;const av=a.version||1;if(av>=(s.version||1))return s;
   const h=(s.history||[]).find(x=>x.version===av);return h?{...s,title:h.title,desc:h.desc,fields:h.fields,version:av}:s}
 function verNote(a){const s=getSet(a.setId);if(!s||(a.version||1)>=(s.version||1))return'';
-  return` · <b style="color:var(--a)">v${a.version||1} applied, v${s.version} available</b> <button class="b sec sm" data-act="upgradeSet" data-arg="${escA(a.setId)}">Review &amp; update</button>`}
+  return` · <b style="color:var(--a)">v${a.version||1} applied, v${s.version} available</b>${a.srvAs&&!srvCan('cases:write')?'':` <button class="b sec sm" data-act="upgradeSet" data-arg="${escA(a.setId)}">Review &amp; update</button>`}`}
 function upgradeSet(id){
   const a=CASE.applied.find(x=>x.setId===id),s=getSet(id);if(!a||!s)return;
+  if(a.srvAs&&!s.srv)return toast('This set is not in the server library any more.');
+  if(a.srvAs&&!srvCan('cases:write'))return toast('Your role cannot change cases.');
+  if(!resolve(a).fields)return toast('The pinned version could not be read from the server.');
   const old=resolve(a).fields,om=Object.fromEntries(old.map(f=>[f.id,f])),nm=Object.fromEntries(s.fields.map(f=>[f.id,f]));
   const add=s.fields.filter(f=>!om[f.id]).map(f=>f.label),rem=old.filter(f=>!nm[f.id]).map(f=>f.label),chg=s.fields.filter(f=>om[f.id]&&canon(om[f.id])!==canon(f)).map(f=>f.label);
-  if(confirm(`${s.title}: v${a.version||1} → v${s.version}\nAdded: ${add.join(', ')||'none'}\nRemoved from form: ${rem.join(', ')||'none'}\nChanged: ${chg.join(', ')||'none'}\n\nEntered values are kept. Update this case?`)){a.version=s.version;save();renderAll();toast('Updated to v'+s.version)}
+  if(confirm(`${s.title}: v${a.version||1} → v${s.version}\nAdded: ${add.join(', ')||'none'}\nRemoved from form: ${rem.join(', ')||'none'}\nChanged: ${chg.join(', ')||'none'}\n\nEntered values are kept. Update this case?`)){if(a.srvAs)return upgradeSrv(a,s);a.version=s.version;save();renderAll();toast('Updated to v'+s.version)}
 }
 function getSet(id){return REGISTRY.find(s=>s.id===id)||PATHWAYS.find(p=>p.id===id)}
 function isApplied(id){return CASE.applied.some(a=>a.setId===id)}
 
 /* Apply / remove */
 function applySet(id,fromPathway){
+  if(srvMode())return applySetSrv(id,fromPathway);
   if(isApplied(id)){toast('Already applied');return}
   const s=getSet(id);if(!s)return;
   if(s.kind==='pathway'){
@@ -756,7 +763,70 @@ function applySet(id,fromPathway){
   }
   save();renderAll();
 }
-function removeSet(id){CASE.applied=CASE.applied.filter(a=>a.setId!==id);save();renderAll();toast('Removed')}
+function removeSet(id){
+  if(srvMode())return removeSetSrv(id);
+  CASE.applied=CASE.applied.filter(a=>a.setId!==id);save();renderAll();toast('Removed')}
+/* ---------- Pins (B3b-1) ----------
+   Signed in, an applied set is a server pin of ONE exact published version (case_applied_sets). The page shows that version, reads its
+   definition from the server (so an older pin keeps its own fields), and moves to a newer version only by the explicit update.
+   Withdrawing keeps the pin and anything recorded with it. Nothing about applied sets is written to the browser. */
+const pinEntry=(r,from)=>({setId:r.slug,srvAs:String(r.id),srvSet:String(r.element_set_id),version:r.version,checksum:r.checksum,title:r.set_title,addedAt:r.applied_at,appliedBy:r.applied_by,fromPathway:from||null});
+async function pinDef(e){
+  const k=e.srvSet+':'+e.version;if(PIN.defs[k])return true;
+  const r=await api('GET','/api/element-sets/'+e.srvSet+'/versions/'+e.version),v=r.status===200&&r.body.version,d=v&&v.definition;
+  if(!d||!Array.isArray(d.fields))return false;
+  PIN.defs[k]={id:e.setId,kind:r.body.set.kind,title:d.title,desc:d.desc||'',fields:d.fields,version:v.version,sdc:d.sdc,srv:{setId:Number(e.srvSet),version:v.version,checksum:v.checksum}};
+  return true;
+}
+async function pinsLoad(c){   // the case's active pins; the timeline route also lists superseded and withdrawn ones (history), which are not shown here
+  const r=await api('GET','/api/cases/'+c.serverId+'/timeline?limit=1');
+  if(r.status!==200){toast('Applied sets could not be loaded: '+apiMsg(r));return false}
+  const from=Object.fromEntries((c.applied||[]).map(a=>[a.setId,a.fromPathway])),act=(r.body.appliedSets||[]).filter(x=>x.state==='active').map(x=>pinEntry(x,from[x.slug]));
+  await Promise.all(act.map(pinDef));c.applied=act;return true;
+}
+async function pinPost(c,s){return api('POST','/api/cases/'+c.serverId+'/applied-sets',{setId:s.srv.setId,version:s.srv.version})}
+async function applySetSrv(id,fromPathway){
+  const c=CASE,s=getSet(id);if(!s)return;
+  if(!c.serverId)return toast('Open a patient on the Patients tab first: sets are applied to a saved case.');
+  if(!srvCan('cases:write'))return toast('Your role cannot change cases.');
+  if(c.pinsOk!==true)return toast('The applied sets of this case are not loaded. Open the case again.');
+  if(PIN.busy)return;PIN.busy=true;
+  try{
+    const pw=s.kind==='pathway',ids=pw?(s.members||[]):[id];
+    if(!pw&&isApplied(id))return toast('Already applied');
+    let ok=0,skip=0,msg='';
+    for(const mid of ids){
+      if(c.applied.some(a=>a.setId===mid))continue;
+      const m=getSet(mid);if(!m||!m.srv){skip++;continue}
+      const r=await pinPost(c,m);
+      if(r.status!==201){msg=apiMsg(r);break}
+      const e=pinEntry(r.body.appliedSet,pw?id:fromPathway);await pinDef(e);c.applied.push(e);ok++;
+    }
+    if(msg)await pinsLoad(c);
+    if(c===CASE)renderAll();
+    toast(msg?(ok?`Stopped after ${ok} set(s): `:'Not applied: ')+msg:ok?(pw?'Pathway applied: '+s.title:'Added: '+s.title)+(skip?` (${skip} set(s) are not in the server library and were skipped)`:''):'Not applied: only published sets from the server library can be applied to a saved case.');
+  }finally{PIN.busy=false}
+}
+async function removeSetSrv(id){
+  const c=CASE,a=c.applied.find(x=>x.setId===id);if(!a||!a.srvAs)return;
+  if(!srvCan('cases:write'))return toast('Your role cannot change cases.');
+  if(!confirm(`Withdraw ${a.title} (v${a.version}) from this case? The pin and anything recorded with it stay in the record; the set just takes no new values.`))return;
+  if(PIN.busy)return;PIN.busy=true;
+  try{
+    const r=await api('POST','/api/cases/'+c.serverId+'/applied-sets/'+a.srvAs+'/withdraw',{});
+    if(r.status===200){c.applied=c.applied.filter(x=>x!==a);toast('Withdrawn')}else{toast(apiMsg(r));await pinsLoad(c)}
+    if(c===CASE)renderAll();
+  }finally{PIN.busy=false}
+}
+async function upgradeSrv(a,s){   // the explicit update: the server pins the newer published version and supersedes the old pin
+  const c=CASE;if(PIN.busy)return;PIN.busy=true;
+  try{
+    const r=await pinPost(c,s);
+    if(r.status!==201){toast(apiMsg(r));await pinsLoad(c);if(c===CASE)renderAll();return}
+    const e=pinEntry(r.body.appliedSet,a.fromPathway);await pinDef(e);c.applied=c.applied.map(x=>x===a?e:x);
+    if(c===CASE)renderAll();toast('Updated to v'+e.version);
+  }finally{PIN.busy=false}
+}
 function savePatient(){CASE.patient={name:$('p_name').value.trim(),mrn:$('p_mrn').value.trim(),age:$('p_age').value.trim(),sex:$('p_sex').value};save();renderBanner()}
 function fillPatient(){const p=CASE.patient||{};$('p_name').value=p.name||'';$('p_mrn').value=p.mrn||'';$('p_age').value=p.age||'';$('p_sex').value=p.sex||''}
 function renderBanner(){
@@ -793,7 +863,7 @@ function renderCases(){
     const dx=c.applied.map(a=>resolve(a)).filter(s=>s&&s.kind==='disease').map(s=>`<span class="kind disease">${escA(s.title)}</span>`).join(' ');
     const dr=c.notes.filter(n=>n.status==='draft').length;
     return`<div class="item" data-act="openCase" data-arg="${escA(c.id)}"><div><b>${escA(caseName(c))}</b> <span class="mu">MRN ${escA(caseMrn(c))}</span>${c.title?` · ${escA(c.title)}`:''}${c.srvStatus&&c.srvStatus!=='active'?` <span class="kind">${escA(c.srvStatus)}</span>`:''} ${dx}
-      <div class="meta">${c.applied.length} sets · ${c.notes.length} notes${dr?` (${dr} draft)`:''} · updated ${c.updatedAt.slice(0,16).replace('T',' ')}${c.id===CASE.id?' · open':''}</div></div>
+      <div class="meta">${c.serverId&&c.pinsOk!==true?'':c.applied.length+' sets · '}${c.notes.length} notes${dr?` (${dr} draft)`:''} · updated ${c.updatedAt.slice(0,16).replace('T',' ')}${c.id===CASE.id?' · open':''}</div></div>
       ${c.status==='archived'&&(!srvMode()||srvCan('cases:write'))?`<button class="b sec sm" data-act="restoreCase" data-arg="${escA(c.id)}">Restore</button>`:''}</div>`;
   }).join('')||'<div class="empty">No cases.</div>';
 }
@@ -801,7 +871,7 @@ function renderCases(){
 /* ---------- Storage adapter (B1b-1) ----------
    local  = file:// demo or signed out: everything in localStorage 'vr_traj' (unchanged).
    server = signed in: cases, title, status and narrative live on the server; 'vr_traj' is never written.
-   TEMPORARY exception (decision 2026-11-22, option B): until B3 the applied sets, values and notes of a server case, and custom
+   TEMPORARY exception (decision 2026-11-22, option B): until B3b-2/B3c the values and notes of a server case (applied sets are server pins since B3b-1), and custom
    element sets, sit in localStorage under 'vr_interim' (synthetic data only). B3b/B3c remove it. */
 const srvMode=()=>!!Srv.user;
 const Store={q:Promise.resolve(),nt:null,dirty:null,busy:{},conflict:null};
@@ -813,15 +883,16 @@ function interimRead(){
 }
 function interimWrite(mark){
   const im=interimRead(),cases=im.cases,imported={...im.imported,...(mark||{})};
-  [CASE,...CASES].forEach(c=>{if(c&&c.serverId)cases[c.serverId]={applied:c.applied,values:c.values,notes:c.notes}});
+  [CASE,...CASES].forEach(c=>{if(c&&c.serverId)cases[c.serverId]={values:c.values,notes:c.notes}});
+  Object.values(cases).forEach(x=>{if(x)delete x.applied});   // applied sets are server pins now (B3b-1); older copies are dropped
   const customs=REGISTRY.filter(s=>!s.srv&&!BUILTIN.find(b=>b.id===s.id));
-  try{localStorage.setItem('vr_interim',JSON.stringify({_temporary:'applied sets, values and notes of server cases; synthetic data only; removed in B3',cases,customs,imported}))}catch(e){toast('Storage full')}
+  try{localStorage.setItem('vr_interim',JSON.stringify({_temporary:'values and notes of server cases; synthetic data only; removed in B3b-2 and B3c',cases,customs,imported}))}catch(e){toast('Storage full')}
 }
 function fromRow(r,old){
   const im=interimRead().cases[r.id]||{};
   return{id:'s'+r.id,serverId:r.id,rowVersion:r.row_version,title:r.title,srvStatus:r.status,patientId:r.patient_id,patient:{},
     narrative:old?old.narrative:'',narrativeSent:old?old.narrativeSent:'',
-    applied:old?old.applied:(im.applied||[]),values:old?old.values:(im.values||{}),notes:old?old.notes:(im.notes||[]),
+    applied:old?old.applied:[],values:old?old.values:(im.values||{}),notes:old?old.notes:(im.notes||[]),
     status:r.status==='archived'?'archived':'open',createdAt:r.created_at,updatedAt:r.updated_at}
 }
 function storeEnter(){   // after sign-in: server cases replace the demo cases on screen; the demo data stays in localStorage untouched
@@ -871,6 +942,7 @@ async function openCaseSrv(id){
   if(r.status!==200){toast(apiMsg(r));return}
   Object.assign(c,fromRow(r.body.case,c));
   c.narrative=r.body.narrative?r.body.narrative.body:'';c.narrativeSent=c.narrative.trim();
+  c.pinsOk=await pinsLoad(c);
   CASE=c;conflictHide();
   fillPatient();$('narrative').value=c.narrative;$('narSt').textContent='';$('bj').textContent='';$('bchk').textContent='';
   renderAll();document.querySelector('[data-t=case]').click();
@@ -969,13 +1041,12 @@ async function conflictKeep(){
 
 /* ---------- Import local demo cases (B1b-2) ----------
    One explicit action per case. Only the title and the narrative text are sent; the typed demo patient fields are not.
-   Applied sets, values and notes are copied into the temporary 'vr_interim' key of this browser. 'vr_traj' is only read. */
+   Values and notes are copied into the temporary 'vr_interim' key of this browser; applied sets are not copied (they are server pins now). 'vr_traj' is only read. */
 const LOCAL_ID=/^[A-Za-z0-9_-]{1,64}$/;
 function localDemoCases(){
   try{const d=JSON.parse(localStorage.getItem('vr_traj')||'{}');return(Array.isArray(d.cases)?d.cases:[]).filter(c=>c&&typeof c.id==='string'&&LOCAL_ID.test(c.id))}
   catch(e){return[]}
 }
-const importKeep=c=>(c.applied||[]).filter(a=>getSet(a.setId));
 function importBody(c){const t=$('imp_t_'+c.id);return{title:t?t.value:'',narrative:typeof c.narrative==='string'?c.narrative:'',localId:c.id}}
 async function importOpen(){
   const b=$('importBox');if(b.style.display==='block'){b.style.display='none';return}
@@ -986,16 +1057,16 @@ function importRender(){
   const done=interimRead().imported,list=localDemoCases();
   const pts=Object.values(Srv.pts).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
   $('importBox').innerHTML='<b>Import local demo cases</b>'+
-    '<div class="mu" style="margin:4px 0 8px">These cases are saved in this browser (synthetic data only). Pick one, choose the registered patient it belongs to and check what will be sent. Only the title and the narrative go to the server, once; the import is recorded in the audit log. Sets, values and notes stay in this browser until they get server storage. The typed demo name, MRN, age and sex are not sent.</div>'+
+    '<div class="mu" style="margin:4px 0 8px">These cases are saved in this browser (synthetic data only). Pick one, choose the registered patient it belongs to and check what will be sent. Only the title and the narrative go to the server, once; the import is recorded in the audit log. Values and notes stay in this browser until they get server storage; applied sets are not copied (apply them again from the library, the values entered for their fields are kept). The typed demo name, MRN, age and sex are not sent.</div>'+
     (list.map(c=>{
-      const id=escA(c.id),imp=done[c.id],p=c.patient||{},kept=importKeep(c).length,all=(c.applied||[]).length;
+      const id=escA(c.id),imp=done[c.id],p=c.patient||{},all=(c.applied||[]).length;
       const sel=`<select id="imp_p_${id}" aria-label="Registered patient" data-act="importPreview" data-arg="${id}" data-ev="change"${imp?' disabled':''}><option value="">Choose a registered patient…</option>`+
         pts.map(q=>`<option value="${Number(q.id)}"${c.patientId===q.id?' selected':''}>${escA(q.name)} · MRN ${escA(q.mrn)}</option>`).join('')+'</select>';
       return`<div class="cd"><div><b>${escA(p.name||'Unnamed demo patient')}</b> <span class="mu">demo MRN ${escA(p.mrn||'—')} · ${String(c.narrative||'').length} characters of narrative · ${all} sets · ${(c.notes||[]).length} notes</span></div>`+
         (imp?`<div class="mu">Imported as server case #${Number(imp)}. It cannot be imported again from this browser.</div>`
           :`<label>Title on the server</label><input id="imp_t_${id}" maxlength="200" value="${escA('Imported demo case, '+String(c.createdAt||'').slice(0,10))}" data-act="importPreview" data-arg="${id}" data-ev="input">`+
            `<label>Registered patient</label>${sel}`+
-           (kept<all?`<div class="mu">${all-kept} applied set(s) use custom sets that are not available while signed in and will be left out.</div>`:'')+
+           (all?`<div class="mu">${all} applied set(s) are not copied: apply them again from the server library.</div>`:'')+
            `<label>This exact request will be sent</label><pre class="raw" id="imp_pre_${id}"></pre>`+
            `<div class="flex" style="margin-top:6px"><button class="b sm" data-act="importSend" data-arg="${id}">Send this</button></div>`)+`</div>`;
     }).join('')||'<div class="empty">No local demo cases in this browser.</div>');
@@ -1014,7 +1085,7 @@ async function importSend(id){
     const r=await api('POST','/api/patients/'+pid+'/cases/import',body);
     if(r.status!==201)return toast(apiMsg(r));
     const n=fromRow(r.body.case),cp=v=>JSON.parse(JSON.stringify(v));
-    n.applied=cp(importKeep(c));n.values=cp(c.values||{});n.notes=cp(c.notes||[]);n.narrative=body.narrative;n.narrativeSent=body.narrative.trim();
+    n.values=cp(c.values||{});n.notes=cp(c.notes||[]);n.narrative=body.narrative;n.narrativeSent=body.narrative.trim();
     CASES.push(n);interimWrite({[id]:n.serverId});
     importRender();renderCases();toast('Imported as a server case');
   }finally{Store.busy['imp'+id]=0}
@@ -1308,7 +1379,9 @@ function renderApplied(){
     const s=resolve(a);if(!s)return;
     const span=document.createElement('span');
     span.className='chip'+(a.fromPathway?' pathway':'');
-    span.innerHTML=`${escA(s.title)}${(getSet(a.setId).version||1)>1?' v'+(a.version||1):''}${(a.version||1)<(getSet(a.setId).version||1)?' ↑':''} <button data-act="removeSet" data-arg="${escA(a.setId)}">×</button>`;
+    const live=getSet(a.setId),lv=live?live.version||1:a.version||1,sv=!!a.srvAs;
+    span.innerHTML=`${escA(s.title)}${sv||lv>1?' v'+(a.version||1):''}${(a.version||1)<lv?' ↑':''}${s.unread?' ⚠':''}${sv&&!srvCan('cases:write')?'':` <button data-act="removeSet" data-arg="${escA(a.setId)}">×</button>`}`;
+    if(sv)span.title='Pinned v'+a.version+', checksum '+String(a.checksum||'').slice(0,12)+(a.appliedBy?', applied by '+a.appliedBy:'')+(s.unread?' (its definition could not be read)':'');
     box.appendChild(span);
   });
 }

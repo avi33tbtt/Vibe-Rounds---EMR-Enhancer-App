@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const { JSDOM } = require('jsdom');
-const { setup, PW } = require('./helpers');
+const { setup, client, PW, reviewers, approveVersion } = require('./helpers');
 
 const KEY = 'sk-ui-SECRET-9876543210';
 let env, prov, seen, reply;
@@ -124,10 +124,15 @@ test('names typed into the diagnosis are removed before the preview and are not 
 
 test('AI rank end to end: ranked ids come back through the server and apply to the case', async () => {
   await setServer(true);
+  // the demo built-ins are not in the library while signed in (B2b-1): publish one set on the server to rank, and open a case to apply it to
+  const R = await reviewers(env.base), admin = client(env.base); await admin.login('admin1');
+  const made = await R.doctor.post('/api/element-sets', { slug: 'rank_set', kind: 'disease', definition: { title: 'Rank set', fields: [{ id: 'x', label: 'X', type: 'text' }] } });
+  assert.equal(made.status, 201, JSON.stringify(made.body)); await approveVersion(R, made.body.set.id, 1);
+  assert.equal((await admin.post(`/api/element-sets/${made.body.set.id}/versions/1/publish`, {})).status, 200);
+  const pid = (await admin.post('/api/patients', { name: 'Rank Patient', mrn: 'RK-1', dob: '1980-01-01', sex: 'F' })).body.patient.id;
   const ui = await openPage({ vr_set: JSON.stringify({ d: false }) });
-  await ui.login('doctor1');
-  // the demo built-ins are not in the library while signed in (B2b-1): give the page one set to rank
-  ui.w.eval("REGISTRY.push({id:'rank_set',kind:'disease',title:'Rank set',desc:'',fields:[{id:'x',label:'X',type:'text'}],version:1})");
+  await ui.login('doctor1'); await until(() => ui.w.eval('LIB.loaded'), 'library');
+  await ui.w.ptOpenCase(pid); await until(() => ui.w.eval('!!CASE.serverId && CASE.pinsOk === true'), 'case open');
   const id = 'rank_set';
   reply = JSON.stringify({ ranked: [id, 'not_in_candidates'] });
   const asked = []; ui.w.prompt = m => { asked.push(m); return asked.length === 1 ? 'Sepsis' : '1'; };
@@ -137,7 +142,7 @@ test('AI rank end to end: ranked ids come back through the server and apply to t
   const body = JSON.parse(seen[0].body);
   const payload = JSON.parse(body.messages[1].content);
   assert.deepEqual(Object.keys(payload).sort(), ['applied_pathways', 'applied_sets', 'candidates', 'diagnosis']);
-  assert.ok(ui.w.eval(`CASE.applied.some(a=>a.setId==='${id}')`));
+  await until(() => ui.w.eval(`CASE.applied.some(a=>a.setId==='${id}')`), 'ranked set applied');
   reply = JSON.stringify({ title: 'Mock set', fields: [{ id: 'a', label: 'A', type: 'text' }] });
 });
 

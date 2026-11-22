@@ -95,8 +95,6 @@ test('page: the import button exists only for signed-in roles that may write cas
 
 test('page: preview shows exactly what is sent; one click imports once; vr_traj is untouched; interim data follows', async () => {
   const a = await openPage({ vr_traj: DEMO }); await a.login('nurse1');
-  // the demo built-ins are not in the signed-in library (B2b-1): put the set the first demo case uses into it
-  a.w.eval("REGISTRY.push({id:'dm_ctx',kind:'disease',title:'DM',desc:'',fields:[{id:'glu',label:'Glucose',type:'number'}],version:1})");
   await a.openImport();
   assert.equal(a.$('importBox').style.display, 'block');
   const pre = () => a.$('imp_pre_c_d1').textContent;
@@ -107,7 +105,7 @@ test('page: preview shows exactly what is sent; one click imports once; vr_traj 
   assert.match(shown, new RegExp(`^POST /api/patients/${pid}/cases/import\\n`));
   assert.deepEqual(JSON.parse(shown.slice(shown.indexOf('\n') + 1)), { title: 'Chest pain (imported)', narrative: 'Demo narrative with chest pain', localId: 'c_d1' });
   assert.doesNotMatch(shown, /Typed Demo Name|TYPED-77/);
-  assert.match(a.$('importBox').textContent, /1 applied set\(s\) use custom sets/);   // the second demo case refers to a set that does not exist
+  assert.match(a.$('importBox').textContent, /1 applied set\(s\) are not copied/);   // applied sets are server pins since B3b-1: the import does not copy them
 
   // nothing is sent without a click; no patient chosen = no request
   const posts = () => a.fetched.filter(f => f.method === 'POST' && /import/.test(f.path));
@@ -126,7 +124,7 @@ test('page: preview shows exactly what is sent; one click imports once; vr_traj 
   assert.equal(a.ls('vr_traj'), DEMO, 'vr_traj is only read, never written');
   const im = JSON.parse(a.ls('vr_interim'));
   assert.equal(im.imported.c_d1, row.id);
-  assert.equal(im.cases[row.id].applied[0].setId, 'dm_ctx'); assert.equal(im.cases[row.id].values.glu, 7.4); assert.equal(im.cases[row.id].notes[0].title, 'Demo note');
+  assert.equal('applied' in im.cases[row.id], false); assert.equal(im.cases[row.id].values.glu, 7.4); assert.equal(im.cases[row.id].notes[0].title, 'Demo note');
   assert.doesNotMatch(a.ls('vr_interim'), /Typed Demo Name|TYPED-77|Import Patient/);
   assert.match(a.$('importBox').textContent, new RegExp(`Imported as server case #${row.id}`));
   assert.equal(a.$('imp_t_c_d1'), null, 'no second import from this browser');
@@ -134,12 +132,13 @@ test('page: preview shows exactly what is sent; one click imports once; vr_traj 
   assert.match(a.$('caseList').textContent, /Chest pain \(imported\)/);
   const keep = a.ls('vr_interim'); await a.close();
 
-  // a later session remembers the import, and the case opens with its sets, values and notes
+  // a later session remembers the import, and the case opens with its values and notes (applied sets are not copied)
   const b = await openPage({ vr_traj: DEMO, vr_interim: keep }); await b.login('nurse1'); await b.openImport();
   assert.match(b.$('importBox').textContent, new RegExp(`Imported as server case #${row.id}`));
+  await until(() => b.ev(`CASES.some(c => c.id === 's${row.id}')`), 'case list loaded');   // the list loads after the patients; opening before it arrives does nothing
   await b.w.openCase('s' + row.id);
   assert.equal(b.ev('CASE.narrative'), 'Demo narrative with chest pain');
-  assert.equal(b.ev('CASE.applied.length'), 1); assert.equal(b.ev('CASE.values.glu'), 7.4); assert.equal(b.ev('CASE.notes.length'), 1);
+  assert.equal(b.ev('CASE.applied.length'), 0); assert.equal(b.ev('CASE.values.glu'), 7.4); assert.equal(b.ev('CASE.notes.length'), 1);
   assert.equal(b.ls('vr_traj'), DEMO);
   await b.close();
 });

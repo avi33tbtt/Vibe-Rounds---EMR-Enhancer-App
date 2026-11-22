@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
 const { createApp } = require('../app');
-const { setup, client, PW } = require('./helpers');
+const { setup, client, PW, reviewers, approveVersion } = require('./helpers');
 const { pageHtml } = require('./html');
 
 let env, api, pid, pid2;
@@ -76,7 +76,15 @@ test('a case created in one session is listed and opened in a second; it survive
   } finally { await new Promise(r => server2.close(r)); }
 });
 
-test('signed in: vr_traj is never written; applied sets, values and notes go to the labelled interim key and come back', async () => {
+async function publishSet(slug) {   // a set the page can pin: created, approved by two informaticians, published by the admin
+  const R = await reviewers(env.base), admin = client(env.base); await admin.login('admin1');
+  const made = await R.doctor.post('/api/element-sets', { slug, kind: 'care', definition: { title: 'Adapter set', fields: [{ id: 'x', label: 'X', type: 'text' }] } });
+  assert.equal(made.status, 201, JSON.stringify(made.body)); await approveVersion(R, made.body.set.id, 1);
+  assert.equal((await admin.post(`/api/element-sets/${made.body.set.id}/versions/1/publish`, {})).status, 200);
+}
+
+test('signed in: vr_traj is never written; values and notes go to the labelled interim key; applied sets are server pins that come back', async () => {
+  await publishSet('adapter_set');
   const raw = JSON.stringify({ cases: [{ id: 'c_demo', patient: { name: 'Demo Only', mrn: 'D-0', age: '50', sex: 'M' }, narrative: 'demo narrative', applied: [], values: {}, notes: [], status: 'open', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], current: 'c_demo', customs: [] });
   const a = await openPage({ vr_traj: raw });
   assert.match(a.$('pbanner').textContent, /Demo Only/);                    // signed out: the local demo case
@@ -84,13 +92,12 @@ test('signed in: vr_traj is never written; applied sets, values and notes go to 
   assert.doesNotMatch(a.$('pbanner').textContent, /Demo Only/);             // signed in: demo cases are not shown
   assert.match(a.$('encPanel').textContent, /No case is open/);
   await a.open(pid);
-  // the demo built-ins are not in the library while signed in (B2b-1), so give the page one set to apply
-  a.ev('REGISTRY.push({id:"adapter_set",kind:"care",title:"Adapter set",fields:[{id:"x",label:"X",type:"text"}]})');
-  const setId = 'adapter_set';
-  a.w.applySet(setId); write(a, 'typed while signed in'); await a.w.storeFlush();
+  const setId = 'adapter_set';   // published on the server above; applying it pins it there (B3b-1)
+  a.w.applySet(setId); await until(() => a.ev('CASE.applied.length') === 1, 'pinned'); write(a, 'typed while signed in');
+  a.ev("CASE.values.x = 'value kept in the interim key'; save()");   // values stay on the old path until B3b-2 await a.w.storeFlush();
   assert.equal(a.ls('vr_traj'), raw, 'vr_traj must be byte-for-byte untouched while signed in');
   const interim = JSON.parse(a.ls('vr_interim')), sid = a.ev('CASE.serverId');
-  assert.equal(interim.cases[sid].applied.length, 1);
+  assert.equal('applied' in interim.cases[sid], false, 'applied sets are not kept in the browser');
   assert.doesNotMatch(a.ls('vr_interim'), /Adapter Patient|AD-1/);          // identity is not copied into the browser
   assert.ok(interim._temporary);
   const keys = Object.keys(a.w.localStorage).filter(k => /^vr_/.test(k)).sort();
@@ -102,9 +109,9 @@ test('signed in: vr_traj is never written; applied sets, values and notes go to 
   assert.equal(a.ls('vr_traj'), raw);
   const saved = a.ls('vr_interim'); await a.close();
 
-  // a later session (same browser storage) gets the interim data back on the same server case
+  // a later session (same browser storage) gets the pin from the server and the interim data from the browser
   const b = await openPage({ vr_interim: saved, vr_traj: raw }); await b.login('nurse1'); await b.open(pid);
-  assert.equal(b.ev('CASE.applied.length'), 1); assert.equal(b.ev('CASE.applied[0].setId'), setId);
+  assert.equal(b.ev('CASE.applied.length'), 1); assert.equal(b.ev('CASE.applied[0].setId'), setId); assert.equal(b.ev('CASE.values.x'), 'value kept in the interim key');
   assert.equal(b.ev('CASE.narrative'), 'typed while signed in');           // narrative comes from the server, not the browser
   assert.equal(b.ls('vr_traj'), raw);
   await b.close();
