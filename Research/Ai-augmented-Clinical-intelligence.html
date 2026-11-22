@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
-<meta content="A six-chapter exploration of context-aware EMRs, contextual clinical intelligence, reusable clinical knowledge, canonical data architecture and a marketplace-powered intelligence application." name="description"/>
+<meta content="A ten-chapter exploration of context-aware EMRs, contextual clinical intelligence, reusable clinical knowledge, canonical data architecture, a marketplace-powered intelligence application, the CCIS standard, reusable analytics, conformance engineering and platform governance." name="description"/>
 <title>From Context-Aware EMRs to Clinical Intelligence — Chapters 1–10</title>
 <style>
 :root{--ink:#1d2939;--muted:#667085;--line:#dce3ed;--blue:#194b78;--blue2:#286d9b;--green:#14765e;--purple:#6b50a2;--paper:#fff;--wash:#f2f5f9}
@@ -36,13 +36,34 @@ code{background:#f1f4f8;padding:2px 5px;border-radius:4px;font-size:.92em}
 a{overflow-wrap:anywhere}
 @media(max-width:760px){.book{padding:12px 10px 40px}.book-cover{padding:32px 24px}.chapter{padding:22px 17px}.chapter-hero{padding:28px 21px}.grid,.two-col,#chapter2 .two-col,#chapter3 .grid{grid-template-columns:1fr}table{font-size:.84rem}th,td{padding:8px}.contents{padding:18px}}
 @media print{body{background:#fff}.book{max-width:none;padding:0}.book-cover,.chapter{box-shadow:none;break-inside:avoid}.chapter{border:0;padding:18px 0}.contents{break-after:page}a{color:inherit;text-decoration:none}}
+
+/* ---- readability + navigation fixes ---- */
+.hero,.chapter-hero,.book-cover{background:linear-gradient(135deg,#153858,#286f98);color:#fff}
+.hero{padding:34px 32px;border-radius:14px;margin:0 0 28px}
+.hero h1,.hero h2,.hero p,.hero .eyebrow,.chapter-hero h1,.chapter-hero h2,.book-cover h1,.book-cover .eyebrow{color:#fff!important}
+.hero p,.chapter-hero p,.book-cover p{color:#e8f1fa!important}
+.hero .eyebrow{font-size:.76rem;letter-spacing:.16em;text-transform:uppercase;font-weight:750;opacity:.85}
+.hero h1{font-size:clamp(1.9rem,4vw,2.7rem);line-height:1.18;margin:12px 0}
+.closing{background:#172b49;color:#fff;border-radius:14px;padding:25px;margin:24px 0}
+.closing h1,.closing h2,.closing h3,.closing h4,.closing strong,.closing .eyebrow{color:#fff}
+.closing p,.closing li,.closing td,.closing small{color:#e3edf7}
+.closing a{color:#9cd0ff}
+.hero a,.chapter-hero a{color:#cfe6ff}
+.toc-bar{position:sticky;top:0;z-index:50;display:flex;gap:6px;overflow-x:auto;padding:8px 10px;margin:0 -26px 18px;background:rgba(255,255,255,.96);border-bottom:1px solid var(--line);backdrop-filter:blur(6px);scrollbar-width:thin}
+.toc-bar a{flex:0 0 auto;padding:4px 11px;border-radius:20px;background:#e9f0f8;color:#194b78;font-size:.8rem;font-weight:650;text-decoration:none;white-space:nowrap}
+.toc-bar a:hover{background:#194b78;color:#fff}
+.back-top{display:block;text-align:right;font-size:.85rem;margin-top:10px}
+.back-top a{color:var(--blue2);text-decoration:none}
+.chapter{scroll-margin-top:52px}
+@media(max-width:760px){.toc-bar{margin:0 -10px 14px}}
+@media print{.toc-bar,.back-top{display:none}}
 </style>
-</head><body><main class="book">
+</head><body><main class="book" id="top"><nav class="toc-bar" aria-label="Chapters"><a href="#top">Contents</a><a href="#chapter1">Ch 1</a><a href="#chapter2">Ch 2</a><a href="#chapter3">Ch 3</a><a href="#chapter4">Ch 4</a><a href="#chapter5">Ch 5</a><a href="#chapter6">Ch 6</a><a href="#chapter7">Ch 7</a><a href="#chapter8">Ch 8</a><a href="#chapter9">Ch 9</a><a href="#chapter10">Ch 10</a></nav>
 <header class="book-cover">
 <div class="eyebrow">Clinical informatics · VibeRounds · Chapters 1–10</div>
 <h1>From Context-Aware EMRs to Clinical Intelligence</h1>
 <p>A connected exploration of dynamic clinical documentation, composable care pathways, contextual intelligence, longitudinal analytics and reusable clinical knowledge infrastructure.</p>
-<div class="book-meta"><span>Chapter 1 · Conceptual evolution</span><span>Chapter 2 · Contextual intelligence</span><span>Chapter 3 · Knowledge architecture</span><span>Chapter 5 · Canonical data architecture</span><span>Chapter 6 · Intelligence app and marketplace</span><span>Chapter 7 · Clinical Context Intelligence Standard</span><span>Chapter 8 · Reusable analytics and research translation</span><span>Chapter 9 · CCIS engineering and conformance</span><span>Chapter 10 · Platform expansion and governance</span></div>
+<div class="book-meta"><span>Chapter 1 · Conceptual evolution</span><span>Chapter 2 · Contextual intelligence</span><span>Chapter 3 · Knowledge architecture</span><span>Chapter 4 · System synthesis and build strategy</span><span>Chapter 5 · Canonical data architecture</span><span>Chapter 6 · Intelligence app and marketplace</span><span>Chapter 7 · Clinical Context Intelligence Standard</span><span>Chapter 8 · Reusable analytics and research translation</span><span>Chapter 9 · CCIS engineering and conformance</span><span>Chapter 10 · Platform expansion and governance</span></div>
 </header>
 <nav class="contents">
 <h2>Contents</h2>
@@ -62,7 +83,7 @@ a{overflow-wrap:anywhere}
 <h1>Beyond Static EMRs: The Emergence of Contextual Clinical Intelligence</h1>
 <p>From diagnosis-aware documentation to composable care pathways, patient monitoring, trajectory analytics and a connected clinical knowledge ecosystem.</p>
 </header>
-<p class="lead">The starting point is a practical frustration: a clinical record can be full of data and still fail to capture the information that matters to the clinical problem in front of the clinician. The five essays gathered here describe an architectural progression. Each step addresses a limitation exposed by the previous one.</p>
+<p class="lead">The starting point is a practical frustration: a clinical record can be full of data and still fail to capture the information that matters to the clinical problem in front of the clinician. The five essays that seed this chapter describe an architectural progression; later chapters build on it. Each step addresses a limitation exposed by the previous one.</p>
 <nav class="chapter-nav">
 <strong>In this chapter</strong>
 <ol>
@@ -225,7 +246,7 @@ a{overflow-wrap:anywhere}
 </ol>
 <p class="small">The source essays are synthesized here into one progression rather than reproduced as five separate blog posts. The detailed source documents for Chapters 2 and 3 follow in their supplied form.</p>
 </section>
-<div class="chapter-footer">Chapter 1 · Conceptual evolution</div>
+<div class="chapter-footer">Chapter 1 · Conceptual evolution</div><p class="back-top"><a href="#top">↑ Back to contents</a></p>
 </section>
 <section class="chapter" id="chapter2">
 <header class="hero">
@@ -376,6 +397,7 @@ can begin from the first narrative rather than waiting for the completion
 of structured documentation.
 
 <h2>3. Avinash Principle: The Decision Intelligence Layer</h2>
+<p class="small"><em>In this book, the <strong>Avinash Principle</strong> is the idea that clinical reasoning pivots on a small number of recurring key decision nodes (hub nodes) in a patient's journey, and that these nodes can be captured as reusable, knowledge-backed units and then tested for recurrence across patients.</em></p>
 <p>
 A disease context tells the EMR what information is relevant to a condition.
 A pathway tells it how clinical care can be organized.
@@ -1140,7 +1162,7 @@ discovery become interconnected parts of everyday clinical practice.
     medical judgment.
   </p>
 </footer>
-<div class="chapter-footer">Chapter 2 · Contextual clinical intelligence</div>
+<div class="chapter-footer">Chapter 2 · Contextual clinical intelligence</div><p class="back-top"><a href="#top">↑ Back to contents</a></p>
 </section>
 <section class="chapter" id="chapter3">
 <header class="hero">
@@ -1423,7 +1445,7 @@ discovery become interconnected parts of everyday clinical practice.
 <p><strong>That is the architectural opportunity worth pursuing.</strong></p>
 <p class="small">Conceptual architecture document. Clinical examples are illustrative and require clinical governance, terminology validation and testing before operational use.</p>
 </section>
-<div class="chapter-footer">Chapter 3 · Clinical knowledge and intelligence infrastructure</div>
+<div class="chapter-footer">Chapter 3 · Clinical knowledge and intelligence infrastructure</div><p class="back-top"><a href="#top">↑ Back to contents</a></p>
 </section>
 <section class="chapter" id="chapter4">
 <header class="chapter-hero">
@@ -1705,7 +1727,7 @@ discovery become interconnected parts of everyday clinical practice.
 <tr><td>A5</td><td>8a–8f · Lint, review workflow, reviewer rules, review UI, session-derived signer, entered-in-error handling</td><td>Establishes content governance and closes known data-integrity gaps.</td><td>Content can be submitted, reviewed, approved and amended with immutable versions and correct authorship.</td></tr>
 </tbody>
 </table>
-<p><strong>Tracker rule:</strong> follow the first TODO/IN PROGRESS item in <code>EMR_TASK_TRACKER.md</code>, currently 6c in the inspected snapshot. Do not mark work DONE without implementation and verification. Do not edit existing chunk files; add new chunks only when the current roadmap reaches them.</p>
+<p><strong>Tracker rule:</strong> follow the first open (not-started or in-progress) item in <code>EMR_TASK_TRACKER.md</code>; in the repository snapshot inspected for this chapter that was 6c (Chapter 5 records 6c as done and 6d as next). Do not mark work DONE without implementation and verification. Do not edit existing chunk files; add new chunks only when the current roadmap reaches them.</p>
 <h3>Track B — Build the clinical intelligence foundation</h3>
 <table>
 <thead><tr><th>Phase</th><th>Build objective</th><th>Small deliverable sequence</th><th>Exit condition</th></tr></thead>
@@ -1790,7 +1812,7 @@ discovery become interconnected parts of everyday clinical practice.
 <ol>
 <li><strong>Refresh the repository.</strong> Work from the latest <code>main</code> (or an explicitly selected working branch) before choosing a task.</li>
 <li><strong>Read the tracker and only the relevant chunk.</strong> Follow <code>EMR_TASK_TRACKER.md</code> and the repository's small-session protocol. Avoid rereading large files wholesale when targeted ranges suffice.</li>
-<li><strong>Choose one TODO task.</strong> In the inspected snapshot, the first open task is 6c. Do not jump ahead unless the user explicitly changes priority.</li>
+<li><strong>Choose one open task.</strong> In the snapshot inspected for this chapter the first open task was 6c (since completed; see Chapter 5). Do not jump ahead unless the user explicitly changes priority.</li>
 <li><strong>Check the size guard.</strong> If the task is too large, split it into smaller independently testable tasks before coding.</li>
 <li><strong>Implement the smallest complete change.</strong> Preserve existing conventions, permissions, audit behavior and migration rules.</li>
 <li><strong>Test once deliberately.</strong> Run the prescribed test suite and only the necessary targeted checks. Do not claim completion when the tests or required environment are unavailable.</li>
@@ -1799,7 +1821,7 @@ discovery become interconnected parts of everyday clinical practice.
 </ol>
 <div class="callout green">
 <strong>Immediate next task from the inspected repository snapshot</strong>
-<p>Continue with <code>6c — Restricted database role, no DELETE/TRUNCATE</code> as the first TODO in <code>EMR_TASK_TRACKER.md</code>. This chapter does not mark it complete or alter the repository. The next intelligence milestone after the current security, operations and review backlog is B0: agree the canonical case/context model and map it against the actual browser-side structures.</p>
+<p>Continue with <code>6c — Restricted database role, no DELETE/TRUNCATE</code> as the first open task in <code>EMR_TASK_TRACKER.md</code> at the time of that snapshot (Chapter 5 later records it as done, with 6d next). This chapter does not mark it complete or alter the repository. The next intelligence milestone after the current security, operations and review backlog is B0: agree the canonical case/context model and map it against the actual browser-side structures.</p>
 </div>
 </section>
 <section id="c4-definition">
@@ -1828,7 +1850,7 @@ discovery become interconnected parts of everyday clinical practice.
 </div>
 <p class="small">Repository snapshot reviewed: public <code>main</code> branch, 22 November 2026. This chapter is an architectural synthesis and proposed development plan, not a claim of clinical validation or production readiness.</p>
 </section>
-<div class="chapter-footer">Chapter 4 · System synthesis and build strategy</div>
+<div class="chapter-footer">Chapter 4 · System synthesis and build strategy</div><p class="back-top"><a href="#top">↑ Back to contents</a></p>
 </section><section class="chapter" id="chapter5">
 <header class="chapter-hero">
 <div class="eyebrow">Chapter 5 · Canonical data architecture</div>
@@ -2135,7 +2157,7 @@ analytics_runs
 </tbody></table>
 <p>These are candidate mappings, not a claim that every internal entity has a one-to-one FHIR equivalent. The export layer must define mappings resource by resource and test them against the supported FHIR R4 profile. Only verified terminology bindings may be emitted as coded entries.</p>
 <h2>10. Migration sequence and small implementation chunks</h2>
-<p>The schema should arrive through small, additive migrations. The repository tracker is the execution authority for the immediate build order. It now records 6c as DONE; 6d (Content-Security-Policy) is the next TODO, followed by 6e, the 7-series deployment/backup work and the 8-series review workflow. Chapter 5 does not override that security sequence.</p>
+<p>The schema should arrive through small, additive migrations. The repository tracker is the execution authority for the immediate build order. It now records 6c as DONE; 6d (Content-Security-Policy) is the next open task, followed by 6e, the 7-series deployment/backup work and the 8-series review workflow. Chapter 5 does not override that security sequence.</p>
 <h3>10.1 Track A — finish the current foundation first</h3>
 <ol>
 <li><strong>6d — CSP:</strong> decide and implement a policy compatible with the current inline-handler surface, with tests.</li>
@@ -2189,6 +2211,7 @@ analytics_runs
 <p>The Clinical Context Model is not a new screen and not a universal JSON container. It is a set of explicit entities and lifecycle rules that preserve the relationship between a person, a care interaction, an evolving clinical problem, the content applied to that problem, and the facts recorded over time. Its value is that every later capability—pathways, decision nodes, evidence, trajectories, analytics and AI—can operate on the same traceable foundation.</p>
 <p>The implementation strategy is intentionally conservative: preserve the existing Node.js/PostgreSQL architecture, finish the current safety work, map the prototype before migrating it, and add persistence in small verified slices. Build the data model so that clinical meaning and provenance survive every transformation. Intelligence can then be layered onto something reliable.</p>
 <div class="source-list"><h3>Repository files for direct inspection</h3><ul><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/README.md" rel="noopener" target="_blank">README.md — README.md</a></li><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/EMR_TASK_TRACKER.md" rel="noopener" target="_blank">EMR_TASK_TRACKER.md — EMR_TASK_TRACKER.md</a></li><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/emr-plan-chunks/01-core.md" rel="noopener" target="_blank">Core rules — emr-plan-chunks/01-core.md</a></li><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/emr-plan-chunks/02-roadmap.md" rel="noopener" target="_blank">Roadmap — emr-plan-chunks/02-roadmap.md</a></li><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/app.js" rel="noopener" target="_blank">Express API and patient/encounter routes — app.js</a></li><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/auth.js" rel="noopener" target="_blank">Session and actor identity — auth.js</a></li><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/permissions.js" rel="noopener" target="_blank">Server permissions — permissions.js</a></li><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/audit.js" rel="noopener" target="_blank">Audit implementation — audit.js</a></li><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/ai.js" rel="noopener" target="_blank">AI boundary — ai.js</a></li><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/migrate.js" rel="noopener" target="_blank">Migration runner — migrate.js</a></li><li><a href="https://github.com/avi33tbtt/Vibe-Rounds---EMR-Enhancer-App/blob/main/migrations/005_app_role.sql" rel="noopener" target="_blank">Restricted database role migration — migrations/005_app_role.sql</a></li></ul></div><div class="chapter-footer"><strong>Repository grounding note:</strong> This chapter reflects the public repository files inspected on 22 November 2026, including <code>README.md</code>, <code>EMR_TASK_TRACKER.md</code>, <code>emr-plan-chunks/01-core.md</code>, <code>emr-plan-chunks/02-roadmap.md</code>, <code>package.json</code>, <code>server.js</code>, <code>db.js</code>, <code>migrate.js</code>, <code>app.js</code>, <code>auth.js</code>, <code>permissions.js</code>, <code>audit.js</code> and <code>migrations/005_app_role.sql</code>. Proposed entities and schema sketches are design recommendations, not existing database structures. The application remains synthetic-data-only and not for clinical use until the documented go-live gate is satisfied.</div>
+<p class="back-top"><a href="#top">↑ Back to contents</a></p>
 </section>
 <section class="chapter" id="chapter6">
 <header class="chapter-hero">
@@ -2556,7 +2579,7 @@ analytics_runs
 <p><strong>Final direction:</strong> Finish the EMR Enhancer as a reliable contextual data producer. In parallel, formalize the shared context and package contracts. Then build the Clinical Intelligence App around import, compatibility and deterministic analytics execution. Grow the GitHub marketplace and advanced intelligence capabilities only after that first vertical slice works end to end.</p>
 <p class="small">This is a proposed product and engineering architecture. Marketplace status labels, FHIR/SDC conformance and clinical validation claims must be backed by documented processes and evidence. The system is not a validated clinical decision-support product merely by implementing this design.</p>
 </section>
-<div class="chapter-footer">Chapter 6 · Contextual Clinical Intelligence App, marketplace and execution engine</div>
+<div class="chapter-footer">Chapter 6 · Contextual Clinical Intelligence App, marketplace and execution engine</div><p class="back-top"><a href="#top">↑ Back to contents</a></p>
 </section>
 <section class="chapter" id="chapter7">
 <header class="chapter-hero">
@@ -2663,7 +2686,7 @@ analytics_runs
 <div class="callout green"><strong>The architectural conclusion</strong><p>The standard is the common language of the ecosystem. Contextual elements and pathways define clinical context; analytics packages declare what they can compute; authoring tools create conformant artefacts; the marketplace discovers compatible packages; governance establishes the scope of review and validation; and the engine executes pinned packages reproducibly. LLM, GUI and code are different ways to create the same artefacts—not different standards.</p></div>
 <p class="small">CCIS in this chapter is a proposed project-specific standard, not an existing HL7, openEHR or other industry standard. Its schemas, profiles, validators, implementation guides and governance process must be built and published before conformance can be claimed. Clinical review, clinical validation, software verification and regulatory assessment remain distinct responsibilities.</p>
 </section>
-<div class="chapter-footer">Chapter 7 · Clinical Context Intelligence Standard</div>
+<div class="chapter-footer">Chapter 7 · Clinical Context Intelligence Standard</div><p class="back-top"><a href="#top">↑ Back to contents</a></p>
 </section>
 <section class="chapter" id="chapter8">
 <header class="chapter-hero">
@@ -2826,7 +2849,7 @@ analytics_runs
 <p>The key boundary remains intact: EMR Enhancer produces contextual patient data; the Clinical Intelligence App imports and analyses it; CCIS defines the shared artefact contract; and the marketplace distributes reusable knowledge and analytics. Cohort export from EMR Enhancer is a later extension, not a prerequisite for beginning the analytics engine.</p>
 <div class="callout green"><strong>Chapter 8 conclusion</strong><p>The platform should make it easy to reuse a known analytic, compose analytics around a decision node, or create a new evidence-derived package from a research paper—while ensuring every package is explicit, testable, traceable, compatible and appropriately reviewed before clinical use.</p></div>
 </section>
-<div class="chapter-footer">Chapter 8 · Reusable analytics and research translation</div>
+<div class="chapter-footer">Chapter 8 · Reusable analytics and research translation</div><p class="back-top"><a href="#top">↑ Back to contents</a></p>
 </section><section class="chapter" id="chapter9">
 <header class="chapter-hero">
 <div class="eyebrow">Chapter 9 · The next major engineering step</div>
@@ -2974,7 +2997,7 @@ analytics_runs
 <p>At that point, the project will have moved from an architectural proposal to a testable ecosystem: clinical context is authored as standardised artefacts; research can be translated into traceable analytics; packages can be matched to patient context; and the runtime can execute them with explicit provenance and safety boundaries.</p>
 <div class="callout green"><strong>Chapter 9 conclusion</strong><p>The next major engineering step is to make CCIS executable. Start with the schemas, validator, reference fixtures and one end-to-end vertical slice. That single proof will expose the real gaps in the standard and provide a stable foundation for every larger feature that follows.</p></div>
 </section>
-<div class="chapter-footer">Chapter 9 · CCIS engineering and conformance</div>
+<div class="chapter-footer">Chapter 9 · CCIS engineering and conformance</div><p class="back-top"><a href="#top">↑ Back to contents</a></p>
 
 <section class="chapter" id="chapter10">
 <header class="chapter-hero">
@@ -3077,7 +3100,7 @@ analytics_runs
 <p>It should also support safe failure, transparent uncertainty, role-appropriate access, privacy-preserving cohort workflows, package deprecation and migration, independent review and measurable quality monitoring. No single LLM, GUI or runtime should be able to bypass these controls.</p>
 <div class="callout green"><strong>Chapter 10 conclusion</strong><p>After proving CCIS with one conformant vertical slice, expand in evidence-led increments: curate reusable analytics, make decision graphs first-class executable artefacts, build cohort execution independently of the future exporter, harden FHIR mappings and establish external governance. This turns the architecture into a sustainable clinical intelligence ecosystem without weakening its shared standard or safety boundaries.</p></div>
 </section>
-<div class="chapter-footer">Chapter 10 · Platform expansion, cohort execution and governance</div>
+<div class="chapter-footer">Chapter 10 · Platform expansion, cohort execution and governance</div><p class="back-top"><a href="#top">↑ Back to contents</a></p>
 </section>
 </main><!-- Chapters 1–10: clinical intelligence architecture, standard, reusable analytics and engineering roadmap. -->
 </body></html>
