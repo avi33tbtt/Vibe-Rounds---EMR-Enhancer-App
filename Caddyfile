@@ -1,0 +1,7 @@
+# Reverse proxy with automatic TLS.
+# SITE_ADDRESS=localhost  -> Caddy makes its own local certificate (browser warning until you trust it, see README).
+# SITE_ADDRESS=emr.example.org -> Caddy gets a public certificate (Let's Encrypt); DNS must point here and ports 80/443 must be reachable.
+{$SITE_ADDRESS:localhost} {
+	encode gzip
+	reverse_proxy app:3000
+}

@@ -17,6 +17,25 @@ npm start                          # http://127.0.0.1:3000
 
 Opening `emr-enhancer.html` directly as a file still works as the demo; registration needs the server. The page loads `sdc.js` (the shared FHIR SDC code, also used by the server), so keep it in the same folder as the HTML.
 
+## Run with Docker and HTTPS
+
+`docker compose up` starts the whole stack: `db` (PostgreSQL 16), two one-shot steps (`migrate` runs the migrations as the owner; `db-role` sets the `emr_app` login password), `app` (the server, running as the restricted `emr_app` role) and `caddy` (the reverse proxy that does the TLS). Only ports 80 and 443 are published; the app has no published port, and the database port is bound to this machine only (127.0.0.1). The three steps:
+
+```
+cp env.txt .env                              # then edit .env: POSTGRES_PASSWORD, EMR_APP_PASSWORD, SEED_PASSWORD, SITE_ADDRESS
+docker compose up -d --build                 # builds the image, migrates, starts the app and the proxy
+docker compose run --rm app node seed.js     # once: creates admin1, doctor1, nurse1, viewer1 with SEED_PASSWORD
+```
+
+Then open `https://localhost` (or your domain) and sign in as `admin1`.
+
+- **Secrets:** `.env` is gitignored. Use only letters and digits in `POSTGRES_PASSWORD` and `EMR_APP_PASSWORD` (they go inside connection URLs). `EMR_APP_PASSWORD` must be set or `db-role` stops the start with a clear message. The `DATABASE_URL` lines in `.env` are for `npm start` and `npm test` only; Compose builds its own database URLs for the containers.
+- **Local trial (`SITE_ADDRESS=localhost`):** Caddy makes its own certificate, so the browser warns until you trust it: `docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt`, then import that file into your browser or system. A quick check without the browser: `curl -k https://localhost/`. `HTTPS=1` (the default here) also sends the HSTS header, which makes a browser insist on HTTPS for that host name; if that gets in the way of plain-http dev on `localhost`, set `HTTPS=0` in `.env` for the trial only.
+- **Real domain:** set `SITE_ADDRESS=emr.example.org`, point its DNS at the server, and keep ports 80 and 443 open: Caddy then gets and renews a public certificate by itself. Keep `HTTPS=1`.
+- **Day to day:** `docker compose down` stops everything and keeps the data (the `pgdata` volume); `docker compose down -v` also wipes the database. After `git pull`, run `docker compose up -d --build`; new migrations apply on their own.
+- **Tests and local dev** still use only the database: `npm run db:up` starts just `db`.
+- Still **synthetic data only**; do not expose a real deployment before the go-live gate in the tracker.
+
 ## Database roles (restricted app role)
 
 Migration `005_app_role.sql` creates `emr_app`, a role that owns nothing: it cannot `DROP`/`ALTER`/`CREATE`, has no `DELETE` or `TRUNCATE` on `patients`, `encounters` or `audit_log`, and only the grants the code uses. `TRUNCATE` on `patients`/`encounters`/`audit_log` is also refused by trigger, even for the owner. For real use run migrations as the owner and the server as `emr_app`:

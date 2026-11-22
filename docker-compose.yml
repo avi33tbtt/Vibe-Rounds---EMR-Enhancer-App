@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "${DB_PORT}:5432"
+      - "127.0.0.1:${DB_PORT}:5432"   # this machine only (npm test and local dev); the app reaches it as "db" inside Docker
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker-init:/docker-entrypoint-initdb.d:ro
@@ -18,5 +18,77 @@ services:
       timeout: 3s
       retries: 10
 
+  # One-shot: run the numbered migrations as the owner. Safe to run on every start (already-applied ones are skipped).
+  migrate:
+    build: .
+    image: emr-enhancer
+    command: ["node", "migrate.js"]
+    environment:
+      MIGRATE_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # One-shot: give the restricted role emr_app its login password from EMR_APP_PASSWORD (.env, never in git).
+  db-role:
+    image: postgres:16
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        [ -n "$$EMR_APP_PASSWORD" ] || { echo "Set EMR_APP_PASSWORD in .env (see README)." >&2; exit 1; }
+        echo "ALTER ROLE emr_app LOGIN PASSWORD :'pw';" | psql -v ON_ERROR_STOP=1 -v pw="$$EMR_APP_PASSWORD"
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      EMR_APP_PASSWORD: ${EMR_APP_PASSWORD:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  # The server runs as the restricted emr_app role. The owner URL is only for migrations and seed.js.
+  app:
+    build: .
+    image: emr-enhancer
+    restart: unless-stopped
+    env_file: .env      # AI_* keys, SEED_PASSWORD, TX_HOST (the lines below override the database and network settings)
+    environment:
+      DATABASE_URL: postgres://emr_app:${EMR_APP_PASSWORD:-}@db:5432/${POSTGRES_DB}?sslmode=disable
+      MIGRATE_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      HOST: 0.0.0.0     # inside the container; no port is published, only the proxy reaches it
+      PORT: "3000"
+      HTTPS: "${HTTPS:-1}"
+      TRUST_PROXY: "1"  # exactly one proxy (Caddy) in front
+    depends_on:
+      db-role:
+        condition: service_completed_successfully
+    healthcheck:   # uses the existing page route, so no new API route is needed
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
