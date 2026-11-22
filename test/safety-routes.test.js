@@ -271,11 +271,11 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.status, 'rejected'); return ['set.reject'];
       }],
       ['POST /api/element-sets/:id/versions/:version/publish', admin, async () => {
-        const r = await admin.c.post(`/api/element-sets/${S.setId}/versions/${S.setV}/publish`, {});
+        const r = await admin.c.post(`/api/element-sets/${S.setId}/versions/${S.revV}/publish`, {});
         assert.equal(r.status, 200, JSON.stringify(r.body)); return ['set.publish'];
       }],
       ['POST /api/element-sets/:id/versions/:version/retire', admin, async () => {
-        const r = await admin.c.post(`/api/element-sets/${S.setId}/versions/${S.setV}/retire`, {});
+        const r = await admin.c.post(`/api/element-sets/${S.setId}/versions/${S.revV}/retire`, {});
         assert.equal(r.status, 200, JSON.stringify(r.body)); return ['set.retire'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {

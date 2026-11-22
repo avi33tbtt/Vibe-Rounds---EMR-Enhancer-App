@@ -1386,18 +1386,18 @@ function renderLib(){
 
 /* ---------- Server library (B2b-1) ----------
    Signed in: the library is the PUBLISHED sets on the server (latest published version of each). They are read-only here.
-   The demo built-ins are not shown; an admin can import the minimum demo library once, as published v1 (no reviewer yet: 8c).
+   The demo built-ins are not shown; an admin or doctor can send the demo library for review once (8c-2): it is created as v1 and submitted, and shows here only after an informatician approves it and an admin publishes it.
    Pinning an exact version on a case, the visible diff and the explicit update are done in B3a/B3b, not here. */
-const LIB={busy:false,msg:'',loaded:false};
+const LIB={busy:false,msg:'',loaded:false,slugs:new Set()};
 const SRV_RO='Sets from the server library are read-only. Make a new version through the library API, or use a different id.';
 const srvLocked=id=>{const s=REGISTRY.find(x=>x.id===id);return!!(s&&s.srv)};
 const DEMO_IMPORT=['basic_emr','glucose_ss','dka_ctx','snake_ctx','vitals','opd_visit','ipd_admission','ipd_progress','ipd_discharge'];
 const DEF_FIELD_KEYS=['id','label','type','unit','options','repeat','required','derived','flag','rationale','citation','codingPolicy','linkId','sdcType','text','path'];
-function libDef(s){   // the whitelist the server accepts: declarative text, true/false, lists and objects only
+function libDef(s,withCodes=true){   // the whitelist the server accepts: declarative text, true/false, lists and objects only
   const fields=(s.fields||[]).map(f=>{
     const o={};copyFieldKeys(f,o);
     const bs=bnds(f).map(b=>{const x={system:String(b.system),code:String(b.code)};if(b.display)x.display=String(b.display);if(['manual','llm','sdc'].includes(b.source))x.source=b.source;return x});
-    if(bs.length)o.bindings=bs;
+    if(bs.length&&withCodes)o.bindings=bs;
     return o;
   });
   const d={title:s.title,fields};if(s.desc)d.desc=s.desc;return d;
@@ -1415,6 +1415,7 @@ async function libLoad(){
   const l=await api('GET','/api/element-sets');
   if(!Srv.user)return;
   if(l.status!==200){LIB.msg='The library could not be loaded: '+apiMsg(l);return libApply([])}
+  LIB.slugs=new Set((l.body.sets||[]).map(x=>x.slug));
   const pubs=(l.body.sets||[]).filter(x=>x.published_version);
   const res=await Promise.all(pubs.map(x=>api('GET','/api/element-sets/'+x.id+'/versions/'+x.published_version)));
   if(!Srv.user)return;
@@ -1431,28 +1432,28 @@ async function libLoad(){
 function renderLibSrv(){
   const box=$('libSrv');if(!box)return;
   if(!srvMode()){box.innerHTML='';return}
-  const have=new Set(REGISTRY.filter(x=>x.srv).map(x=>x.id)),todo=DEMO_IMPORT.filter(id=>!have.has(id));
+  const have=new Set(REGISTRY.filter(x=>x.srv).map(x=>x.id)),todo=DEMO_IMPORT.filter(id=>!have.has(id)&&!LIB.slugs.has(id));   // already on the server in any state (draft, in review, published) is not offered again
   let h=`<div class="note">Signed in: this library is read from the server (published versions only) and is read-only here.${LIB.msg?' '+escA(LIB.msg):''}</div>`;
-  if(srvCan('sets:write')&&srvCan('sets:publish')&&todo.length)
-    h+=`<div class="cd"><b>Import the demo library</b><div class="mu" style="margin:4px 0 8px">One time, as published v1, by you (${escA(Srv.user.username)}): ${todo.map(id=>escA(BUILTIN.find(b=>b.id===id).title)).join(', ')}. Synthetic demo content, not reviewed yet.</div><button class="b sm" data-act="libImport"${LIB.busy?' disabled':''}>Import and publish</button></div>`;
+  if(srvCan('sets:write')&&srvCan('sets:submit')&&todo.length)
+    h+=`<div class="cd"><b>Send the demo library for review</b><div class="mu" style="margin:4px 0 8px">One time, as v1 submitted by you (${escA(Srv.user.username)}): ${todo.map(id=>escA(BUILTIN.find(b=>b.id===id).title)).join(', ')}. Synthetic demo content. It goes in without terminology codes (the server cannot verify them yet; add them in a later version). It appears in this library only after an informatician approves it and an admin publishes it.</div><button class="b sm" data-act="libImport"${LIB.busy?' disabled':''}>Create and submit for review</button></div>`;
   box.innerHTML=h;
 }
 async function libImport(){
-  if(LIB.busy||!srvCan('sets:write')||!srvCan('sets:publish'))return;
-  const have=new Set(REGISTRY.filter(x=>x.srv).map(x=>x.id)),todo=DEMO_IMPORT.filter(id=>!have.has(id));
+  if(LIB.busy||!srvCan('sets:write')||!srvCan('sets:submit'))return;
+  const have=new Set(REGISTRY.filter(x=>x.srv).map(x=>x.id)),todo=DEMO_IMPORT.filter(id=>!have.has(id)&&!LIB.slugs.has(id));   // already on the server in any state (draft, in review, published) is not offered again
   if(!todo.length)return;
-  if(!confirm('Create and publish version 1 of these demo sets on the server?\n\n'+todo.map(id=>'- '+BUILTIN.find(b=>b.id===id).title).join('\n')+'\n\nPublished versions cannot be changed afterwards.'))return;
+  if(!confirm('Create version 1 of these demo sets on the server and submit them for review?\n\n'+todo.map(id=>'- '+BUILTIN.find(b=>b.id===id).title).join('\n')+'\n\nThey are not usable until a reviewer approves them and an admin publishes them. A submitted version cannot be changed.'))return;
   LIB.busy=true;renderLibSrv();
   const out=[];
   try{
     for(const id of todo){
       const b=BUILTIN.find(x=>x.id===id);
-      const c=await api('POST','/api/element-sets',{slug:id,kind:b.kind,definition:libDef(b)});
+      const c=await api('POST','/api/element-sets',{slug:id,kind:b.kind,definition:libDef(b,false)});   // 8c-2: no codes. The server cannot verify a code yet, and review refuses unverified ones, so the demo goes in uncoded
       if(!Srv.user)return;
       if(c.status!==201){out.push(b.title+': '+(c.status===409?'a set with this id already exists on the server (not changed)':apiMsg(c))+'.');continue}
-      const p=await api('POST','/api/element-sets/'+c.body.set.id+'/versions/1/publish',{checksum:c.body.version.checksum});
+      const p=await api('POST','/api/element-sets/'+c.body.set.id+'/versions/1/submit',{});
       if(!Srv.user)return;
-      out.push(p.status===200?b.title+': published v1.':b.title+': created as a draft but not published ('+apiMsg(p)+').');
+      out.push(p.status===200?b.title+': v1 submitted for review.':b.title+': created as a draft but not submitted ('+apiMsg(p)+').');
     }
   }finally{LIB.busy=false}
   await libLoad();

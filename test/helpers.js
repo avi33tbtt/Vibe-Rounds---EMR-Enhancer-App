@@ -45,4 +45,24 @@ function client(base) {
     login: (u, pw = PW) => call('POST', '/api/login', { username: u, password: pw }),
   };
 }
-module.exports = { setup, client, PW };
+// 8c-2: a version can only be published once a reviewer approved it. Tests that just need a published set call
+// approveVersion first: the doctor submits, informaticians approve (a second one when lint flagged the set).
+// Safe to call again on a version that has already been through this (it does nothing then).
+async function reviewers(base) {
+  const R = { doctor: client(base), inf1: client(base), inf2: client(base) };
+  for (const [c, u] of [[R.doctor, 'doctor1'], [R.inf1, 'informatician1'], [R.inf2, 'informatician2']]) {
+    const r = await c.login(u); if (r.status !== 200) throw new Error('reviewer login failed: ' + u);
+  }
+  return R;
+}
+async function approveVersion(R, setId, v) {
+  const sub = await R.doctor.post(`/api/element-sets/${setId}/versions/${v}/submit`, {});
+  if (![200, 409].includes(sub.status)) throw new Error('submit failed: ' + JSON.stringify(sub.body));
+  for (const inf of [R.inf1, R.inf2]) {
+    const r = await inf.post(`/api/element-sets/${setId}/versions/${v}/approve`, { reason: 'Test approval' });
+    if (r.status === 409) return;                    // not in review any more: nothing to do
+    if (r.status !== 200) throw new Error('approve failed: ' + JSON.stringify(r.body));
+    if (r.body.status === 'reviewed') return;
+  }
+}
+module.exports = { setup, client, PW, reviewers, approveVersion };

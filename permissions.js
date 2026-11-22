@@ -11,7 +11,7 @@ const PERMS = {
   'sets:write':        ['admin', 'doctor'],                      // create a set, add a draft version (D5: create/edit = admin and doctor)
   'sets:submit':       ['admin', 'doctor'],                      // submit a draft version for review (8b)
   'sets:review':       ['informatician'],                        // approve or reject a version in review (8c); not the author or submitter (checked per version)
-  'sets:publish':      ['admin'],                                // publish and retire a version (no separate informatician role exists yet)
+  'sets:publish':      ['admin'],                                // publish an APPROVED version and retire a version; reviewers (informatician) cannot publish (8c-2 decision)
   'audit:read':        ['admin'],
   'ai:use':            ['admin', 'doctor'],   // draft / rank element sets with the server-side AI
   'ai:admin':          ['admin'],             // the AI on/off switch, model and request limits

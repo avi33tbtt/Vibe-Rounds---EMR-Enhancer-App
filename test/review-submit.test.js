@@ -72,7 +72,7 @@ test('only a draft can be submitted; a second submit is refused', async () => {
 test('an in-review version cannot be published directly', async () => {
   const s = await newSet(); assert.equal((await submit(s)).status, 200);
   const r = await admin.post(`/api/element-sets/${s.id}/versions/${s.v}/publish`, {});
-  assert.equal(r.status, 409); assert.equal(r.body.error, 'not_publishable');
+  assert.equal(r.status, 409); assert.equal(r.body.error, 'not_reviewed');
 });
 
 test('permissions: nurse and viewer cannot submit; everyone signed in can read the review and the queue', async () => {

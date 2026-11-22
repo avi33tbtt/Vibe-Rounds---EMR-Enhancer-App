@@ -221,7 +221,7 @@ function mountSets(app, pool) {
     res.status(out.status).json(out.body);
   });
 
-  /* ---------- publish (draft or reviewed -> published; the version is frozen from here on) ---------- */
+  /* ---------- publish (reviewed -> published; the version is frozen from here on) ---------- */
   app.post('/api/element-sets/:id/versions/:version/publish', A.requirePerm(pool, 'sets:publish'), async (req, res) => {
     const s = strict(req.body, ['checksum']);
     if (s.error) return res.status(400).json(s.error);
@@ -234,7 +234,12 @@ function mountSets(app, pool) {
       if (!set) return { status: 404, body: { error: 'not_found' } };
       const v = (await c.query('SELECT status, checksum, definition_json FROM element_set_versions WHERE element_set_id = $1 AND version = $2 FOR UPDATE', [set.id, n])).rows[0];
       if (!v) return { status: 404, body: { error: 'not_found' } };
-      if (!['draft', 'reviewed'].includes(v.status)) return { status: 409, body: { error: 'not_publishable', message: `This version is ${v.status}; only a draft can be published.` } };
+      // 8c-2: only an approved version is published. The database refuses anything else too (migration 010).
+      if (['draft', 'in_review'].includes(v.status)) {
+        await audit(c, req, 'set.publish_rejected', 'element_set', set.id, { slug: set.slug, version: n, reason: 'not_reviewed', status: v.status });
+        return { status: 409, body: { error: 'not_reviewed', message: `This version is ${v.status === 'draft' ? 'a draft' : 'still in review'}; only a version approved by a reviewer can be published.` } };
+      }
+      if (v.status !== 'reviewed') return { status: 409, body: { error: 'not_publishable', message: `This version is ${v.status}; only an approved version can be published.` } };
       // What is published is exactly what was stored: recompute from the stored content, and compare with what the publisher saw.
       const reject = async (reason, message) => {
         await audit(c, req, 'set.publish_rejected', 'element_set', set.id, { slug: set.slug, version: n, reason });

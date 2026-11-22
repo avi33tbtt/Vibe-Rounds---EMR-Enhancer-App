@@ -1,13 +1,14 @@
 'use strict';
-// Task B2b-1: the Library tab reads published element sets from the server when signed in, and an admin can import the
-// minimum demo library once, as published v1. Real page (jsdom) + real server + PostgreSQL.
+// Task B2b-1 (changed by 8c-2): the Library tab reads published element sets from the server when signed in. An admin or doctor can
+// send the demo library for review once (created as v1 and submitted, without codes); it shows in the library only after an
+// informatician approves it and an admin publishes it. Real page (jsdom) + real server + PostgreSQL.
 // Pinning an exact version on a case, the diff and the explicit update are NOT here: they come with B3a/B3b.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
-const { setup, client, PW } = require('./helpers');
+const { setup, client, PW, reviewers, approveVersion } = require('./helpers');
 
-let env, admin;
+let env, admin, R;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 async function until(fn, what) { for (let i = 0; i < 150; i++) { if (await fn()) return; await wait(30); } throw new Error('timed out: ' + what); }
 const DEMO = ['basic_emr', 'glucose_ss', 'dka_ctx', 'snake_ctx', 'vitals', 'opd_visit', 'ipd_admission', 'ipd_progress', 'ipd_discharge'];
@@ -18,7 +19,11 @@ async function reset() {
   if (env) await env.close();
   env = await setup();
   admin = client(env.base); assert.equal((await admin.login('admin1')).status, 200);
+  R = await reviewers(env.base);
 }
+// 8c-2: nothing is published without review. These helpers do what the people would do: submit, approve, publish.
+async function pub(id, v = 1) { await approveVersion(R, id, v); const r = await admin.post(`/api/element-sets/${id}/versions/${v}/publish`); assert.equal(r.status, 200, JSON.stringify(r.body)); }
+async function reviewAndPublishAll() { for (const s of (await admin.get('/api/element-sets')).body.sets) await pub(s.id); }
 
 async function openPage(store = {}) {
   const jar = {}, fetched = [];
@@ -44,9 +49,9 @@ async function openPage(store = {}) {
 const importBtn = ui => ui.d.querySelector('#libSrv button[data-act="libImport"]');
 const setIds = ui => ui.evj('REGISTRY.filter(s=>s.srv).map(s=>s.id).sort()');
 
-test('signed in with an empty server library: no demo built-ins are shown; only an admin is offered the import', async () => {
+test('signed in with an empty server library: no demo built-ins are shown; only an admin or a doctor is offered the import', async () => {
   await reset();
-  for (const [user, canImport] of [['admin1', true], ['doctor1', false], ['nurse1', false], ['viewer1', false]]) {
+  for (const [user, canImport] of [['admin1', true], ['doctor1', true], ['nurse1', false], ['viewer1', false]]) {
     const ui = await openPage(); await ui.login(user);
     assert.deepEqual(ui.evj('REGISTRY.filter(s=>s.kind!=="pathway").map(s=>s.id)'), [], user + ': no demo built-ins while signed in');
     assert.match(ui.libText(), /read from the server/);
@@ -56,46 +61,49 @@ test('signed in with an empty server library: no demo built-ins are shown; only 
   }
 });
 
-test('the admin imports the minimum demo library once: the demo sets, published v1 by the session user, then the offer is gone', async () => {
+test('the admin sends the demo library for review once: v1 created and submitted (no codes), not published; then the offer is gone', async () => {
   await reset();
   const ui = await openPage(); await ui.login('admin1');
   const before = ui.fetched.length;
   importBtn(ui).click();
-  await until(() => ui.ev('LIB.busy') === false && setIds(ui).length === DEMO.length, 'import finished');
-  assert.deepEqual(setIds(ui), [...DEMO].sort());
-  assert.equal(importBtn(ui), null, 'nothing left to import');
+  await until(() => ui.ev('LIB.busy') === false && importBtn(ui) === null, 'import finished');
+  assert.deepEqual(setIds(ui), [], 'not in the library: nothing is published without review');
   const sent = ui.fetched.slice(before).filter(f => f.method === 'POST');
-  assert.equal(sent.length, 2 * DEMO.length, 'one create and one publish per set');
-  for (const f of sent) assert.doesNotMatch(f.body, /createdBy|publishedBy|published_by|author/i, 'no actor is sent in a body');
+  assert.equal(sent.length, 2 * DEMO.length, 'one create and one submit per set, no publish');
+  assert.equal(sent.filter(f => /\/publish/.test(f.path)).length, 0);
+  for (const f of sent) assert.doesNotMatch(f.body, /createdBy|publishedBy|submittedBy|published_by|author/i, 'no actor is sent in a body');
+  assert.doesNotMatch(sent.map(f => f.body).join(''), /bindings/, 'no codes are sent');
+  assert.match(ui.$('libSrv').textContent, /submitted for review/);
 
   const list = (await admin.get('/api/element-sets')).body.sets;
   assert.equal(list.length, DEMO.length);
-  for (const s of list) assert.equal(s.published_version, 1);
+  for (const s of list) { assert.equal(s.published_version, null); assert.equal(s.latest_version, 1); }
   const v = (await admin.get(`/api/element-sets/${list[0].id}/versions/1`)).body.version;
-  assert.equal(v.status, 'published'); assert.equal(v.published_by, 'admin1');
-  assert.match(ui.$('libList').textContent, /server v1/);
-  const aud = await env.pool.query(`SELECT count(*)::int AS n FROM audit_log WHERE action = 'set.publish'`);
-  assert.equal(aud.rows[0].n, DEMO.length);
+  assert.equal(v.status, 'in_review'); assert.equal(v.published_by, null);
+  const n = async a => (await env.pool.query('SELECT count(*)::int AS n FROM audit_log WHERE action = $1', [a])).rows[0].n;
+  assert.equal(await n('set.submit'), DEMO.length); assert.equal(await n('set.publish'), 0);
 
-  // the codes the demo carried survive as bindings, and nothing outside the whitelist was sent
-  const glu = ui.ev('JSON.stringify(REGISTRY.find(s=>s.id==="glucose_ss").fields[0])');
-  assert.match(glu, /"system":"loinc".*"code":"2339-0"|"code":"2339-0".*"system":"loinc"/);
-  assert.doesNotMatch(glu, /coding"|legacyCoding/);
+  // review and publish are done by people with those roles; then the sets appear in the library, as read-only server sets
+  await reviewAndPublishAll(); await ui.w.libLoad();
+  assert.deepEqual(setIds(ui), [...DEMO].sort());
+  assert.match(ui.$('libList').textContent, /server v1/);
+  assert.equal(importBtn(ui), null);
 
   const calls = ui.fetched.length; await ui.w.libImport();
   assert.equal(ui.fetched.length, calls, 'a second import does nothing');
   await ui.close();
 });
 
-test('a slug that already exists on the server is left alone and reported; the others are still imported', async () => {
+test('a slug that already exists on the server is left alone (and not offered again); the others are still submitted', async () => {
   await reset();
   const made = await admin.post('/api/element-sets', { slug: 'dka_ctx', kind: 'disease', definition: { title: 'Someone else’s DKA', fields: [{ id: 'a', label: 'A', type: 'text' }] } });
   assert.equal(made.status, 201);   // a draft: not in the signed-in library
   const ui = await openPage(); await ui.login('admin1');
+  assert.deepEqual(ui.evj('[...LIB.slugs]'), ['dka_ctx']);
   importBtn(ui).click();
-  await until(() => ui.ev('LIB.busy') === false && setIds(ui).length === DEMO.length - 1, 'partial import');
-  assert.deepEqual(setIds(ui), DEMO.filter(id => id !== 'dka_ctx').sort());
-  assert.match(ui.$('libSrv').textContent, /already exists on the server/);
+  await until(() => ui.ev('LIB.busy') === false && importBtn(ui) === null, 'partial import');
+  const states = Object.fromEntries((await env.pool.query('SELECT s.slug, v.status FROM element_sets s JOIN element_set_versions v ON v.element_set_id = s.id')).rows.map(r => [r.slug, r.status]));
+  for (const id of DEMO) assert.equal(states[id], id === 'dka_ctx' ? 'draft' : 'in_review', id);
   const row = (await admin.get(`/api/element-sets/${made.body.set.id}`)).body;
   assert.equal(row.set.title, 'Someone else’s DKA'); assert.equal(row.versions.length, 1); assert.equal(row.versions[0].status, 'draft');
   await ui.close();
@@ -105,7 +113,7 @@ test('the library shows the latest published version; drafts are not shown; an o
   await reset();
   const mk = await admin.post('/api/element-sets', { slug: 'lib_one', kind: 'care', definition: { title: 'Lib one', fields: [{ id: 'a', label: 'A', type: 'text' }] } });
   const id = mk.body.set.id;
-  assert.equal((await admin.post(`/api/element-sets/${id}/versions/1/publish`)).status, 200);
+  await pub(id);
   const ui = await openPage(); await ui.login('nurse1');
   assert.deepEqual(setIds(ui), ['lib_one']);
   assert.equal(ui.ev('getSet("lib_one").version'), 1);
@@ -115,7 +123,7 @@ test('the library shows the latest published version; drafts are not shown; an o
   assert.equal(v2.status, 201);
   await ui.w.libLoad();
   assert.equal(ui.ev('getSet("lib_one").version'), 1, 'a draft v2 is not shown');
-  assert.equal((await admin.post(`/api/element-sets/${id}/versions/2/publish`)).status, 200);
+  await pub(id, 2);
   await ui.w.libLoad();
   assert.equal(ui.ev('getSet("lib_one").version'), 2);
   assert.equal(ui.ev('getSet("lib_one").fields.length'), 2);
@@ -126,7 +134,7 @@ test('the library shows the latest published version; drafts are not shown; an o
 test('server sets are read-only in the page and never copied into the browser', async () => {
   await reset();
   const mk = await admin.post('/api/element-sets', { slug: 'ro_set', kind: 'care', definition: { title: 'RO set', fields: [{ id: 'a', label: 'A', type: 'text' }] } });
-  await admin.post(`/api/element-sets/${mk.body.set.id}/versions/1/publish`);
+  await pub(mk.body.set.id);
   const ui = await openPage({ vr_traj: JSON.stringify({ cases: [], customs: [] }) }); const raw = ui.ls('vr_traj');
   await ui.login('doctor1');
   assert.deepEqual(setIds(ui), ['ro_set']);
@@ -146,7 +154,10 @@ test('server sets are read-only in the page and never copied into the browser', 
 test('a pathway applies only the members that are in the library and says how many were skipped', async () => {
   await reset();
   const ui = await openPage(); await ui.login('admin1');
-  importBtn(ui).click(); await until(() => ui.ev('LIB.busy') === false && setIds(ui).length === DEMO.length, 'import');
+  importBtn(ui).click(); await until(() => ui.ev('LIB.busy') === false && importBtn(ui) === null, 'import');
+  assert.deepEqual(setIds(ui), [], 'nothing is in the library until it is reviewed and published');
+  await reviewAndPublishAll(); await ui.w.libLoad();
+  assert.equal(setIds(ui).length, DEMO.length);
   ui.ev('CASE.applied.length=0');
   ui.w.applySet('pw_dm');   // basic_emr, vitals, dm_ctx, glucose_ss, hba1c_mon: dm_ctx and hba1c_mon are not in the library
   assert.deepEqual(ui.evj('CASE.applied.map(a=>a.setId)'), ['basic_emr', 'vitals', 'glucose_ss']);
@@ -156,10 +167,10 @@ test('a pathway applies only the members that are in the library and says how ma
 
 test('text from the server is shown as text; sign-out brings back the local demo library', async () => {
   await reset();
-  const bad = '5 < 6 & "quoted" \'single\' &amp; &lt;b&gt;';   // markup itself is refused by the server (lint); this checks that odd text is shown as typed, not decoded
+  const bad = 'Tom & "quoted" \'single\' &amp; &lt;b&gt;';   // markup itself is refused by the server (lint), and a number with a comparison trips the dose rule; this checks that odd text is shown as typed, not decoded
   const mk = await admin.post('/api/element-sets', { slug: 'hostile', kind: 'care', definition: { title: bad, desc: bad, fields: [{ id: 'a', label: bad, type: 'text' }] } });
   assert.equal(mk.status, 201);
-  await admin.post(`/api/element-sets/${mk.body.set.id}/versions/1/publish`);
+  await pub(mk.body.set.id);
   const ui = await openPage(); await ui.login('viewer1');
   ui.w.renderLib(); ui.w.renderAll();
   assert.ok(ui.$('libList').textContent.includes(bad));

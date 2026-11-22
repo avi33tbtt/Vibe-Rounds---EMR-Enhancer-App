@@ -3,10 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
-const { setup, client } = require('./helpers');
+const { setup, client, reviewers, approveVersion } = require('./helpers');
 const { checksumOf, canonicalJson } = require('../sets');
 
-let env, admin, doctor, nurse, viewer;
+let env, admin, doctor, nurse, viewer, R;
 const uid = async name => (await env.pool.query('SELECT id FROM users WHERE username = $1', [name])).rows[0].id;
 const audits = async action => (await env.pool.query('SELECT * FROM audit_log WHERE action = $1 ORDER BY id', [action])).rows;
 const counts = async () => ({
@@ -24,12 +24,14 @@ async function newSet(who = doctor, def = DEF(), kind = 'custom') {
   const r = await who.post('/api/element-sets', { slug: slug(), kind, definition: def });
   assert.equal(r.status, 201, JSON.stringify(r.body)); return r.body;
 }
-const publish = async (setId, v, who = admin, body = {}) => who.post(`/api/element-sets/${setId}/versions/${v}/publish`, body);
+// 8c-2: a version must be approved before it can be published, so the helper runs it through review first (publish-needs-review.test.js covers the rule itself).
+const publish = async (setId, v, who = admin, body = {}) => { await approveVersion(R, setId, v); return who.post(`/api/element-sets/${setId}/versions/${v}/publish`, body); };
 
 test.before(async () => {
   env = await setup();
   admin = client(env.base); doctor = client(env.base); nurse = client(env.base); viewer = client(env.base);
   for (const [c, u] of [[admin, 'admin1'], [doctor, 'doctor1'], [nurse, 'nurse1'], [viewer, 'viewer1']]) assert.equal((await c.login(u)).status, 200);
+  R = await reviewers(env.base);
 });
 test.after(async () => { await env.close(); });
 
@@ -115,7 +117,7 @@ test('forged actor and state fields are refused, nothing is written; the recorde
   const v2 = await doctor.post(`/api/element-sets/${s.set.id}/versions`, { definition: DEF('v2'), createdBy: 1, version: 1 });
   assert.equal(v2.status, 400); assert.equal(v2.body.error, 'unknown_field');
   for (const forged of [{ publishedBy: await uid('doctor1') }, { published_by: 1 }, { status: 'published' }]) {
-    const r = await publish(s.set.id, 1, admin, forged);
+    const r = await admin.post(`/api/element-sets/${s.set.id}/versions/1/publish`, forged);   // refused on the body, before any status check
     assert.equal(r.status, 400, JSON.stringify(forged)); assert.equal(r.body.error, 'unknown_field');
   }
   const still = (await env.pool.query('SELECT status, published_by FROM element_set_versions WHERE element_set_id = $1', [s.set.id])).rows[0];
@@ -154,12 +156,14 @@ test('checksum mismatch is rejected on create, on new version and on publish; th
   const r3 = await publish(id, 1, admin, { checksum: wrong });
   assert.equal(r3.status, 409); assert.equal(r3.body.error, 'checksum_mismatch');
   assert.equal((await audits('set.publish_rejected')).at(-1).detail.reason, 'checksum_mismatch');
-  assert.equal((await viewer.get(`/api/element-sets/${id}`)).body.versions[0].status, 'draft');
-  // content changed behind the server's back (a draft is not locked in the database): the stored checksum no longer matches, so it is not published
-  await env.pool.query(`UPDATE element_set_versions SET definition_json = jsonb_set(definition_json, '{title}', '"tampered"') WHERE element_set_id = $1`, [id]);
+  assert.equal((await viewer.get(`/api/element-sets/${id}`)).body.versions[0].status, 'reviewed', 'approved, not published');
+  // content changed behind the server's back (as the database owner, with the freeze trigger off): the stored checksum no longer matches, so it is not published
+  await env.pool.query('ALTER TABLE element_set_versions DISABLE TRIGGER element_set_versions_guard');
+  try { await env.pool.query(`UPDATE element_set_versions SET definition_json = jsonb_set(definition_json, '{title}', '"tampered"') WHERE element_set_id = $1`, [id]); }
+  finally { await env.pool.query('ALTER TABLE element_set_versions ENABLE TRIGGER element_set_versions_guard'); }
   const r4 = await publish(id, 1);
   assert.equal(r4.status, 409); assert.equal(r4.body.error, 'checksum_mismatch');
-  assert.equal((await viewer.get(`/api/element-sets/${id}`)).body.versions[0].status, 'draft');
+  assert.equal((await viewer.get(`/api/element-sets/${id}`)).body.versions[0].status, 'reviewed');
 });
 
 test('content must be declarative data: unknown keys, code-like text, numbers, broken characters and oversize are refused', async () => {
@@ -218,13 +222,13 @@ test('content must be declarative data: unknown keys, code-like text, numbers, b
   assert.equal((await doctor.post('/api/element-sets', { slug: slug(), kind: 'custom', definition: fine })).status, 201);
 });
 
-test('publish: only a draft can be published; the version is then frozen by the API and by the database', async () => {
+test('publish: only an approved version can be published; the version is then frozen by the API and by the database', async () => {
   const s = await newSet(doctor, DEF('Frozen set'));
   const id = s.set.id;
   const p = await publish(id, 1);
   assert.equal(p.status, 200); assert.equal(p.body.version.status, 'published'); assert.ok(p.body.version.published_at);
   assert.equal((await publish(id, 1)).status, 409);
-  assert.equal((await publish(id, 9)).status, 404);
+  assert.equal((await admin.post(`/api/element-sets/${id}/versions/9/publish`, {})).status, 404);
   // there is no route that edits a version
   for (const m of ['PUT', 'PATCH']) {
     const r = await doctor.raw(m, `/api/element-sets/${id}/versions/1`, { definition: DEF('changed') });
