@@ -927,19 +927,26 @@ function commitGenerated(apply){
 function applyGenerated(){commitGenerated(true)}
 function saveGenerated(){commitGenerated(false)}
 
-/* Values helpers for repeat */
-function getRows(fid){
+/* Values helpers for repeat. Rows are never removed (chunk 8f): a wrong row is marked entered_in_error with who (the session) and when, and stays stored.
+   allRows = everything stored; getRows = rows still in use (notes, snapshot, Questionnaire response). The FHIR export reads allRows. */
+let SHOW_ERR=false;
+const rowBad=r=>!!r&&r.status==='entered_in_error';
+function allRows(fid){
   const v=CASE.values[fid];
   return Array.isArray(v)?v:[];
 }
+const getRows=fid=>allRows(fid).filter(r=>!rowBad(r));
 function setRows(fid,rows){CASE.values[fid]=rows;save()}
 function addRow(fid,val){
-  const rows=getRows(fid);
+  const rows=allRows(fid);
   rows.unshift({ts:new Date().toISOString().slice(0,16),value:val});
   setRows(fid,rows);renderForms();
 }
-function delRow(fid,idx){
-  const rows=getRows(fid);rows.splice(idx,1);setRows(fid,rows);renderForms();
+function markRowError(fid,idx){
+  if(!user())return toast('Sign in to mark an entry as an error');
+  const r=allRows(fid)[idx];if(!r||rowBad(r))return;
+  if(!confirm('Mark this entry as entered in error? It is kept, shown struck through, and exported as entered-in-error.'))return;
+  r.status='entered_in_error';r.errorBy=user();r.errorAt=nowISO();save();renderForms();toast('Marked as entered in error');
 }
 function setVal(id,val){
   CASE.values[id]=val;
@@ -984,15 +991,18 @@ function fieldHTML(f){
   const status=st(f);
   const badge=`<span class="bd" style="background:var(${COL[status]})">${status}</span>`;
   if(f.repeat){
-    const rows=getRows(f.id);
+    const all=allRows(f.id),bad=all.filter(rowBad).length;
     let t=`<label>${escA(f.label)}${f.unit?' ('+escA(f.unit)+')':''} ${badge} <span class="mu">repeating</span></label>
       <div class="rep-add"><input id="new_${escA(f.id)}" type="${f.type==='text'||f.type==='select'||f.type==='boolean'?'text':'number'}" placeholder="New value">
       <button class="b sm" data-act="addRowFrom" data-arg="${escA(f.id)}">Add</button></div>`;
-    if(rows.length){
+    if(all.length&&(SHOW_ERR||bad<all.length)){
       t+=`<table class="rep-table"><tr><th>Time</th><th>Value</th><th></th></tr>`;
-      rows.forEach((r,i)=>{t+=`<tr><td>${escA(r.ts||'')}</td><td>${escA(r.value)}</td><td><button class="b sec sm" data-act="delRow" data-arg="${escA(f.id)}" data-arg2="${i}">×</button></td></tr>`});
+      all.forEach((r,i)=>{
+        if(rowBad(r)){if(SHOW_ERR)t+=`<tr class="err"><td><s>${escA(r.ts||'')}</s></td><td><s>${escA(r.value)}</s></td><td class="mu">entered in error · ${escA(r.errorBy||'')} · ${escA((r.errorAt||'').slice(0,16).replace('T',' '))}</td></tr>`;return}
+        t+=`<tr><td>${escA(r.ts||'')}</td><td>${escA(r.value)}</td><td><button class="b sec sm" data-act="markRowError" data-arg="${escA(f.id)}" data-arg2="${i}"${user()?'':' disabled title="Sign in to mark an entry as an error"'}>Error</button></td></tr>`});
       t+=`</table>`;
     }
+    if(bad)t+=`<label class="mu"><input type="checkbox" data-act="toggleShowErr" data-ev="change"${SHOW_ERR?' checked':''}> Show ${bad} entered in error</label>`;
     return t;
   }
   const id=escA('f_'+f.id), v=CASE.values[f.id]??'';
@@ -1155,9 +1165,10 @@ function buildBundle(){
       sk+=bnds(f).length-ec.length;
 
       if(f.repeat){
-        getRows(f.id).forEach(row=>{
+        allRows(f.id).forEach(row=>{
           if(row.value===''||row.value==null)return;
-          const obs={resourceType:'Observation',status:'final',code:codeConcept,subject:{reference:pid}};
+          const obs={resourceType:'Observation',status:rowBad(row)?'entered-in-error':'final',code:codeConcept,subject:{reference:pid}};   // never dropped: a wrong row is exported as entered-in-error
+          if(rowBad(row))obs.note=[{text:'Entered in error by '+(row.errorBy||'unknown')+(row.errorAt?' at '+row.errorAt:'')}];
           if(row.ts)obs.effectiveDateTime=new Date(row.ts).toISOString();
           if(f.type==='integer'||f.type==='number')obs.valueQuantity=qty(row.value,f.unit);
           else if(f.type==='boolean')obs.valueBoolean=row.value==='Yes'||row.value===true;
@@ -1568,7 +1579,8 @@ const ACT={
   removeSet:(el,e,a)=>removeSet(a),
   applySet:(el,e,a)=>applySet(a),
   verifyGenerated:()=>verifyGenerated(),
-  delRow:(el,e,a)=>delRow(a,Number(el.getAttribute('data-arg2'))),
+  markRowError:(el,e,a)=>markRowError(a,Number(el.getAttribute('data-arg2'))),
+  toggleShowErr:(el)=>{SHOW_ERR=!!el.checked;renderForms()},
   setVal:(el,e,a)=>setVal(a,el.value),
   dlQ:(el,e,a)=>dlQ(a),
   editCustom:(el,e,a)=>editCustom(a),

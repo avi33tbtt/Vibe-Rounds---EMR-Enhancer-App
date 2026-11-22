@@ -61,7 +61,7 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | 8 | chunk-08-review-workflow.md | Review/approval workflow (original) | SPLIT |  |  | Replaced by 8a to 8f. |
 | 8a | chunk-08a-lint.md | Shared lint module | DONE | 2026-11-22 | 1 new module + 1 test | lint.js, test/lint.test.js, DECISIONS.md. 5 rules + needsTwoReviewers; 27 tests incl. seed-set check. Full suite 142 pass, 4 todo. Page loads lint.js in 8d. |
 | 8e | chunk-08e-signer-from-session.md | Signer/author from session (core-rule gap) | DONE | 2026-11-22 | page + tests | emr-enhancer.html, test/safety-data.test.js, test/safety-escaping.test.js. Signer, amender and FHIR author = signed-in user; no typed box; vr_user purged. 147 pass, 3 todo. Notes still in browser. |
-| 8f | chunk-08f-entered-in-error.md | No hard delete of observation rows | TODO |  | page + tests | Page-level only; server enforcement arrives in B3a/B3b. |
+| 8f | chunk-08f-entered-in-error.md | No hard delete of observation rows | DONE | 2026-11-22 | page + tests | emr-enhancer.html, test/safety-data.test.js, test/safety-escaping.test.js. Rows marked entered_in_error (session user, time), kept, hidden by default, exported as entered-in-error. 148 pass, 2 todo. |
 | | | **TRACK B: canonical clinical context model on the server (book Ch5)** | | | | |
 | B0 | chunk-B0-baseline-contract.md | Baseline contract: prototype objects to entities (docs only) | TODO |  | 1 markdown file | Needs: 8f. Decision 2026-11-22: server is system of record. User reviews before B1. |
 | B1a | chunk-B1a-cases-server.md | Persistent cases: migration, API, permissions | TODO |  | 1 migration, 1 routes file, tests | Needs: B0. |
@@ -130,8 +130,8 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - Arrange an independent clinical reviewer before any package is labelled `validated` (D1c, D6).
 - Check terminology licences and device-software/health-data rules (go-live gate).
 
-## KNOWN GAPS (5 `test.todo` tests) and where they are fixed
-(a) signer/author: page now uses the session (8e, done); server enforcement still in B3c. (b) `delRow` splices observation rows -> page-level in 8f, server-enforced in B3a/B3b. (c) closed by 6c. (d) signed-note immutability and stale-version conflicts only in the page; element sets, cases and notes are not stored on the server -> DECIDED 2026-11-22: full server storage is now planned (B1 to B4); notes in B3c. (e) `GET /api/patients/:id/encounters` not audited -> left as is.
+## KNOWN GAPS (2 `test.todo` tests left) and where they are fixed
+(a) signer/author: page now uses the session (8e, done); server enforcement still in B3c. (b) observation rows: page no longer deletes them (8f, done); server-enforced in B3a/B3b. (c) closed by 6c. (d) signed-note immutability and stale-version conflicts only in the page; element sets, cases and notes are not stored on the server -> DECIDED 2026-11-22: full server storage is now planned (B1 to B4); notes in B3c. (e) `GET /api/patients/:id/encounters` not audited -> left as is.
 
 ## DECISIONS MADE ON 2026-11-22 (also in DECISIONS.md)
 - Server-side storage is ALWAYS ON for cases, element sets, observations and notes (reverses the snapshot-only idea). Browser storage remains only as the file:// demo fallback behind one storage adapter; signed-in sessions write no clinical data to localStorage.

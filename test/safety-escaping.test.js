@@ -111,9 +111,9 @@ test('each hostile string is shown literally: set title, field label, option, no
 test('an id containing a quote cannot break out of an inline handler', () => {
   const { w, d } = page();
   w.renderLib(); w.renderCustomList();
-  w.eval("Srv.user = { username: 'doc', role: 'doctor', perms: [] }"); w.renderNotes();   // the Sign button is disabled without a session (chunk 8e)
+  w.eval("Srv.user = { username: 'doc', role: 'doctor', perms: [] }"); w.renderNotes(); w.renderForms();   // the Sign and Error buttons are disabled without a session (chunks 8e, 8f)
   const got = [];
-  for (const fn of ['applySet', 'removeSet', 'dlQ', 'editCustom', 'signNote', 'toggleAmend', 'editNote', 'setVal', 'addRow', 'delRow', 'openCase'])
+  for (const fn of ['applySet', 'removeSet', 'dlQ', 'editCustom', 'signNote', 'toggleAmend', 'editNote', 'setVal', 'addRow', 'markRowError', 'openCase'])
     w[fn] = (...a) => got.push([fn, ...a]);
   const click = (sel, root = d) => { const el = root.querySelector(sel); assert.ok(el, 'found ' + sel); el.click(); };
   const last = (sel, back = 2) => { const all = d.querySelectorAll(sel); assert.ok(all.length >= back, 'found ' + sel); all[all.length - back].click(); };
@@ -128,7 +128,7 @@ test('an id containing a quote cannot break out of an inline handler', () => {
   const sel = d.querySelector('#forms select'); sel.dispatchEvent(new w.Event('change', { bubbles: true }));   // setVal(fieldId, value)
   const ta = d.querySelector('#noteList textarea'); ta.dispatchEvent(new w.Event('change', { bubbles: true })); // editNote(noteId, value)
   const add = d.querySelector('#forms .rep-add button'); d.getElementById('new_' + REP_ID).value = '5'; add.click(); // addRow(fieldId, value)
-  click('#forms button[data-act="delRow"]');
+  click('#forms button[data-act="markRowError"]');
   assert.equal(w.__pwn, undefined, 'no handler argument executed code');
   const by = fn => got.filter(g => g[0] === fn);
   assert.equal(by('applySet')[0][1], SET_ID);   // from the library button
@@ -141,7 +141,7 @@ test('an id containing a quote cannot break out of an inline handler', () => {
   assert.equal(by('editNote')[0][1], NOTE_ID);
   assert.equal(by('setVal')[0][1], 'sel');
   assert.deepEqual(by('addRow')[0].slice(1), [REP_ID, '5']);
-  assert.equal(by('delRow')[0][1], REP_ID);
+  assert.equal(by('markRowError')[0][1], REP_ID);
   assert.equal(by('openCase')[0][1], 'c1');
 });
 

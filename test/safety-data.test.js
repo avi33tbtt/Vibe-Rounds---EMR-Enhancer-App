@@ -259,5 +259,56 @@ test('sign-in through /api/me fills the signer; an old stored name is purged on 
   assert.equal(w.eval('user()'), 'nurse1');
   assert.match(w.document.getElementById('n_who').textContent, /nurse1 \(nurse\)/);
 });
-test.todo('observation rows entered on a case cannot be hard-deleted in the page (delRow splices them out today; needs a "mark entered in error" flow)');
+// ---------- chunk 8f: observation rows are marked entered in error, never removed ----------
+test('a wrong observation row is marked entered in error (who, when) and stays stored, shown struck through, and exported', () => {
+  const p = page();
+  assert.deepEqual(p.errors, []);
+  const set = { id: 'rep_set', kind: 'care', title: 'Rep set', desc: '', custom: true, version: 1, fields: [{ id: 'rr', label: 'Rate', type: 'number', unit: 'n', repeat: true }] };
+  p.w.eval(`REGISTRY.push(${JSON.stringify(set)});applySet('rep_set')`);
+  for (const v of ['10', '20', '30']) p.w.addRow('rr', v);                  // newest first: 30, 20, 10
+  const raw = () => JSON.parse(JSON.stringify(p.w.eval("CASE.values['rr']")));
+  const stored = () => JSON.parse(p.w.localStorage.getItem('vr_traj')).cases.flatMap(c => c.values.rr || []);
+  assert.deepEqual(raw().map(r => r.value), ['30', '20', '10']);
+  const idx = raw().findIndex(r => r.value === '20');
+
+  signIn(p, null); p.w.renderForms();                                      // no session: refused, button disabled
+  assert.ok(p.d.querySelector('#forms [data-act="markRowError"]').disabled);
+  p.w.markRowError('rr', idx);
+  assert.equal(raw()[idx].status, undefined);
+
+  signIn(p, 'doctor1'); p.w.renderForms();
+  p.w.markRowError('rr', idx);
+  let r = raw();
+  assert.equal(r.length, 3, 'the row is still stored');
+  assert.equal(r[idx].status, 'entered_in_error'); assert.equal(r[idx].value, '20');
+  assert.equal(r[idx].errorBy, 'doctor1', 'who comes from the session'); assert.ok(r[idx].errorAt);
+  assert.equal(stored().length, 3, 'and still saved in browser storage');
+
+  // hidden by default; shown struck through on request; the other rows still have their buttons
+  const forms = () => p.$('forms').innerHTML;
+  assert.doesNotMatch(forms(), /<td>20<\/td>/); assert.doesNotMatch(forms(), /<s>20<\/s>/);
+  assert.match(forms(), /Show 1 entered in error/);
+  const box = p.d.querySelector('#forms [data-act="toggleShowErr"]'); box.checked = true; box.dispatchEvent(new p.w.Event('change', { bubbles: true }));
+  assert.match(forms(), /<s>20<\/s>/); assert.match(forms(), /entered in error · doctor1/);
+  assert.equal(p.d.querySelectorAll('#forms [data-act="markRowError"]').length, 2, 'only rows not in error can be marked');
+
+  // marking again by someone else does not rewrite who or when
+  const when = r[idx].errorAt; signIn(p, 'someone'); p.w.markRowError('rr', idx);
+  assert.equal(raw()[idx].errorBy, 'doctor1'); assert.equal(raw()[idx].errorAt, when);
+
+  // rows in error are left out of the working views (snapshot note) ...
+  assert.doesNotMatch(p.w.eval('snapshotText()'), /\b20 @/);   // the value 20 (not the year in the time stamp)
+  assert.match(p.w.eval('snapshotText()'), /30 @.*10 @/);
+  assert.deepEqual(JSON.parse(JSON.stringify(p.w.eval("getRows('rr')"))).map(x => x.value), ['30', '10']);
+  // ... but kept in the FHIR export, as entered-in-error with a note
+  p.w.buildBundle();
+  const obs = JSON.parse(p.$('bj').textContent).entry.map(e => e.resource).filter(x => x.resourceType === 'Observation');
+  assert.equal(obs.length, 3);
+  const bad = obs.filter(o => o.status === 'entered-in-error');
+  assert.equal(bad.length, 1); assert.equal(bad[0].valueQuantity.value, 20); assert.match(bad[0].note[0].text, /doctor1/);
+  assert.equal(obs.filter(o => o.status === 'final').length, 2);
+
+  // nothing in the page removes a row any more
+  assert.doesNotMatch(HTML, /function delRow|rows\.splice|data-act="delRow"/);
+});
 test.todo('server-side: signed notes are immutable on the server (notes live in the browser until a later chunk stores them there)');
