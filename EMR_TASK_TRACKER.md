@@ -68,7 +68,7 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | B1b | chunk-B1b-cases-page.md | Cases in the page via storage adapter | SPLIT | 2026-11-22 |  | Replaced by B1b-1 and B1b-2: item 3 (audited import) needs a server route; interim data rule undecided. Nothing built. |
 | B1b-1 | chunk-B1b-cases-page.md | Storage adapter (server/local); signed-in case list, create, open, title/status, narrative; 409 screen | DONE | 2026-11-22 | page + 1 test file | emr-enhancer.html, test/storage-adapter.test.js, test/safety-data.test.js, DECISIONS.md. Server/local adapter, 409 screen, vr_interim. 170 tests (165 pass, 2 todo, 3 skipped: no Chrome). |
 | B1b-2 | chunk-B1b-cases-page.md | Import local demo cases (explicit action, audited as an import) | DONE | 2026-11-22 | 1 route in cases.js, matrix, page button, 1 test file | cases.js, emr-enhancer.html, test/case-import.test.js, test/safety-routes.test.js, DECISIONS.md. Import route + panel; sends title and narrative only. 175 tests (170 pass, 2 todo, 3 skipped). |
-| B2a | chunk-B2a-element-sets-server.md | Versioned element sets (server) | TODO |  | 1 migration, 1 routes file, tests | Needs: B1a. |
+| B2a | chunk-B2a-element-sets-server.md | Versioned element sets (server) | DONE | 2026-11-22 | 1 migration, 1 routes file, tests | sets.js, 007_element_sets.sql, app.js, permissions.js, 4 test files, DECISIONS.md. 7 routes; publish admin-only (no informatician role). 188 tests (183 pass, 2 todo, 3 skipped). |
 | B2b | chunk-B2b-element-sets-page.md | Library + case pinning use server versions | TODO |  | page + 1 test file | Needs: B2a, B1b. May merge into B3a/B3b (see chunk). |
 | 8b | chunk-08b-submit-snapshot.md | Server: submit set for review (snapshot) | TODO |  | 1 migration, routes, tests | Needs: 8a, B2a. Reordered 2026-11-22: build on server versions (apply chunk-B2r changes here; chunk text says snapshots). |
 | 8c | chunk-08c-review-rules.md | Reviewer rules + frozen approved version | TODO |  | routes, trigger, tests | Needs: 8b. Build on server versions. |
@@ -147,4 +147,5 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - Resolved 2026-11-22: re-ordered, review workflow (8b to 8d) now follows B2b and is built on server versions.
 - Where do the CCIS libraries and the Intelligence App live long term: this repo (current plan) or a separate repo after C9?
 - Which clinician owns the snake-envenomation parameters used by the slice?
+- Who may publish element sets? B2a made `sets:publish` admin-only because no informatician role exists. Add the role (users.role change, seed, role tests) or allow doctors?
 - Adding any API route makes `test/safety-routes.test.js` fail until the permission matrix there is updated on purpose.

@@ -36,6 +36,13 @@ const MATRIX = {
   'PATCH /api/cases/:id/archive':   { guard: 'cases:write' },
   'POST /api/cases/:id/encounters': { guard: 'cases:write' },
   'POST /api/cases/:id/narrative':  { guard: 'cases:write' },
+  'GET /api/element-sets':          { guard: 'sets:read' },
+  'POST /api/element-sets':         { guard: 'sets:write' },
+  'GET /api/element-sets/:id':      { guard: 'sets:read' },
+  'GET /api/element-sets/:id/versions/:version': { guard: 'sets:read' },
+  'POST /api/element-sets/:id/versions': { guard: 'sets:write' },
+  'POST /api/element-sets/:id/versions/:version/publish': { guard: 'sets:publish' },
+  'POST /api/element-sets/:id/versions/:version/retire': { guard: 'sets:publish' },
   'GET /api/audit':                 { guard: 'audit:read' },
   'PUT /api/ai/settings':           { guard: 'ai:admin' },
   'POST /api/ai/preview':           { guard: 'ai:use' },
@@ -50,6 +57,9 @@ const EXPECTED_ROLES = {
   'encounters:write':  ['admin', 'doctor', 'nurse'],
   'cases:read':        ['admin', 'doctor', 'nurse', 'viewer'],
   'cases:write':       ['admin', 'doctor', 'nurse'],
+  'sets:read':         ['admin', 'doctor', 'nurse', 'viewer'],
+  'sets:write':        ['admin', 'doctor'],
+  'sets:publish':      ['admin'],
   'audit:read':        ['admin'],
   'ai:use':            ['admin', 'doctor'],
   'ai:admin':          ['admin'],
@@ -227,6 +237,22 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal(a.status, 200, JSON.stringify(a.body));
         assert.equal((await doctor.c.patch(`/api/cases/${S.cid}/archive`, { archived: false, rowVersion: a.body.case.row_version })).status, 200);
         return ['case.archive', 'case.restore'];
+      }],
+      ['POST /api/element-sets', doctor, async () => {              // like cases: no `...fake` (unknown body keys are refused)
+        const r = await doctor.c.post('/api/element-sets', { slug: 'audit-set', kind: 'custom', definition: { title: 'Audit set', fields: [{ id: 'a', label: 'A', type: 'text' }] } });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); S.setId = r.body.set.id; return ['set.create'];
+      }],
+      ['POST /api/element-sets/:id/versions', doctor, async () => {
+        const r = await doctor.c.post(`/api/element-sets/${S.setId}/versions`, { definition: { title: 'Audit set v2', fields: [{ id: 'a', label: 'A', type: 'text' }] } });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); S.setV = r.body.version.version; return ['set.version_create'];
+      }],
+      ['POST /api/element-sets/:id/versions/:version/publish', admin, async () => {
+        const r = await admin.c.post(`/api/element-sets/${S.setId}/versions/${S.setV}/publish`, {});
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['set.publish'];
+      }],
+      ['POST /api/element-sets/:id/versions/:version/retire', admin, async () => {
+        const r = await admin.c.post(`/api/element-sets/${S.setId}/versions/${S.setV}/retire`, {});
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['set.retire'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);
