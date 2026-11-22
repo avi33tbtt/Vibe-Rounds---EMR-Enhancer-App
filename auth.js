@@ -36,8 +36,9 @@ async function createSession(pool, userId) {
   return token;
 }
 
-const cookieHeader = (token, maxAge) =>
-  `sid=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
+// Secure is added when the deployment is HTTPS (HTTPS=1); a Secure cookie is never sent over plain http.
+const cookieHeader = (token, maxAge, secure = false) =>
+  `sid=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure ? '; Secure' : ''}`;
 
 // Middleware: loads req.user from the session cookie (identity always comes from here).
 function sessionLoader(pool) {

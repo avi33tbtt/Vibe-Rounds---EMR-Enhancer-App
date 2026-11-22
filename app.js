@@ -6,6 +6,7 @@ const { audit } = require('./audit');
 const { permsFor } = require('./permissions');
 const A = require('./auth');
 const { mountAi } = require('./ai');
+const { createLimiter } = require('./ratelimit');
 
 const PATIENT_SELECT = `
   SELECT p.id, p.mrn, p.name, p.dob, p.sex, p.archived, p.created_at,
@@ -32,14 +33,50 @@ function validatePatient(b) {
   return { value: { name, mrn, dob, sex } };
 }
 
+const envOn = v => ['1', 'true', 'yes'].includes(String(v || '').toLowerCase());
+// TRUST_PROXY = number of reverse proxies in front (1 for one proxy). Never "true": that would let a client spoof its IP.
+const proxyHops = v => { const n = Number(v); return v != null && v !== '' && Number.isInteger(n) && n > 0 ? n : false; };
+// Defaults are per process (see ratelimit.js). Login counts FAILED attempts only; writes are per session.
+const DEFAULT_LIMITS = {
+  loginIp: { max: 20, windowMs: 10 * 60 * 1000 },
+  loginUser: { max: 5, windowMs: 10 * 60 * 1000 },
+  write: { max: 120, windowMs: 60 * 1000 },
+};
+
 function createApp(pool, opts = {}) {
   const app = express();
+  const https = opts.https ?? envOn(process.env.HTTPS);
+  const LIM = Object.fromEntries(Object.entries(DEFAULT_LIMITS).map(([k, v]) => [k, { ...v, ...(opts.limits || {})[k] }]));
+  const lim = Object.fromEntries(Object.entries(LIM).map(([k, v]) => [k, createLimiter(v)]));
   app.disable('x-powered-by');
-  app.set('trust proxy', false);
+  app.set('trust proxy', opts.trustProxy ?? proxyHops(process.env.TRUST_PROXY));
   app.use(express.json({ limit: '50kb' }));
-  app.use((req, res, next) => { res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }); next(); });
+  app.use((req, res, next) => {
+    res.set({
+      'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+    });
+    if (https) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
   app.use(A.csrfGuard);
   app.use(A.sessionLoader(pool));
+
+  // Refuse with 429 and write ONE audit row per key per window (a flood cannot fill the audit log).
+  async function refuse(req, res, r, scope, detail = {}) {
+    res.set('Retry-After', String(r.retryAfter));
+    if (r.first) await audit(pool, req, 'rate_limited', 'rate_limit', null, { scope, method: req.method, path: req.baseUrl + req.path, ...detail });
+    res.status(429).json({ error: 'rate_limited', message: `Too many ${scope === 'write' ? 'requests' : 'sign-in attempts'}. Try again in ${r.retryAfter} seconds.` });
+  }
+  // Write routes: per session. Reads are not limited here.
+  app.use('/api', async (req, res, next) => {
+    try {
+      if (!req.user || ['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+      const r = lim.write.hit(req.sessionHash);
+      return r.ok ? next() : await refuse(req, res, r, 'write', { limit: LIM.write.max, windowMs: LIM.write.windowMs });
+    } catch (e) { next(e); }
+  });
 
   app.param('id', (_req, res, next, v) => (/^\d{1,9}$/.test(v) ? next() : res.status(404).json({ error: 'not_found' })));
 
@@ -52,25 +89,32 @@ function createApp(pool, opts = {}) {
   app.post('/api/login', async (req, res) => {
     const username = String(req.body.username || '').trim().toLowerCase();
     const password = String(req.body.password || '');
+    const ukey = username.slice(0, 60);
+    const byIp = lim.loginIp.blocked(req.ip);
+    if (byIp) return refuse(req, res, byIp, 'login_ip', { username: ukey });
+    const byUser = lim.loginUser.blocked(ukey);
+    if (byUser) return refuse(req, res, byUser, 'login_username', { username: ukey });
     const { rows } = await pool.query('SELECT * FROM users WHERE username = $1 AND active', [username]);
     const u = rows[0];
     // Always run a hash check so timing does not reveal whether the user exists.
     const ok = A.checkPassword(password, u ? u.password_hash : 'scrypt$00$00') && !!u;
     if (!ok) {
+      lim.loginIp.hit(req.ip); lim.loginUser.hit(ukey);
       await audit(pool, req, 'login.failed', 'user', null, { username: username.slice(0, 60) });
       return res.status(401).json({ error: 'bad_credentials' });
     }
+    lim.loginUser.reset(ukey);
     const token = await A.createSession(pool, u.id);
     req.user = { id: u.id, username: u.username, role: u.role };
     await audit(pool, req, 'login', 'user', u.id);
-    res.set('Set-Cookie', A.cookieHeader(token, A.SESSION_HOURS * 3600));
+    res.set('Set-Cookie', A.cookieHeader(token, A.SESSION_HOURS * 3600, https));
     res.json({ user: { username: u.username, displayName: u.display_name, role: u.role, perms: permsFor(u.role) } });
   });
 
   app.post('/api/logout', A.requireLogin, async (req, res) => {
     await pool.query('DELETE FROM sessions WHERE token_hash = $1', [req.sessionHash]);
     await audit(pool, req, 'logout', 'user', req.user.id);
-    res.set('Set-Cookie', A.cookieHeader('', 0));
+    res.set('Set-Cookie', A.cookieHeader('', 0, https));
     res.json({ ok: true });
   });
 

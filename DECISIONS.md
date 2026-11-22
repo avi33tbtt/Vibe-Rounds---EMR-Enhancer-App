@@ -86,6 +86,9 @@ Moved out of `EMR_TASK_TRACKER.md` on 2026-11-22 so the tracker stays small. Cla
 | 2026-11-22 | 6a | `escA` is now the one shared escaper for text AND attributes: it also escapes `'` and `>` (before: only `&`, `"`, `<`). Every `innerHTML` site that renders set, field, option, note, patient or audit text now calls it. |
 | 2026-11-22 | 6a | Ids passed to inline handlers use a new `jsA(x)` (JSON string literal, then attribute-escaped) instead of `'${x}'`, because an id with a quote could end the string and run code even when escaped. Server integer ids use `Number(...)`. Handlers stay inline (CSP is 6d). |
 | 2026-11-22 | 6a | Left as is on purpose: `CODESYS` labels/keys and `EmrSdc.LIMITS` text (constants in our own code, not user or server data), and `textContent` sites (already safe). The text field value used to escape only `"`; it now uses `escA`, so a stored `&amp;` shows as typed. |
+| 2026-11-22 | 6b | Limits (per process, env-free defaults in `app.js`): login 5 FAILED attempts per username and 20 per IP per 10 min (a success clears the username count); writes 120 per minute per session. Reads are not limited. A refusal writes ONE `rate_limited` audit row per key per window, so a flood cannot fill the audit log. |
+| 2026-11-22 | 6b | `HTTPS=1` turns on Secure cookie and HSTS (off by default so `http://localhost` still works). `TRUST_PROXY` takes a hop COUNT only; `true` is never accepted because it lets a client fake its IP. Limiter is in memory: more than one instance needs a shared store. |
+| 2026-11-22 | 6b | Headers added: X-Frame-Options DENY, Referrer-Policy no-referrer, Permissions-Policy (camera, microphone, geolocation, payment, usb off). No CSP (6d). `env.txt` gained commented `HTTPS` and `TRUST_PROXY` lines. |
 
 ## Old OPEN QUESTIONS / BLOCKERS (verbatim)
 
