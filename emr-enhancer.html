@@ -619,7 +619,7 @@ const ver=id=>getSet(id)?.version||1;
 function resolve(a){const s=getSet(a.setId);if(!s)return;const av=a.version||1;if(av>=(s.version||1))return s;
   const h=(s.history||[]).find(x=>x.version===av);return h?{...s,title:h.title,desc:h.desc,fields:h.fields,version:av}:s}
 function verNote(a){const s=getSet(a.setId);if(!s||(a.version||1)>=(s.version||1))return'';
-  return` · <b style="color:var(--a)">v${a.version||1} applied, v${s.version} available</b> <button class="b sec sm" onclick="upgradeSet('${a.setId}')">Review &amp; update</button>`}
+  return` · <b style="color:var(--a)">v${a.version||1} applied, v${s.version} available</b> <button class="b sec sm" onclick="upgradeSet(${jsA(a.setId)})">Review &amp; update</button>`}
 function upgradeSet(id){
   const a=CASE.applied.find(x=>x.setId===id),s=getSet(id);if(!a||!s)return;
   const old=resolve(a).fields,om=Object.fromEntries(old.map(f=>[f.id,f])),nm=Object.fromEntries(s.fields.map(f=>[f.id,f]));
@@ -675,9 +675,9 @@ function renderCases(){
   $('caseList').innerHTML=rows.map(c=>{
     const dx=c.applied.map(a=>resolve(a)).filter(s=>s&&s.kind==='disease').map(s=>`<span class="kind disease">${escA(s.title)}</span>`).join(' ');
     const dr=c.notes.filter(n=>n.status==='draft').length;
-    return`<div class="item" onclick="openCase('${c.id}')"><div><b>${escA(caseName(c))}</b> <span class="mu">MRN ${escA(caseMrn(c))}</span> ${dx}
+    return`<div class="item" onclick="openCase(${jsA(c.id)})"><div><b>${escA(caseName(c))}</b> <span class="mu">MRN ${escA(caseMrn(c))}</span> ${dx}
       <div class="meta">${c.applied.length} sets · ${c.notes.length} notes${dr?` (${dr} draft)`:''} · updated ${c.updatedAt.slice(0,16).replace('T',' ')}${c.id===CASE.id?' · open':''}</div></div>
-      ${c.status==='archived'?`<button class="b sec sm" onclick="event.stopPropagation();restoreCase('${c.id}')">Restore</button>`:''}</div>`;
+      ${c.status==='archived'?`<button class="b sec sm" onclick="event.stopPropagation();restoreCase(${jsA(c.id)})">Restore</button>`:''}</div>`;
   }).join('')||'<div class="empty">No cases.</div>';
 }
 
@@ -707,14 +707,14 @@ function submitAmend(id){const n=nid(id),r=$('am_r_'+id).value.trim(),b=$('am_b_
   n.amendments.push({at:nowISO(),by:user(),reason:r,body:b});AMEND[id]=false;save();renderNotes();toast('Amended')}
 function renderNotes(){
   $('noteList').innerHTML=CASE.notes.map(n=>{
-    const head=`<b>${escA(n.title)}</b> <span class="kind">${n.kind}</span> <span class="mu">${n.status} · ${n.createdAt.slice(0,16).replace('T',' ')}</span>`;
-    if(n.status==='draft')return`<div class="cd nt draft">${head}<textarea onchange="editNote('${n.id}',this.value)">${escA(n.body)}</textarea>
-      <button class="b sm" onclick="signNote('${n.id}')">Sign</button><button class="b sec sm" onclick="discardNote('${n.id}')">Discard</button></div>`;
+    const head=`<b>${escA(n.title)}</b> <span class="kind">${escA(n.kind)}</span> <span class="mu">${escA(n.status)} · ${escA(n.createdAt.slice(0,16).replace('T',' '))}</span>`;
+    if(n.status==='draft')return`<div class="cd nt draft">${head}<textarea onchange="editNote(${jsA(n.id)},this.value)">${escA(n.body)}</textarea>
+      <button class="b sm" onclick="signNote(${jsA(n.id)})">Sign</button><button class="b sec sm" onclick="discardNote(${jsA(n.id)})">Discard</button></div>`;
     if(n.status==='discarded')return`<div class="cd nt discarded">${head}</div>`;
     const am=n.amendments.map((x,i)=>`<div class="mu">Amendment ${i+1} · ${escA(x.by)} · ${x.at.slice(0,16).replace('T',' ')} · reason: ${escA(x.reason)}</div>`).join('');
-    const form=AMEND[n.id]?`<label>Reason for amendment</label><input id="am_r_${n.id}"><label>Amended text</label><textarea id="am_b_${n.id}">${escA(noteCurrent(n))}</textarea>
-      <button class="b sm" onclick="submitAmend('${n.id}')">Submit amendment</button><button class="b sec sm" onclick="toggleAmend('${n.id}')">Cancel</button>`
-      :`<button class="b sec sm" onclick="toggleAmend('${n.id}')">Amend…</button>`;
+    const form=AMEND[n.id]?`<label>Reason for amendment</label><input id="am_r_${escA(n.id)}"><label>Amended text</label><textarea id="am_b_${escA(n.id)}">${escA(noteCurrent(n))}</textarea>
+      <button class="b sm" onclick="submitAmend(${jsA(n.id)})">Submit amendment</button><button class="b sec sm" onclick="toggleAmend(${jsA(n.id)})">Cancel</button>`
+      :`<button class="b sec sm" onclick="toggleAmend(${jsA(n.id)})">Amend…</button>`;
     return`<div class="cd nt signed">${head}<pre class="body">${escA(noteCurrent(n))}</pre><div class="mu">Signed by ${escA(n.signedBy)} · ${n.signedAt.slice(0,16).replace('T',' ')}</div>${am}
       ${n.amendments.length?`<details><summary class="mu">Original (as signed)</summary><pre class="body">${escA(n.body)}</pre></details>`:''}${form}</div>`;
   }).join('')||'<div class="empty">No notes yet.</div>';
@@ -869,7 +869,7 @@ async function generate(){
       try{set=normaliseGenerated(parseJSON(t),dx,systems,'llm')}catch(e){throw Error('Model reply was not usable JSON. Click Generate to retry (you will see the preview again).')}
     }else{set=normaliseGenerated(set,dx,systems,'demo');set.provenance.by='demo'}
     LAST_GENERATED=set;Object.keys(GEN_STASH).forEach(k=>delete GEN_STASH[k]);
-    $('genSummary').innerHTML=`${escA(set.title)} · ${set.kind} · ${set.fields.length} fields${uncodedBadge(set)}`;
+    $('genSummary').innerHTML=`${escA(set.title)} · ${escA(set.kind)} · ${set.fields.length} fields${uncodedBadge(set)}`;
     $('genRaw').textContent=JSON.stringify(set,null,2);
     renderGenPreview();
     $('genPreview').style.display='block';
@@ -884,11 +884,11 @@ function renderGenPreview(){
     const bs=bnds(f);nb+=bs.length;
     const skipped=f.codingPolicy&&f.codingPolicy.mode==='skip';
     if(!bs.length&&!f.flag&&!skipped)return;
-    const skip=`<label class="chk"><input type="checkbox" ${skipped?'checked':''} onchange="genSkip('${escA(f.id)}',this.checked)">skip</label>`;
+    const skip=`<label class="chk"><input type="checkbox" ${skipped?'checked':''} onchange="genSkip(${jsA(f.id)},this.checked)">skip</label>`;
     (bs.length?bs:[null]).forEach((c,i)=>{
       const t=c?bst(c):'missing',mm=c&&MM[ck(c)],rw=c?roleWarn(f,c):'';
-      rows+=`<tr><td>${i?'':escA(f.label)}</td><td>${c?c.system+' '+escA(c.code):(skipped?'— skipped':'—')}</td><td>${escA(c?.display||'')}${mm?` <span style="color:var(--a)">⚠ server: ${escA(mm)}</span>`:''}${rw?` <span class="gen-warn">${rw}</span>`:''}</td>
-      <td>${c?`<span class="bd" style="background:var(${COL[t]})">${t}</span>`:''}</td><td>${!i&&f.flag?`<span class="gen-warn">${f.flag}</span>`:''}</td><td>${i?'':skip}</td></tr>`;
+      rows+=`<tr><td>${i?'':escA(f.label)}</td><td>${c?escA(c.system)+' '+escA(c.code):(skipped?'— skipped':'—')}</td><td>${escA(c?.display||'')}${mm?` <span style="color:var(--a)">⚠ server: ${escA(mm)}</span>`:''}${rw?` <span class="gen-warn">${escA(rw)}</span>`:''}</td>
+      <td>${c?`<span class="bd" style="background:var(${COL[t]})">${t}</span>`:''}</td><td>${!i&&f.flag?`<span class="gen-warn">${escA(f.flag)}</span>`:''}</td><td>${i?'':skip}</td></tr>`;
     });
   });
   $('genBind').innerHTML=nb||rows?`<div class="mu">${nb} proposed binding(s) on ${set.fields.filter(f=>bnds(f).length).length} of ${set.fields.length} fields. Proposed ≠ verified.${nb?'':' This set will be saved <b>uncoded</b>; it is still usable.'}</div>
@@ -960,7 +960,7 @@ function renderApplied(){
     const s=resolve(a);if(!s)return;
     const span=document.createElement('span');
     span.className='chip'+(a.fromPathway?' pathway':'');
-    span.innerHTML=`${s.title}${(getSet(a.setId).version||1)>1?' v'+(a.version||1):''}${(a.version||1)<(getSet(a.setId).version||1)?' ↑':''} <button onclick="removeSet('${a.setId}')">×</button>`;
+    span.innerHTML=`${escA(s.title)}${(getSet(a.setId).version||1)>1?' v'+(a.version||1):''}${(a.version||1)<(getSet(a.setId).version||1)?' ↑':''} <button onclick="removeSet(${jsA(a.setId)})">×</button>`;
     box.appendChild(span);
   });
 }
@@ -968,14 +968,14 @@ function renderLists(){
   const q=($('searchEl').value||'').toLowerCase();
   $('pathwayList').innerHTML=PATHWAYS.map(p=>{
     const on=(p.members||[]).every(m=>isApplied(m));
-    return`<div class="item" onclick="applySet('${p.id}')"><div><span class="kind pathway">pathway</span> ${p.title}<div class="meta">${p.desc||''}</div></div>
-      <button class="b sm ${on?'sec':''}" onclick="event.stopPropagation();applySet('${p.id}')">${on?'✓':'+'}</button></div>`;
+    return`<div class="item" onclick="applySet(${jsA(p.id)})"><div><span class="kind pathway">pathway</span> ${escA(p.title)}<div class="meta">${escA(p.desc||'')}</div></div>
+      <button class="b sm ${on?'sec':''}" onclick="event.stopPropagation();applySet(${jsA(p.id)})">${on?'✓':'+'}</button></div>`;
   }).join('');
   $('elementList').innerHTML=REGISTRY.filter(s=>!q||s.title.toLowerCase().includes(q)||(s.desc||'').toLowerCase().includes(q)||s.id.includes(q))
     .map(s=>{
       const on=isApplied(s.id);
-      return`<div class="item" onclick="applySet('${s.id}')"><div><span class="kind ${s.kind}">${s.kind}</span> ${s.title}${s.generated?' <span class="mu">·gen</span>':''}<div class="meta">${s.desc||''}</div></div>
-        <button class="b sm ${on?'sec':''}" onclick="event.stopPropagation();applySet('${s.id}')">${on?'✓':'+'}</button></div>`;
+      return`<div class="item" onclick="applySet(${jsA(s.id)})"><div><span class="kind ${escA(s.kind)}">${escA(s.kind)}</span> ${escA(s.title)}${s.generated?' <span class="mu">·gen</span>':''}<div class="meta">${escA(s.desc||'')}</div></div>
+        <button class="b sm ${on?'sec':''}" onclick="event.stopPropagation();applySet(${jsA(s.id)})">${on?'✓':'+'}</button></div>`;
     }).join('')||'<div class="mu">No matches</div>';
 }
 
@@ -984,32 +984,32 @@ function fieldHTML(f){
   const badge=`<span class="bd" style="background:var(${COL[status]})">${status}</span>`;
   if(f.repeat){
     const rows=getRows(f.id);
-    let t=`<label>${f.label}${f.unit?' ('+f.unit+')':''} ${badge} <span class="mu">repeating</span></label>
-      <div class="rep-add"><input id="new_${f.id}" type="${f.type==='text'||f.type==='select'||f.type==='boolean'?'text':'number'}" placeholder="New value">
-      <button class="b sm" onclick="const v=$('new_${f.id}').value;if(v!==''){addRow('${f.id}',v);$('new_${f.id}').value=''}">Add</button></div>`;
+    let t=`<label>${escA(f.label)}${f.unit?' ('+escA(f.unit)+')':''} ${badge} <span class="mu">repeating</span></label>
+      <div class="rep-add"><input id="new_${escA(f.id)}" type="${f.type==='text'||f.type==='select'||f.type==='boolean'?'text':'number'}" placeholder="New value">
+      <button class="b sm" onclick="const v=$(${jsA('new_'+f.id)}).value;if(v!==''){addRow(${jsA(f.id)},v);$(${jsA('new_'+f.id)}).value=''}">Add</button></div>`;
     if(rows.length){
       t+=`<table class="rep-table"><tr><th>Time</th><th>Value</th><th></th></tr>`;
-      rows.forEach((r,i)=>{t+=`<tr><td>${r.ts||''}</td><td>${r.value}</td><td><button class="b sec sm" onclick="delRow('${f.id}',${i})">×</button></td></tr>`});
+      rows.forEach((r,i)=>{t+=`<tr><td>${escA(r.ts||'')}</td><td>${escA(r.value)}</td><td><button class="b sec sm" onclick="delRow(${jsA(f.id)},${i})">×</button></td></tr>`});
       t+=`</table>`;
     }
     return t;
   }
-  const id='f_'+f.id, v=CASE.values[f.id]??'';
+  const id=escA('f_'+f.id), v=CASE.values[f.id]??'';
   let inp;
   if(f.type==='select'){
-    const opts=(f.options||[]).map(o=>`<option value="${o}" ${v===o?'selected':''}>${o}</option>`).join('');
-    inp=`<select id="${id}" onchange="setVal('${f.id}',this.value)"><option value="">—</option>${opts}</select>`;
+    const opts=(f.options||[]).map(o=>`<option value="${escA(o)}" ${v===o?'selected':''}>${escA(o)}</option>`).join('');
+    inp=`<select id="${id}" onchange="setVal(${jsA(f.id)},this.value)"><option value="">—</option>${opts}</select>`;
   }else if(f.type==='boolean'){
-    inp=`<select id="${id}" onchange="setVal('${f.id}',this.value)"><option value="">—</option>
+    inp=`<select id="${id}" onchange="setVal(${jsA(f.id)},this.value)"><option value="">—</option>
       <option value="Yes" ${v==='Yes'?'selected':''}>Yes</option><option value="No" ${v==='No'?'selected':''}>No</option></select>`;
   }else if(f.type==='datetime'){
-    inp=`<input id="${id}" type="datetime-local" value="${v}" onchange="setVal('${f.id}',this.value)">`;
+    inp=`<input id="${id}" type="datetime-local" value="${escA(v)}" onchange="setVal(${jsA(f.id)},this.value)">`;
   }else if(f.type==='text'){
-    inp=`<input id="${id}" value="${String(v).replace(/"/g,'&quot;')}" onchange="setVal('${f.id}',this.value)">`;
+    inp=`<input id="${id}" value="${escA(v)}" onchange="setVal(${jsA(f.id)},this.value)">`;
   }else{
-    inp=`<input id="${id}" type="number" value="${v}" ${f.derived?'readonly':''} onchange="setVal('${f.id}',this.value)">`;
+    inp=`<input id="${id}" type="number" value="${escA(v)}" ${f.derived?'readonly':''} onchange="setVal(${jsA(f.id)},this.value)">`;
   }
-  return`<label>${f.label}${f.unit?' ('+f.unit+')':''}${f.required?' *':''} ${badge}</label>${inp}${f.rationale?`<div class="mu">${f.rationale}</div>`:''}`;
+  return`<label>${escA(f.label)}${f.unit?' ('+escA(f.unit)+')':''}${f.required?' *':''} ${badge}</label>${inp}${f.rationale?`<div class="mu">${escA(f.rationale)}</div>`:''}`;
 }
 
 function renderForms(){
@@ -1020,9 +1020,9 @@ function renderForms(){
   CASE.applied.forEach(a=>{
     const s=resolve(a);if(!s||!s.fields)return;
     html+=`<div class="cd"><div class="flex" style="justify-content:space-between">
-      <h3 style="margin:0">${s.title} <span class="kind ${s.kind}">${s.kind}</span>${s.generated?' <span class="mu">generated</span>':''}${sdcBadge(s)}${uncodedBadge(s)}</h3>
-      <button class="b sec sm" onclick="removeSet('${s.id}')">Remove</button></div>
-      <div class="mu" style="margin-bottom:8px">${s.desc||''}${a.fromPathway?' · via pathway':''}${verNote(a)}</div>`;
+      <h3 style="margin:0">${escA(s.title)} <span class="kind ${escA(s.kind)}">${escA(s.kind)}</span>${s.generated?' <span class="mu">generated</span>':''}${sdcBadge(s)}${uncodedBadge(s)}</h3>
+      <button class="b sec sm" onclick="removeSet(${jsA(s.id)})">Remove</button></div>
+      <div class="mu" style="margin-bottom:8px">${escA(s.desc||'')}${a.fromPathway?' · via pathway':''}${verNote(a)}</div>`;
     s.fields.forEach(f=>{html+=fieldHTML(f)});
     html+=`</div>`;
   });
@@ -1033,10 +1033,10 @@ function renderLib(){
   $('libList').innerHTML=all.map(s=>{
     const isPw=s.kind==='pathway';
     return`<div class="cd"><div class="flex" style="justify-content:space-between">
-      <div><span class="kind ${s.kind}">${s.kind}</span> <b>${s.title}</b>${s.generated?' <span class="mu">·gen</span>':''}${sdcBadge(s)}${uncodedBadge(s)}
-        <div class="mu">${s.desc||''}</div>
-        ${isPw?`<div class="mu">Members: ${(s.members||[]).join(', ')}</div>`:`<div class="mu">${(s.fields||[]).length} fields</div>`}
-      </div><div><button class="b sm" onclick="applySet('${s.id}')">Use in case</button>${isPw?'':` <button class="b sec sm" onclick="dlQ('${s.id}')">Questionnaire</button>`}</div></div></div>`;
+      <div><span class="kind ${escA(s.kind)}">${escA(s.kind)}</span> <b>${escA(s.title)}</b>${s.generated?' <span class="mu">·gen</span>':''}${sdcBadge(s)}${uncodedBadge(s)}
+        <div class="mu">${escA(s.desc||'')}</div>
+        ${isPw?`<div class="mu">Members: ${escA((s.members||[]).join(', '))}</div>`:`<div class="mu">${(s.fields||[]).length} fields</div>`}
+      </div><div><button class="b sm" onclick="applySet(${jsA(s.id)})">Use in case</button>${isPw?'':` <button class="b sec sm" onclick="dlQ(${jsA(s.id)})">Questionnaire</button>`}</div></div></div>`;
   }).join('');
 }
 
@@ -1051,7 +1051,7 @@ function codesUI(){
       (bs.length?bs:[null]).forEach((c,i)=>{
         const t=c?bst(c):'missing';n[t]++;
         const sys=c&&csBy(c.system),rw=c?roleWarn(f,c):'';
-        rows+=`<tr><td>${i?'':s.title}</td><td>${i?'':f.label}</td><td>${c?(sys?sys.label:c.system)+' '+c.code:''}</td><td>${c?.display||''}${c&&MM[ck(c)]?` <span style="color:var(--a)">⚠ server: ${MM[ck(c)]}</span>`:''}${rw?` <span class="gen-warn">${rw}</span>`:''}${c&&sys&&!sys.verifier&&sys.enabled!==false?' <span class="mu">(no verifier)</span>':''}</td>
+        rows+=`<tr><td>${i?'':escA(s.title)}</td><td>${i?'':escA(f.label)}</td><td>${c?escA((sys?sys.label:c.system)+' '+c.code):''}</td><td>${escA(c?.display||'')}${c&&MM[ck(c)]?` <span style="color:var(--a)">⚠ server: ${escA(MM[ck(c)])}</span>`:''}${rw?` <span class="gen-warn">${escA(rw)}</span>`:''}${c&&sys&&!sys.verifier&&sys.enabled!==false?' <span class="mu">(no verifier)</span>':''}</td>
         <td><span class="bd" style="background:var(${COL[t]})">${t}</span></td></tr>`;
       });
     });
@@ -1104,7 +1104,7 @@ function importQ(){
     save();renderAll();
     $('qSummary').innerHTML=`<b>${escA(set.title)}</b> · ${set.fields.length} fields · v${set.version}${prev?' (updated existing)':''} · ${set.fields.reduce((n,f)=>n+bnds(f).length,0)} bound codes (unverified until checked)
       ${r.warn.length?`<div class="gen-warn">${r.warn.length} limitation(s): ${escA(r.warn.slice(0,6).join('; '))}${r.warn.length>6?' …':''}</div>`:''}
-      <button class="b sm" onclick="applySet('${id}')">Apply to case</button>`;
+      <button class="b sm" onclick="applySet(${jsA(id)})">Apply to case</button>`;
   }catch(e){toast('Import failed: '+e.message)}
 }
 function loadQFile(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('q_json').value=r.result};r.readAsText(f)}
@@ -1202,7 +1202,10 @@ function copyBundle(){const t=$('bj').textContent;if(!t)return toast('Build firs
 function dlBundle(){const t=$('bj').textContent;if(!t)return toast('Build first');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='bundle.json';a.click()}
 
 /* Manual create */
-function escA(x){return String(x??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+/* Shared escaper for text AND attribute values (both quote kinds, < and >). */
+function escA(x){return String(x??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+/* A value passed to an inline handler: a JSON string literal, then attribute-escaped. Never splice '${x}' into a handler. */
+function jsA(x){return escA(JSON.stringify(String(x??'')))}
 /* Create-screen options: SDC checkbox and the global code-system picker */
 const PICK_ORDER=['snomed','loinc','rxnorm','icd10','icd11','atc','local'];
 let CS_PICK=['snomed','loinc'];
@@ -1344,8 +1347,8 @@ function saveElement(){
 function renderCustomList(){
   const customs=REGISTRY.filter(s=>s.custom||s.generated||!BUILTIN.find(b=>b.id===s.id));
   if(!customs.length){$('customList').innerHTML='<span class="mu">None yet.</span>';return}
-  $('customList').innerHTML=customs.map(s=>`<div class="item"><div><span class="kind ${s.kind}">${s.kind}</span> ${s.title}${sdcBadge(s)}${uncodedBadge(s)} <span class="mu">(${s.id})</span></div>
-    <button class="b sec sm" onclick="editCustom('${s.id}')">Edit</button></div>`).join('');
+  $('customList').innerHTML=customs.map(s=>`<div class="item"><div><span class="kind ${escA(s.kind)}">${escA(s.kind)}</span> ${escA(s.title)}${sdcBadge(s)}${uncodedBadge(s)} <span class="mu">(${escA(s.id)})</span></div>
+    <button class="b sec sm" onclick="editCustom(${jsA(s.id)})">Edit</button></div>`).join('');
 }
 function editCustom(id){
   const s=getSet(id);if(!s)return;
@@ -1458,10 +1461,10 @@ async function ptLoad(){
   const r=await api('GET','/api/patients?q='+encodeURIComponent($('ptQ').value.trim())+($('ptArch').checked?'&archived=1':''));
   if(r.status!==200){$('ptList').innerHTML=`<div class="gen-err">${escA(apiMsg(r))}</div>`;return}
   const rows=r.body.patients;rows.forEach(p=>{Srv.pts[p.id]=p});
-  $('ptList').innerHTML=rows.map(p=>`<div class="item" onclick="ptOpenCase(${p.id})"><div><b>${escA(p.name)}</b> <span class="mu">MRN ${escA(p.mrn)}</span>
+  $('ptList').innerHTML=rows.map(p=>`<div class="item" onclick="ptOpenCase(${Number(p.id)})"><div><b>${escA(p.name)}</b> <span class="mu">MRN ${escA(p.mrn)}</span>
       <div class="meta">${escA(p.age)} · ${escA(SEXL[p.sex]||p.sex)} · DOB ${escA(p.dob)}${p.open_bed?' · bed '+escA(p.open_bed):' · no open encounter'}${p.archived?' · archived':''}</div></div>
-      <div>${srvCan('patients:archive')?`<button class="b sec sm" onclick="event.stopPropagation();ptArchive(${p.id},${!p.archived})">${p.archived?'Restore':'Archive'}</button>`:''}
-      <button class="b sm" onclick="event.stopPropagation();ptOpenCase(${p.id})">Open case</button></div></div>`).join('')||'<div class="empty">No patients found.</div>';
+      <div>${srvCan('patients:archive')?`<button class="b sec sm" onclick="event.stopPropagation();ptArchive(${Number(p.id)},${!p.archived})">${p.archived?'Restore':'Archive'}</button>`:''}
+      <button class="b sm" onclick="event.stopPropagation();ptOpenCase(${Number(p.id)})">Open case</button></div></div>`).join('')||'<div class="empty">No patients found.</div>';
 }
 function ptToggleForm(show){
   const f=$('ptForm');show=show===undefined?f.style.display!=='block':show;f.style.display=show?'block':'none';
@@ -1474,7 +1477,7 @@ async function ptRegister(confirmDuplicate){
   if(r.status===201){$('ptDup').innerHTML='';['r_name','r_mrn','r_dob','r_sex'].forEach(i=>$(i).value='');ptToggleForm(false);toast('Registered '+r.body.patient.name);ptLoad();return}
   if(r.body.error==='possible_duplicate'){
     $('ptDup').innerHTML=`<div class="dupbox"><b>Possible duplicate.</b> ${escA(r.body.message)}<ul style="margin:6px 0">`+r.body.duplicates.map(d=>
-      `<li>${escA(d.name)} · MRN ${escA(d.mrn)} · DOB ${escA(d.dob)}${d.archived?' · archived':''} <a href="#" onclick="ptOpenCase(${d.id});return false">open</a></li>`).join('')+
+      `<li>${escA(d.name)} · MRN ${escA(d.mrn)} · DOB ${escA(d.dob)}${d.archived?' · archived':''} <a href="#" onclick="ptOpenCase(${Number(d.id)});return false">open</a></li>`).join('')+
       `</ul>If this is a different person, register anyway. <button class="b sm" onclick="ptRegister(true)">Register anyway</button></div>`;return}
   $('ptDup').innerHTML='';$('pt_err').textContent=apiMsg(r);
 }
@@ -1498,7 +1501,7 @@ function renderEncounter(){
   const lp=Srv.pts[CASE.patientId];
   if(!lp){box.innerHTML='<span class="mu">Sign in on the <a href="#" onclick="document.querySelector(\'[data-t=patients]\').click();return false">Patients</a> tab to load this patient and manage encounters.</span>';return}
   const w=srvCan('encounters:write');
-  if(lp.open_encounter_id)box.innerHTML=`<b>Encounter open</b> · bed ${escA(lp.open_bed)} · since ${escA(String(lp.open_since).slice(0,16).replace('T',' '))}`+(w?` <button class="b sec sm" onclick="encClose(${lp.open_encounter_id})">Close encounter</button>`:'');
+  if(lp.open_encounter_id)box.innerHTML=`<b>Encounter open</b> · bed ${escA(lp.open_bed)} · since ${escA(String(lp.open_since).slice(0,16).replace('T',' '))}`+(w?` <button class="b sec sm" onclick="encClose(${Number(lp.open_encounter_id)})">Close encounter</button>`:'');
   else if(lp.archived)box.innerHTML='<b>No open encounter.</b> <span class="mu">Patient is archived; restore on the Patients tab to open one.</span>';
   else box.innerHTML='<b>No open encounter</b>'+(w?` <input id="enc_bed" placeholder="Bed (e.g. ICU-1)" aria-label="Bed" style="width:150px" onkeydown="if(event.key==='Enter')encOpen()"> <button class="b sm" onclick="encOpen()">Open encounter</button>`:' <span class="mu">(your role cannot open encounters)</span>');
 }

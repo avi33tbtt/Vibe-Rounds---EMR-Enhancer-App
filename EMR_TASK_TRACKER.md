@@ -38,9 +38,9 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | 3  | chunk-03-create-screen.md | Unified create screen | DONE | 2026-11-21 | | SDC checkbox, code picker, `sdc.js`. |
 | 4a | chunk-04-ai-browser.md | AI in browser, minimal payload | DONE | 2026-11-21 | | Superseded by 4b (no key in browser). |
 | 4b | chunk-04-ai-server.md | AI on the server | DONE | 2026-11-22 | | Mock provider only; real provider call not tried. |
-| 5  | chunk-05-safety-tests.md | Safety-test pack + CI | DONE | 2026-11-22 | | 92 tests (87 pass, 5 todo). CI workflow never run on GitHub yet. |
+| 5  | chunk-05-safety-tests.md | Safety-test pack + CI | DONE | 2026-11-22 | | | 5  | chunk-05-safety-tests.md | Safety-test pack + CI | DONE | 2026-11-22 | | 92 tests (87 pass, 5 todo). CI workflow never run on GitHub yet. |
 | 6  | chunk-06-security.md | Security hardening (original) | SPLIT | | | Replaced by 6a to 6e. |
-| 6a | chunk-06a-escaping.md | Escape all user text in the page | TODO | | page + 1 test file | |
+| 6a | chunk-06a-escaping.md | Escape all user text in the page | DONE | 2026-11-22 | page + 1 test file | emr-enhancer.html, test/safety-escaping.test.js, DECISIONS.md. Shared escaper + jsA for handler ids at ~45 sites; 5 hostile-string tests. 97 tests (92 pass, 5 todo). Rest of 6 still TODO. |
 | 6b | chunk-06b-headers-cookies-ratelimit.md | Headers, Secure cookie, rate limits | TODO | | app.js, auth.js + 1 test | |
 | 6c | chunk-06c-db-role.md | Restricted DB role, no DELETE/TRUNCATE | TODO | | 1 migration + config + tests | |
 | 6d | chunk-06d-csp.md | Content-Security-Policy (93 inline handlers) | TODO | | decide approach first; may need 2 sessions | |
