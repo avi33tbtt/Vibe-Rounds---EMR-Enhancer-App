@@ -22,7 +22,12 @@ Opening `emr-enhancer.html` directly as a file still works as the demo; registra
 `docker compose up` starts the whole stack: `db` (PostgreSQL 16), two one-shot steps (`migrate` runs the migrations as the owner; `db-role` sets the `emr_app` login password), `app` (the server, running as the restricted `emr_app` role) and `caddy` (the reverse proxy that does the TLS). Only ports 80 and 443 are published; the app has no published port, and the database port is bound to this machine only (127.0.0.1). The three steps:
 
 ```
-cp env.txt .env                              # then edit .env: POSTGRES_PASSWORD, EMR_APP_PASSWORD, SEED_PASSWORD, SITE_ADDRESS
+cp env.txt .env
+```
+
+**Now open `.env` and set `EMR_APP_PASSWORD` before going on.** It is blank in `env.txt` on purpose, and the start stops without it. Use letters and digits only. Also change `POSTGRES_PASSWORD` and `SEED_PASSWORD`, and set `SITE_ADDRESS` if you have a domain. Then:
+
+```
 docker compose up -d --build                 # builds the image, migrates, starts the app and the proxy
 docker compose run --rm app node seed.js     # once: creates admin1, doctor1, nurse1, viewer1 with SEED_PASSWORD
 ```
@@ -33,12 +38,13 @@ Then open `https://localhost` (or your domain) and sign in as `admin1`.
 - **Local trial (`SITE_ADDRESS=localhost`):** Caddy makes its own certificate, so the browser warns until you trust it: `docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt`, then import that file into your browser or system. A quick check without the browser: `curl -k https://localhost/`. `HTTPS=1` (the default here) also sends the HSTS header, which makes a browser insist on HTTPS for that host name; if that gets in the way of plain-http dev on `localhost`, set `HTTPS=0` in `.env` for the trial only.
 - **Real domain:** set `SITE_ADDRESS=emr.example.org`, point its DNS at the server, and keep ports 80 and 443 open: Caddy then gets and renews a public certificate by itself. Keep `HTTPS=1`.
 - **Day to day:** `docker compose down` stops everything and keeps the data (the `pgdata` volume); `docker compose down -v` also wipes the database. After `git pull`, run `docker compose up -d --build`; new migrations apply on their own.
+- **If `docker compose up` says `db-role` "didn't complete successfully":** `up -d` hides the reason, so run `docker compose logs db-role`. The usual cause is an empty `EMR_APP_PASSWORD` in `.env`. Fix `.env`, then run `docker compose up -d` again (no rebuild needed). The `seed.js` command fails with the same message until the stack starts.
 - **Tests and local dev** still use only the database: `npm run db:up` starts just `db`.
 - Still **synthetic data only**; do not expose a real deployment before the go-live gate in the tracker.
 
 ## Encrypted backups
 
-`scripts/backup.sh` dumps the whole database (`audit_log` included) with `pg_dump`, encrypts it with [age](https://github.com/FiloSottile/age) straight from the pipe (no plain copy is written), and saves `emr-<UTC time>.dump.age` plus a `.sha256` file. It keeps the newest `BACKUP_KEEP` (default 14) and removes older ones. It encrypts to a **public** key, so the server can write backups but cannot read them. Restoring is chunk 7c.
+`scripts/backup.sh` dumps the whole database (`audit_log` included) with `pg_dump`, encrypts it with [age](https://github.com/FiloSottile/age) straight from the pipe (no plain copy is written), and saves `emr-<UTC time>.dump.age` plus a `.sha256` file. It keeps the newest `BACKUP_KEEP` (default 14) and removes older ones. It encrypts to a **public** key, so the server can write backups but cannot read them. Restoring is below.
 
 1. **Make the key pair on a different machine** (your own computer, not the server). Install age, then: `age-keygen -o backup-key.txt`. It prints `Public key: age1...`. Keep `backup-key.txt` somewhere safe and off the server (a password manager or an offline disk). **If it is lost, the backups cannot be opened.**
 2. Put only the public key in `.env`: `BACKUP_AGE_RECIPIENT=age1...`
@@ -54,6 +60,14 @@ pg_restore -l check.dump                               # lists the tables, inclu
 ```
 
 Without the private key the file is just random bytes starting with `age-encryption.org`. `test/safety-backup.test.js` proves this on every run: the script, the checksum, the wrong-key failure and the keep-N rule. It needs `age` and `pg_dump` installed (CI installs them). One-off run without Docker: `BACKUP_AGE_RECIPIENT=age1... BACKUP_DIR=./backups BACKUP_DATABASE_URL=$DATABASE_URL bash scripts/backup.sh`.
+
+## Restore from a backup
+
+`scripts/restore.sh <backup.dump.age> <private-key-file> <new-database-name>` checks the checksum, creates a NEW database (it refuses if the name exists, so it never overwrites anything), restores into it in one transaction, and checks that the database's recorded migrations match the `migrations/` folder. If anything fails, the new database is dropped again. It needs `age`, `pg_restore`, `psql` and `createdb` and the libpq variables (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`) of the database owner. Users and their password hashes come back with the data, so the old passwords work.
+
+`scripts/verify-restore.sh` compares row counts of `patients`, `encounters`, `audit_log` and the last audit id: `verify-restore.sh print <db>` on the source (save the line, right after the backup) and `verify-restore.sh compare <restored-db> <source-db-or-saved-file>` after the restore. Then point the app at the new database (`POSTGRES_DB` in `.env`, or `DATABASE_URL`).
+
+The exact steps for a clean machine, and the table that records each restore run, are in `docs/RESTORE-TEST.md`. The tested-restore line of the go-live gate is met only when that table says MATCH for a run on a clean machine.
 
 ## Database roles (restricted app role)
 
