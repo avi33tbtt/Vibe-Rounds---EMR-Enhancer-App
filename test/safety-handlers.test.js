@@ -8,7 +8,7 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 const { pageHtml } = require('./html');
 
-const MAX_INLINE = 63;
+const MAX_INLINE = 31;
 const src = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
 const inline = s => (s.match(/ on[a-z]+="/g) || []).length;
 
@@ -64,4 +64,30 @@ test('disabled action buttons do nothing', async () => {
   let hit = 0; w.eval('ACT.suggest = () => { window.__s = (window.__s || 0) + 1 }');
   const b = d.querySelector('button[data-act=suggest]'); b.disabled = true; b.click();
   assert.equal(w.__s, undefined);
+});
+
+test('template-built actions: ids arrive intact through data-arg, the inner button wins over its row, values are read at click time', async () => {
+  const w = await page(), d = w.document;
+  const HOSTILE = `x"');window.__pwn=1;//<img src=x onerror=1>&amp;`;
+  const got = [];
+  for (const fn of ['openCase', 'restoreCase', 'addRow', 'genSkip', 'editNote']) w[fn] = (...a) => got.push([fn, ...a]);
+  const esc = w.escA;
+  const box = d.createElement('div');
+  box.innerHTML = `<div id="r" data-act="openCase" data-arg="${esc(HOSTILE)}"><b id="t">name</b><button id="b" data-act="restoreCase" data-arg="${esc(HOSTILE)}">Restore</button></div>
+    <input id="new_f1"><button id="add" data-act="addRowFrom" data-arg="f1">Add</button>
+    <input id="sk" type="checkbox" data-act="genSkip" data-arg="${esc(HOSTILE)}" data-ev="change">
+    <textarea id="ta" data-act="editNote" data-arg="${esc(HOSTILE)}" data-ev="change"></textarea>`;
+  d.body.appendChild(box);
+  d.getElementById('b').click();
+  assert.deepEqual(got.splice(0), [['restoreCase', HOSTILE]], 'inner button only, like the old stopPropagation');
+  d.getElementById('t').click();
+  assert.deepEqual(got.splice(0), [['openCase', HOSTILE]], 'a click on a child reaches the row action');
+  d.getElementById('add').click();
+  assert.deepEqual(got.splice(0), [], 'empty input adds nothing');
+  const i = d.getElementById('new_f1'); i.value = '5'; d.getElementById('add').click();
+  assert.deepEqual(got.splice(0), [['addRow', 'f1', '5']]); assert.equal(i.value, '');
+  const sk = d.getElementById('sk'); sk.checked = true; sk.dispatchEvent(new w.Event('change', { bubbles: true }));
+  const ta = d.getElementById('ta'); ta.value = 'note text'; ta.dispatchEvent(new w.Event('change', { bubbles: true }));
+  assert.deepEqual(got.splice(0), [['genSkip', HOSTILE, true], ['editNote', HOSTILE, 'note text']]);
+  assert.equal(w.__pwn, undefined);
 });

@@ -50,7 +50,7 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | 6d | chunk-06d-csp.md | Content-Security-Policy (93 inline handlers) | SPLIT |  |  | Replaced by 6d-1, 6d-2a, 6d-2b, 6d-2c. Option A (delegated listener) chosen 2026-11-22. |
 | 6d-1 | chunk-06d1-csp-header.md | CSP header + per-response nonce (server half) | DONE | 2026-11-22 | app.js + serve code + 1 test | app.js, env.txt, test/safety-csp.test.js, test/safety-hardening.test.js, DECISIONS.md. Nonce per response; script-src-attr unsafe-inline is temporary (pinned test + todo for 6d-2c). |
 | 6d-2a | chunk-06d2-handlers.md | Delegated listener + convert handlers 1 to 30 | DONE | 2026-11-22 | about 30 handlers | emr-enhancer.html, test/safety-handlers.test.js. ACT table + data-act/data-arg/data-ev; 63 inline handlers left (ratchet test). |
-| 6d-2b | chunk-06d2-handlers.md | Convert handlers 31 to 62 | TODO |  | about 30 handlers | Needs: 6d-2a. |
+| 6d-2b | chunk-06d2-handlers.md | Convert handlers 31 to 62 | DONE | 2026-11-22 | about 30 handlers | emr-enhancer.html, test/safety-handlers.test.js, test/safety-escaping.test.js. 32 converted (ids via data-arg, no jsA); 31 inline left, ratchet set to 31. |
 | 6d-2c | chunk-06d2-handlers.md | Convert the rest; remove unsafe-hashes; zero inline handlers | TODO |  | about 30 handlers | Needs: 6d-2b. Closes 6d. |
 | 6e | chunk-06e-policy-docs.md | Retention, access, consent notes | TODO |  | docs only | Can share a session with 7d. |
 | 7 | chunk-07-backup-deploy.md | Backup, restore, deploy (original) | SPLIT |  |  | Replaced by 7a to 7d. |

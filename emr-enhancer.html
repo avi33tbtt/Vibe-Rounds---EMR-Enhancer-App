@@ -283,8 +283,8 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
       <div id="ptMain" style="display:none">
         <div class="flex">
           <input id="ptQ" placeholder="Search name or MRN…" style="flex:1" data-act="ptDebounce" data-ev="input">
-          <label style="display:flex;gap:4px;font-weight:400;margin:0"><input type="checkbox" id="ptArch" style="width:auto" onchange="ptLoad()"> show archived</label>
-          <button class="b" id="ptRegBtn" onclick="ptToggleForm()">+ Register patient</button>
+          <label style="display:flex;gap:4px;font-weight:400;margin:0"><input type="checkbox" id="ptArch" style="width:auto" data-act="ptLoad" data-ev="change"> show archived</label>
+          <button class="b" id="ptRegBtn" data-act="ptToggleForm">+ Register patient</button>
         </div>
         <div class="cd" id="ptForm" style="display:none">
           <b>Register patient</b>
@@ -296,7 +296,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
           </div>
           <div id="ptDup"></div>
           <div id="pt_err" class="gen-err" role="alert"></div>
-          <div class="flex" style="margin-top:8px"><button class="b" onclick="ptRegister(false)">Register</button><button class="b sec" onclick="ptToggleForm(false)">Cancel</button></div>
+          <div class="flex" style="margin-top:8px"><button class="b" data-act="ptRegister">Register</button><button class="b sec" data-act="ptToggleFormOff">Cancel</button></div>
         </div>
         <div id="ptList"></div>
       </div>
@@ -305,9 +305,9 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <!-- CASES -->
     <div class="pane" id="cases">
       <h3>Cases</h3>
-      <div class="flex"><input id="caseQ" placeholder="Search name, MRN, context…" style="flex:1" oninput="renderCases()">
-        <label style="display:flex;gap:4px;font-weight:400;margin:0"><input type="checkbox" id="caseArch" style="width:auto" onchange="renderCases()"> show archived</label>
-        <button class="b" onclick="newCase()">+ New case</button></div>
+      <div class="flex"><input id="caseQ" placeholder="Search name, MRN, context…" style="flex:1" data-act="renderCases" data-ev="input">
+        <label style="display:flex;gap:4px;font-weight:400;margin:0"><input type="checkbox" id="caseArch" style="width:auto" data-act="renderCases" data-ev="change"> show archived</label>
+        <button class="b" data-act="newCase">+ New case</button></div>
       <div id="caseList"></div>
     </div>
 
@@ -315,11 +315,11 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <div class="pane" id="notes">
       <h3>Notes</h3>
       <div class="cd">
-        <label>Signing as</label><input id="n_user" placeholder="Your name" oninput="localStorage.setItem('vr_user',this.value)">
+        <label>Signing as</label><input id="n_user" placeholder="Your name" data-act="setUser" data-ev="input">
         <label>Title</label><input id="n_title" placeholder="e.g. Progress note">
         <label>Free text</label><textarea id="n_body"></textarea>
-        <div class="flex" style="margin-top:8px"><button class="b" onclick="addNote('free')">Save as draft</button>
-          <button class="b sec" onclick="addNote('structured')">Draft from current values</button></div>
+        <div class="flex" style="margin-top:8px"><button class="b" data-act="addNote" data-arg="free">Save as draft</button>
+          <button class="b sec" data-act="addNote" data-arg="structured">Draft from current values</button></div>
         <div class="mu" style="margin-top:6px">Signed notes cannot be edited; change them by amendment with a reason. Nothing is deleted.</div>
       </div>
       <div id="noteList"></div>
@@ -335,15 +335,15 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <div id="codeSum" class="mu">Apply sets and fill values first.</div>
         <div id="codeTab"></div>
         <div class="flex" style="margin-top:10px">
-          <button class="b" onclick="liveCheck()">Verify live (tx.fhir.org)</button>
-          <button class="b sec" onclick="codesUI()">Refresh</button>
+          <button class="b" data-act="liveCheck">Verify live (tx.fhir.org)</button>
+          <button class="b sec" data-act="codesUI">Refresh</button>
         </div>
         <div class="mu" style="margin-top:8px">Manually add a code you verified in a browser:</div>
         <div class="flex" style="margin-top:4px">
           <select id="asys" style="width:110px"><option>snomed</option><option>loinc</option></select>
           <input id="acode" placeholder="code" style="width:120px">
           <input id="adisp" placeholder="display" style="flex:1">
-          <button class="b sm" onclick="addCode()">Add</button>
+          <button class="b sm" data-act="addCode">Add</button>
         </div>
       </div>
 
@@ -353,9 +353,9 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <div class="flex" style="margin-top:6px"><span class="mu">QuestionnaireResponse:</span>
           <select id="qrMode" style="width:auto"><option value="sdc">for SDC-sourced sets</option><option value="all">for all applied sets</option><option value="none">none</option></select></div>
         <div class="flex" style="margin-top:8px">
-          <button class="b" onclick="buildBundle()">Build bundle</button>
-          <button class="b sec" onclick="copyBundle()">Copy</button>
-          <button class="b sec" onclick="dlBundle()">Download</button>
+          <button class="b" data-act="buildBundle">Build bundle</button>
+          <button class="b sec" data-act="copyBundle">Copy</button>
+          <button class="b sec" data-act="dlBundle">Download</button>
         </div>
         <div id="bchk" class="mu" style="margin-top:6px"></div>
         <pre class="raw" id="bj"></pre>
@@ -619,7 +619,7 @@ const ver=id=>getSet(id)?.version||1;
 function resolve(a){const s=getSet(a.setId);if(!s)return;const av=a.version||1;if(av>=(s.version||1))return s;
   const h=(s.history||[]).find(x=>x.version===av);return h?{...s,title:h.title,desc:h.desc,fields:h.fields,version:av}:s}
 function verNote(a){const s=getSet(a.setId);if(!s||(a.version||1)>=(s.version||1))return'';
-  return` · <b style="color:var(--a)">v${a.version||1} applied, v${s.version} available</b> <button class="b sec sm" onclick="upgradeSet(${jsA(a.setId)})">Review &amp; update</button>`}
+  return` · <b style="color:var(--a)">v${a.version||1} applied, v${s.version} available</b> <button class="b sec sm" data-act="upgradeSet" data-arg="${escA(a.setId)}">Review &amp; update</button>`}
 function upgradeSet(id){
   const a=CASE.applied.find(x=>x.setId===id),s=getSet(id);if(!a||!s)return;
   const old=resolve(a).fields,om=Object.fromEntries(old.map(f=>[f.id,f])),nm=Object.fromEntries(s.fields.map(f=>[f.id,f]));
@@ -675,9 +675,9 @@ function renderCases(){
   $('caseList').innerHTML=rows.map(c=>{
     const dx=c.applied.map(a=>resolve(a)).filter(s=>s&&s.kind==='disease').map(s=>`<span class="kind disease">${escA(s.title)}</span>`).join(' ');
     const dr=c.notes.filter(n=>n.status==='draft').length;
-    return`<div class="item" onclick="openCase(${jsA(c.id)})"><div><b>${escA(caseName(c))}</b> <span class="mu">MRN ${escA(caseMrn(c))}</span> ${dx}
+    return`<div class="item" data-act="openCase" data-arg="${escA(c.id)}"><div><b>${escA(caseName(c))}</b> <span class="mu">MRN ${escA(caseMrn(c))}</span> ${dx}
       <div class="meta">${c.applied.length} sets · ${c.notes.length} notes${dr?` (${dr} draft)`:''} · updated ${c.updatedAt.slice(0,16).replace('T',' ')}${c.id===CASE.id?' · open':''}</div></div>
-      ${c.status==='archived'?`<button class="b sec sm" onclick="event.stopPropagation();restoreCase(${jsA(c.id)})">Restore</button>`:''}</div>`;
+      ${c.status==='archived'?`<button class="b sec sm" data-act="restoreCase" data-arg="${escA(c.id)}">Restore</button>`:''}</div>`;
   }).join('')||'<div class="empty">No cases.</div>';
 }
 
@@ -708,13 +708,13 @@ function submitAmend(id){const n=nid(id),r=$('am_r_'+id).value.trim(),b=$('am_b_
 function renderNotes(){
   $('noteList').innerHTML=CASE.notes.map(n=>{
     const head=`<b>${escA(n.title)}</b> <span class="kind">${escA(n.kind)}</span> <span class="mu">${escA(n.status)} · ${escA(n.createdAt.slice(0,16).replace('T',' '))}</span>`;
-    if(n.status==='draft')return`<div class="cd nt draft">${head}<textarea onchange="editNote(${jsA(n.id)},this.value)">${escA(n.body)}</textarea>
-      <button class="b sm" onclick="signNote(${jsA(n.id)})">Sign</button><button class="b sec sm" onclick="discardNote(${jsA(n.id)})">Discard</button></div>`;
+    if(n.status==='draft')return`<div class="cd nt draft">${head}<textarea data-act="editNote" data-arg="${escA(n.id)}" data-ev="change">${escA(n.body)}</textarea>
+      <button class="b sm" data-act="signNote" data-arg="${escA(n.id)}">Sign</button><button class="b sec sm" data-act="discardNote" data-arg="${escA(n.id)}">Discard</button></div>`;
     if(n.status==='discarded')return`<div class="cd nt discarded">${head}</div>`;
     const am=n.amendments.map((x,i)=>`<div class="mu">Amendment ${i+1} · ${escA(x.by)} · ${x.at.slice(0,16).replace('T',' ')} · reason: ${escA(x.reason)}</div>`).join('');
     const form=AMEND[n.id]?`<label>Reason for amendment</label><input id="am_r_${escA(n.id)}"><label>Amended text</label><textarea id="am_b_${escA(n.id)}">${escA(noteCurrent(n))}</textarea>
-      <button class="b sm" onclick="submitAmend(${jsA(n.id)})">Submit amendment</button><button class="b sec sm" onclick="toggleAmend(${jsA(n.id)})">Cancel</button>`
-      :`<button class="b sec sm" onclick="toggleAmend(${jsA(n.id)})">Amend…</button>`;
+      <button class="b sm" data-act="submitAmend" data-arg="${escA(n.id)}">Submit amendment</button><button class="b sec sm" data-act="toggleAmend" data-arg="${escA(n.id)}">Cancel</button>`
+      :`<button class="b sec sm" data-act="toggleAmend" data-arg="${escA(n.id)}">Amend…</button>`;
     return`<div class="cd nt signed">${head}<pre class="body">${escA(noteCurrent(n))}</pre><div class="mu">Signed by ${escA(n.signedBy)} · ${n.signedAt.slice(0,16).replace('T',' ')}</div>${am}
       ${n.amendments.length?`<details><summary class="mu">Original (as signed)</summary><pre class="body">${escA(n.body)}</pre></details>`:''}${form}</div>`;
   }).join('')||'<div class="empty">No notes yet.</div>';
@@ -884,7 +884,7 @@ function renderGenPreview(){
     const bs=bnds(f);nb+=bs.length;
     const skipped=f.codingPolicy&&f.codingPolicy.mode==='skip';
     if(!bs.length&&!f.flag&&!skipped)return;
-    const skip=`<label class="chk"><input type="checkbox" ${skipped?'checked':''} onchange="genSkip(${jsA(f.id)},this.checked)">skip</label>`;
+    const skip=`<label class="chk"><input type="checkbox" ${skipped?'checked':''} data-act="genSkip" data-arg="${escA(f.id)}" data-ev="change">skip</label>`;
     (bs.length?bs:[null]).forEach((c,i)=>{
       const t=c?bst(c):'missing',mm=c&&MM[ck(c)],rw=c?roleWarn(f,c):'';
       rows+=`<tr><td>${i?'':escA(f.label)}</td><td>${c?escA(c.system)+' '+escA(c.code):(skipped?'— skipped':'—')}</td><td>${escA(c?.display||'')}${mm?` <span style="color:var(--a)">⚠ server: ${escA(mm)}</span>`:''}${rw?` <span class="gen-warn">${escA(rw)}</span>`:''}</td>
@@ -960,7 +960,7 @@ function renderApplied(){
     const s=resolve(a);if(!s)return;
     const span=document.createElement('span');
     span.className='chip'+(a.fromPathway?' pathway':'');
-    span.innerHTML=`${escA(s.title)}${(getSet(a.setId).version||1)>1?' v'+(a.version||1):''}${(a.version||1)<(getSet(a.setId).version||1)?' ↑':''} <button onclick="removeSet(${jsA(a.setId)})">×</button>`;
+    span.innerHTML=`${escA(s.title)}${(getSet(a.setId).version||1)>1?' v'+(a.version||1):''}${(a.version||1)<(getSet(a.setId).version||1)?' ↑':''} <button data-act="removeSet" data-arg="${escA(a.setId)}">×</button>`;
     box.appendChild(span);
   });
 }
@@ -968,14 +968,14 @@ function renderLists(){
   const q=($('searchEl').value||'').toLowerCase();
   $('pathwayList').innerHTML=PATHWAYS.map(p=>{
     const on=(p.members||[]).every(m=>isApplied(m));
-    return`<div class="item" onclick="applySet(${jsA(p.id)})"><div><span class="kind pathway">pathway</span> ${escA(p.title)}<div class="meta">${escA(p.desc||'')}</div></div>
-      <button class="b sm ${on?'sec':''}" onclick="event.stopPropagation();applySet(${jsA(p.id)})">${on?'✓':'+'}</button></div>`;
+    return`<div class="item" data-act="applySet" data-arg="${escA(p.id)}"><div><span class="kind pathway">pathway</span> ${escA(p.title)}<div class="meta">${escA(p.desc||'')}</div></div>
+      <button class="b sm ${on?'sec':''}" data-act="applySet" data-arg="${escA(p.id)}">${on?'✓':'+'}</button></div>`;
   }).join('');
   $('elementList').innerHTML=REGISTRY.filter(s=>!q||s.title.toLowerCase().includes(q)||(s.desc||'').toLowerCase().includes(q)||s.id.includes(q))
     .map(s=>{
       const on=isApplied(s.id);
-      return`<div class="item" onclick="applySet(${jsA(s.id)})"><div><span class="kind ${escA(s.kind)}">${escA(s.kind)}</span> ${escA(s.title)}${s.generated?' <span class="mu">·gen</span>':''}<div class="meta">${escA(s.desc||'')}</div></div>
-        <button class="b sm ${on?'sec':''}" onclick="event.stopPropagation();applySet(${jsA(s.id)})">${on?'✓':'+'}</button></div>`;
+      return`<div class="item" data-act="applySet" data-arg="${escA(s.id)}"><div><span class="kind ${escA(s.kind)}">${escA(s.kind)}</span> ${escA(s.title)}${s.generated?' <span class="mu">·gen</span>':''}<div class="meta">${escA(s.desc||'')}</div></div>
+        <button class="b sm ${on?'sec':''}" data-act="applySet" data-arg="${escA(s.id)}">${on?'✓':'+'}</button></div>`;
     }).join('')||'<div class="mu">No matches</div>';
 }
 
@@ -986,7 +986,7 @@ function fieldHTML(f){
     const rows=getRows(f.id);
     let t=`<label>${escA(f.label)}${f.unit?' ('+escA(f.unit)+')':''} ${badge} <span class="mu">repeating</span></label>
       <div class="rep-add"><input id="new_${escA(f.id)}" type="${f.type==='text'||f.type==='select'||f.type==='boolean'?'text':'number'}" placeholder="New value">
-      <button class="b sm" onclick="const v=$(${jsA('new_'+f.id)}).value;if(v!==''){addRow(${jsA(f.id)},v);$(${jsA('new_'+f.id)}).value=''}">Add</button></div>`;
+      <button class="b sm" data-act="addRowFrom" data-arg="${escA(f.id)}">Add</button></div>`;
     if(rows.length){
       t+=`<table class="rep-table"><tr><th>Time</th><th>Value</th><th></th></tr>`;
       rows.forEach((r,i)=>{t+=`<tr><td>${escA(r.ts||'')}</td><td>${escA(r.value)}</td><td><button class="b sec sm" onclick="delRow(${jsA(f.id)},${i})">×</button></td></tr>`});
@@ -1541,6 +1541,32 @@ const ACT={
   srvLogin:()=>srvLogin(),
   suggest:()=>suggest(),
   tg:(el,e,a)=>tg(a),
+  setUser:(el)=>localStorage.setItem('vr_user',el.value),
+  ptToggleForm:()=>ptToggleForm(),
+  ptToggleFormOff:()=>ptToggleForm(false),
+  ptRegister:()=>ptRegister(false),
+  editNote:(el,e,a)=>editNote(a,el.value),
+  genSkip:(el,e,a)=>genSkip(a,el.checked),
+  addRowFrom:(el,e,a)=>{const i=$('new_'+a);const v=i.value;if(v!==''){addRow(a,v);$('new_'+a).value=''}},
+  ptLoad:()=>ptLoad(),
+  renderCases:()=>renderCases(),
+  newCase:()=>newCase(),
+  liveCheck:()=>liveCheck(),
+  codesUI:()=>codesUI(),
+  addCode:()=>addCode(),
+  buildBundle:()=>buildBundle(),
+  copyBundle:()=>copyBundle(),
+  dlBundle:()=>dlBundle(),
+  addNote:(el,e,a)=>addNote(a),
+  upgradeSet:(el,e,a)=>upgradeSet(a),
+  openCase:(el,e,a)=>openCase(a),
+  restoreCase:(el,e,a)=>restoreCase(a),
+  signNote:(el,e,a)=>signNote(a),
+  discardNote:(el,e,a)=>discardNote(a),
+  submitAmend:(el,e,a)=>submitAmend(a),
+  toggleAmend:(el,e,a)=>toggleAmend(a),
+  removeSet:(el,e,a)=>removeSet(a),
+  applySet:(el,e,a)=>applySet(a),
   verifyGenerated:()=>verifyGenerated()
 };
 (()=>{

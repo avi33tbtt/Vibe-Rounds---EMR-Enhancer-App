@@ -121,11 +121,11 @@ test('an id containing a quote cannot break out of an inline handler', () => {
   click('#forms button[onclick^="removeSet"]');
   last('#libList button[onclick^="dlQ"]');
   click('#customList button[onclick^="editCustom"]');
-  click('#noteList button[onclick^="signNote"]');
-  click('#noteList button[onclick^="toggleAmend"]');
+  click('#noteList button[data-act="signNote"]');
+  click('#noteList button[data-act="toggleAmend"]');
   click('#caseList .item');
-  const sel = d.querySelector('#forms select'); sel.dispatchEvent(new w.Event('change'));   // setVal(fieldId, value)
-  const ta = d.querySelector('#noteList textarea'); ta.dispatchEvent(new w.Event('change')); // editNote(noteId, value)
+  const sel = d.querySelector('#forms select'); sel.dispatchEvent(new w.Event('change', { bubbles: true }));   // setVal(fieldId, value)
+  const ta = d.querySelector('#noteList textarea'); ta.dispatchEvent(new w.Event('change', { bubbles: true })); // editNote(noteId, value)
   const add = d.querySelector('#forms .rep-add button'); d.getElementById('new_' + REP_ID).value = '5'; add.click(); // addRow(fieldId, value)
   click('#forms button[onclick^="delRow"]');
   assert.equal(w.__pwn, undefined, 'no handler argument executed code');
