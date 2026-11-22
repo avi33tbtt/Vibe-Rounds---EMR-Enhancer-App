@@ -14,7 +14,7 @@ async function until(fn, what) { for (let i = 0; i < 100; i++) { if (await fn())
 
 async function openPage() {
   const jar = {};
-  const dom = await JSDOM.fromURL(env.base + '/', { runScripts: 'dangerously', pretendToBeVisual: true,
+  const dom = await JSDOM.fromURL(env.base + '/', { runScripts: 'dangerously', resources: 'usable', pretendToBeVisual: true,
     beforeParse(w) {
       w.confirm = () => true;
       w.fetch = async (path, o = {}) => {
@@ -106,7 +106,7 @@ test('viewer: sees patients, cannot register or open encounters; server refuses 
 });
 
 test('server unreachable: demo case screen still works; sign-in says so', async () => {
-  const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
+  const html = require('./html').pageHtml();
   const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'http://127.0.0.1:1/', pretendToBeVisual: true,
     beforeParse(w) { w.fetch = async () => { throw new Error('down'); }; } });
   const w = dom.window, d = w.document;

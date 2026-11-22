@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM, VirtualConsole } = require('jsdom');
 
-const HTML = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
+const HTML = require('./html').pageHtml();
 const LOINC = 'http://loinc.org', SCT = 'http://snomed.info/sct';
 
 function page({ store = {}, tx = {} } = {}) {

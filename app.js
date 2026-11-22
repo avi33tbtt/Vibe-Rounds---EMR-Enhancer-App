@@ -44,6 +44,8 @@ function createApp(pool, opts = {}) {
 
   const html = path.join(__dirname, 'emr-enhancer.html');
   app.get(['/', '/emr-enhancer.html'], (_req, res) => res.sendFile(html));
+  const sdc = path.join(__dirname, 'sdc.js');   // the one shared copy of the SDC code
+  app.get('/sdc.js', (_req, res) => res.sendFile(sdc));
 
   /* ---------- session ---------- */
   app.post('/api/login', async (req, res) => {

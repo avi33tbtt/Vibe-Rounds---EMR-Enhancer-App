@@ -77,6 +77,9 @@ table.ctab th{background:var(--side)}
 .fblock .field-row{margin-bottom:6px}.fblock .field-row:last-child{margin-bottom:0}
 .fblock .bind{border-top:1px dashed var(--bd);padding-top:6px}
 .gen-warn{color:var(--a);font-size:12px;margin:4px 0}
+.chk{display:flex;align-items:center;gap:6px;font-weight:400;margin:2px 0;white-space:nowrap}.chk input{width:auto}
+.pick{display:flex;flex-wrap:wrap;gap:2px 14px}
+#sdcLimits ul{margin:4px 0 0 18px;padding:0}
 .note{border-left:3px solid var(--ac);padding:6px 12px;margin:8px 0;font-size:13px;color:var(--mu)}
 .pb{padding:6px 16px;background:var(--chip);font-size:13px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--bd)}
 .nt{border-left:3px solid var(--bd);padding-left:10px}.nt.draft{border-color:var(--a)}.nt.signed{border-color:var(--g)}.nt.discarded{opacity:.5}
@@ -192,9 +195,17 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <!-- CREATE / GENERATE -->
     <div class="pane" id="create">
       <h3>Create or generate a contextual element</h3>
+      <div class="cd" id="cOpts">
+        <b>Options for what you create (apply to A and B below)</b>
+        <label class="chk"><input type="checkbox" id="o_sdc" onchange="optsChanged()"> Also author as FHIR SDC Questionnaire</label>
+        <div id="sdcLimits" class="note" style="display:none"></div>
+        <div class="sec-title" style="margin-top:8px">Code systems (global; each field can override or skip)</div>
+        <div id="o_sys" class="pick"></div>
+        <div id="o_note" class="mu" style="margin-top:4px"></div>
+      </div>
       <div class="cd">
         <b>A · Generate from diagnosis (LLM or demo)</b>
-        <div class="note">The model proposes fields and <i>candidate</i> SNOMED/LOINC bindings. Bindings are stored in the element set itself (not in FHIR) and stay <b>unverified</b> until looked up on a terminology server <i>and</i> the display matches. No doses or therapeutic thresholds are requested.</div>
+        <div class="note">The model proposes fields and <i>candidate</i> bindings, only in the code systems ticked above. Bindings are stored in the element set itself (not in FHIR) and stay <b>unverified</b> until looked up on a terminology server <i>and</i> the display matches. No doses or therapeutic thresholds are requested.</div>
         <label>Primary diagnosis</label>
         <input id="gen_dx" placeholder="e.g. Acute ischemic stroke">
         <div class="mu">Examples:
@@ -224,7 +235,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
       </div>
       <div class="cd">
         <b>B · Build by hand</b>
-        <div class="note">Each field can carry a terminology binding (system · code · display). Use <b>Verify</b> to check it against tx.fhir.org. Changing a code automatically drops its verified status.</div>
+        <div class="note">Each field can carry one or more terminology bindings (system · code · display), or be skipped. Use <b>Verify</b> to check it against tx.fhir.org. Changing a code automatically drops its verified status.</div>
         <label>ID</label><input id="c_id" placeholder="urine_io">
         <label>Title</label><input id="c_title">
         <label>Kind</label>
@@ -349,6 +360,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
   </main>
 </div>
 
+<script src="sdc.js"></script>
 <script>
 const $=i=>document.getElementById(i);
 const toast=m=>{ $('toast').textContent=m; setTimeout(()=>{if($('toast').textContent===m)$('toast').textContent=''},4500)};
@@ -556,11 +568,17 @@ const DEMO_DKA={id:'gen_dka',kind:'disease',title:'Diabetic ketoacidosis',desc:'
   ]};
 [...BUILTIN,DEMO_SNAKE,DEMO_DKA].forEach(migrateSet);
 
-const SYS=`You are a clinical informatics assistant. Return ONLY valid JSON (no prose, no markdown):
-{"id":"snake_case","kind":"disease|care","title":"","desc":"","fields":[{"id":"snake_case","label":"","type":"datetime|number|integer|select|boolean|text","unit":"","options":[],"required":false,"repeat":false,"coding":{"system":"snomed|loinc","code":"","display":""},"rationale":""}]}.
-8-14 high-yield fields. Prioritise time-critical intervals, severity, therapy. Use select only with options. For serial observations set repeat:true.
-Terminology: coding is a CANDIDATE binding that will be machine-verified, so give the exact official display term. Use LOINC for lab/vital observations and SNOMED CT for findings/procedures. If you are not certain of a code, leave coding empty (an empty binding is better than a wrong one).
+const SYS_HINT={snomed:'SNOMED CT for findings and procedures',loinc:'LOINC for lab and vital-sign observations',rxnorm:'RxNorm only for medication fields (drug names, never doses)',icd10:'ICD-10 only for diagnosis/condition fields (cannot be machine-verified here: leave empty unless certain)',icd11:'ICD-11 only for diagnosis/condition fields (cannot be machine-verified here: leave empty unless certain)',atc:'ATC only for medication-class fields (cannot be machine-verified here: leave empty unless certain)'};
+/* The prompt names only the ticked systems. With none ticked it asks for no codes at all. */
+function sysPrompt(systems){
+  const sy=(systems||[]).map(csBy).filter(x=>x&&x.key!=='local'&&x.enabled!==false);
+  const b=sy.length?`,"bindings":[{"system":"${sy.map(x=>x.key).join('|')}","code":"","display":""}]`:'';
+  const term=sy.length?`\nTerminology: "bindings" are CANDIDATES that will be machine-verified, so give the exact official display term. Allowed systems ONLY: ${sy.map(x=>x.key).join(', ')} (${sy.map(x=>SYS_HINT[x.key]).filter(Boolean).join('; ')}). Never use any other system. At most one binding per allowed system per field. If you are not certain of a code, leave "bindings" as an empty array (an empty binding is better than a wrong one).`:'\nTerminology: do NOT include codes or bindings.';
+  return `You are a clinical informatics assistant. Return ONLY valid JSON (no prose, no markdown):
+{"id":"snake_case","kind":"disease|care","title":"","desc":"","fields":[{"id":"snake_case","label":"","type":"datetime|number|integer|select|boolean|text","unit":"","options":[],"required":false,"repeat":false${b},"rationale":""}]}.
+8-14 high-yield fields. Prioritise time-critical intervals, severity, therapy. Use select only with options. For serial observations set repeat:true.${term}
 Safety: do NOT include drug doses, dose calculations, therapeutic target ranges, or protocol thresholds anywhere (labels, options, rationale). Capture what to record, not what to do. Use the diagnosis as title.`;
+}
 
 /* State */
 let REGISTRY=[],CASES=[],CASE=null,LAST_GENERATED=null;
@@ -714,6 +732,7 @@ function appliedForPayload(){
 }
 function aiPayload(kind,diagnosis,instructions){
   const p={diagnosis:String(diagnosis||'').trim()};
+  if(kind==='gen')p.systems=aiSystems();   // library setting (system keys), not case data
   const ins=String(instructions||'').trim();if(ins)p.instructions=ins;
   if(kind==='rank'){
     const a=appliedForPayload();p.applied_sets=a.applied_sets;p.applied_pathways=a.applied_pathways;
@@ -725,7 +744,7 @@ function aiPayload(kind,diagnosis,instructions){
   return p;
 }
 function buildAiRequest(kind,payload,s){
-  const sys=kind==='rank'?SYS_RANK:SYS;
+  const sys=kind==='rank'?SYS_RANK:sysPrompt(payload.systems);
   const user=kind==='rank'?JSON.stringify(payload):`Diagnosis: ${payload.diagnosis}`+(payload.instructions?`\nExtra: ${payload.instructions}`:'');
   if(s.p==='an')return{url:'https://api.anthropic.com/v1/messages',
     headers:{'content-type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -770,7 +789,22 @@ async function aiRank(){
 }
 function parseJSON(t){return JSON.parse(String(t).replace(/```json|```/g,'').trim())}
 const DOSE_RE=/\d+(\.\d+)?\s*(mg|mcg|µg|ml|units?|iu)\b|[≥≤<>]=?\s*\d/i;
-function normaliseGenerated(raw,dx){
+let GEN_DROPPED=0;const GEN_STASH={};
+const SYS_ALIAS={snomed:'snomed',snomedct:'snomed',loinc:'loinc',rxnorm:'rxnorm',icd10:'icd10',icd11:'icd11',atc:'atc'};
+/* Keep a proposed binding only if its system was ticked. Source is set by us, never trusted from the model. */
+function proposedBindings(f,allowed,src){
+  const out=[];
+  [...(Array.isArray(f.bindings)?f.bindings:[]),...(f.coding&&f.coding.code?[f.coding]:[])].forEach(x=>{
+    if(!x||!x.code)return;
+    const k=SYS_ALIAS[String(x.system||'').toLowerCase().replace(/[^a-z0-9]/g,'')];
+    if(!k||!allowed.includes(k)){GEN_DROPPED++;return}
+    const b={system:k,code:String(x.code).trim(),display:String(x.display||''),source:src};
+    if(b.code&&!out.some(y=>ck(y)===ck(b)))out.push(b);
+  });
+  return out.slice(0,3);
+}
+function normaliseGenerated(raw,dx,systems,src){
+  systems=(systems||[]).filter(k=>k!=='local');src=src||'llm';GEN_DROPPED=0;
   const idBase=(raw.id||raw.title||dx||'generated').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'generated';
   let id='gen_'+idBase,n=2;
   while(REGISTRY.find(s=>s.id===id)||PATHWAYS.find(p=>p.id===id))id='gen_'+idBase+'_'+n++;
@@ -784,7 +818,7 @@ function normaliseGenerated(raw,dx){
     if(f.required)o.required=true;
     if(f.repeat)o.repeat=true;
     if(f.rationale)o.rationale=String(f.rationale);
-    if(f.coding&&f.coding.code)o.bindings=[{system:f.coding.system==='loinc'?'loinc':'snomed',code:String(f.coding.code).trim(),display:String(f.coding.display||''),source:'llm'}];
+    const pb=proposedBindings(f,systems,src);if(pb.length)o.bindings=pb;
     const scan=[o.label,o.rationale||'',...(o.options||[])].join(' | ');
     if(DOSE_RE.test(scan))o.flag='dose/threshold-like text — review or remove';
     return o;
@@ -797,7 +831,8 @@ async function generate(){
   const dx=$('gen_dx').value.trim();if(!dx)return toast('Enter a diagnosis');
   const btn=$('genBtn');btn.disabled=true;btn.textContent='Generating…';$('genStatus').textContent='';$('genPreview').style.display='none';LAST_GENERATED=null;
   try{
-    const s=JSON.parse(localStorage.getItem('vr_set')||'{}');
+    const s=JSON.parse(localStorage.getItem('vr_set')||'{}'),systems=aiSystems();
+    if($('o_sdc').checked)$('genStatus').textContent='SDC mode: the Questionnaire will not express enableWhen, calculated expressions or value-set options.';
     const demoOn=s.d!==false&&!s.k;
     let set;
     if(demoOn){
@@ -807,14 +842,14 @@ async function generate(){
     }
     if(!set){
       const t=await callAI('gen',aiPayload('gen',dx,$('gen_ins').value));
-      try{set=normaliseGenerated(parseJSON(t),dx)}catch(e){throw Error('Model reply was not usable JSON. Click Generate to retry (you will see the preview again).')}
-    }else{set=normaliseGenerated(set,dx);set.provenance.by='demo'}
-    LAST_GENERATED=set;
-    $('genSummary').textContent=`${set.title} · ${set.kind} · ${set.fields.length} fields`;
+      try{set=normaliseGenerated(parseJSON(t),dx,systems,'llm')}catch(e){throw Error('Model reply was not usable JSON. Click Generate to retry (you will see the preview again).')}
+    }else{set=normaliseGenerated(set,dx,systems,'demo');set.provenance.by='demo'}
+    LAST_GENERATED=set;Object.keys(GEN_STASH).forEach(k=>delete GEN_STASH[k]);
+    $('genSummary').innerHTML=`${escA(set.title)} · ${set.kind} · ${set.fields.length} fields${uncodedBadge(set)}`;
     $('genRaw').textContent=JSON.stringify(set,null,2);
     renderGenPreview();
     $('genPreview').style.display='block';
-    $('genStatus').textContent='Draft ready — review then apply or save.';
+    $('genStatus').textContent='Draft ready — review then apply or save.'+(GEN_DROPPED?` ${GEN_DROPPED} proposed code(s) outside the ticked systems were discarded.`:'')+($('o_sdc').checked?' A Questionnaire will be authored with it.':'');
   }catch(e){toast(e.name==='AiCancel'?e.message:'Error: '+(e.name==='TimeoutError'?'LLM timed out (60s)':e.message))}
   btn.disabled=!aiEnabled();btn.textContent='Generate element set';
 }
@@ -823,17 +858,26 @@ function renderGenPreview(){
   let rows='',nb=0;
   set.fields.forEach(f=>{
     const bs=bnds(f);nb+=bs.length;
-    if(!bs.length&&!f.flag)return;
+    const skipped=f.codingPolicy&&f.codingPolicy.mode==='skip';
+    if(!bs.length&&!f.flag&&!skipped)return;
+    const skip=`<label class="chk"><input type="checkbox" ${skipped?'checked':''} onchange="genSkip('${escA(f.id)}',this.checked)">skip</label>`;
     (bs.length?bs:[null]).forEach((c,i)=>{
       const t=c?bst(c):'missing',mm=c&&MM[ck(c)],rw=c?roleWarn(f,c):'';
-      rows+=`<tr><td>${i?'':f.label}</td><td>${c?c.system+' '+c.code:'—'}</td><td>${c?.display||''}${mm?` <span style="color:var(--a)">⚠ server: ${mm}</span>`:''}${rw?` <span class="gen-warn">${rw}</span>`:''}</td>
-      <td>${c?`<span class="bd" style="background:var(${COL[t]})">${t}</span>`:''}</td><td>${!i&&f.flag?`<span class="gen-warn">${f.flag}</span>`:''}</td></tr>`;
+      rows+=`<tr><td>${i?'':escA(f.label)}</td><td>${c?c.system+' '+escA(c.code):(skipped?'— skipped':'—')}</td><td>${escA(c?.display||'')}${mm?` <span style="color:var(--a)">⚠ server: ${escA(mm)}</span>`:''}${rw?` <span class="gen-warn">${rw}</span>`:''}</td>
+      <td>${c?`<span class="bd" style="background:var(${COL[t]})">${t}</span>`:''}</td><td>${!i&&f.flag?`<span class="gen-warn">${f.flag}</span>`:''}</td><td>${i?'':skip}</td></tr>`;
     });
   });
-  $('genBind').innerHTML=nb||rows?`<div class="mu">${nb} proposed binding(s) on ${set.fields.filter(f=>bnds(f).length).length} of ${set.fields.length} fields. Proposed ≠ verified.</div>
-    <table class="ctab"><tr><th>Field</th><th>Code</th><th>Display</th><th>Status</th><th>Review</th></tr>${rows}</table>`
-    :'<div class="mu">No bindings proposed — add them in B or after saving.</div>';
+  $('genBind').innerHTML=nb||rows?`<div class="mu">${nb} proposed binding(s) on ${set.fields.filter(f=>bnds(f).length).length} of ${set.fields.length} fields. Proposed ≠ verified.${nb?'':' This set will be saved <b>uncoded</b>; it is still usable.'}</div>
+    <table class="ctab"><tr><th>Field</th><th>Code</th><th>Display</th><th>Status</th><th>Review</th><th>Per field</th></tr>${rows}</table>`
+    :'<div class="mu">No bindings proposed: this set will be saved <b>uncoded</b> and is still usable. Add codes in B after saving.</div>';
   $('genVerify').style.display=nb?'inline-block':'none';
+}
+/* Per-field skip in the preview: the proposal is set aside (not lost) so un-ticking brings it back. */
+function genSkip(fid,skip){
+  const f=LAST_GENERATED&&LAST_GENERATED.fields.find(x=>x.id===fid);if(!f)return;
+  if(skip){if(f.bindings){GEN_STASH[fid]=f.bindings;delete f.bindings}f.codingPolicy={mode:'skip'}}
+  else{if(GEN_STASH[fid]){f.bindings=GEN_STASH[fid];delete GEN_STASH[fid]}delete f.codingPolicy}
+  $('genRaw').textContent=JSON.stringify(LAST_GENERATED,null,2);renderGenPreview();
 }
 async function verifyGenerated(){
   if(!LAST_GENERATED)return;
@@ -847,7 +891,8 @@ async function verifyGenerated(){
 }
 function commitGenerated(apply){
   if(!LAST_GENERATED)return;
-  const set=LAST_GENERATED;
+  const set=LAST_GENERATED;Object.keys(GEN_STASH).forEach(k=>delete GEN_STASH[k]);
+  if($('o_sdc').checked)authorSdc(set);
   const i=REGISTRY.findIndex(s=>s.id===set.id);
   if(i>=0)REGISTRY[i]=set;else REGISTRY.push(set);
   save();
@@ -951,7 +996,7 @@ function renderForms(){
   CASE.applied.forEach(a=>{
     const s=resolve(a);if(!s||!s.fields)return;
     html+=`<div class="cd"><div class="flex" style="justify-content:space-between">
-      <h3 style="margin:0">${s.title} <span class="kind ${s.kind}">${s.kind}</span>${s.generated?' <span class="mu">generated</span>':''}${sdcBadge(s)}</h3>
+      <h3 style="margin:0">${s.title} <span class="kind ${s.kind}">${s.kind}</span>${s.generated?' <span class="mu">generated</span>':''}${sdcBadge(s)}${uncodedBadge(s)}</h3>
       <button class="b sec sm" onclick="removeSet('${s.id}')">Remove</button></div>
       <div class="mu" style="margin-bottom:8px">${s.desc||''}${a.fromPathway?' · via pathway':''}${verNote(a)}</div>`;
     s.fields.forEach(f=>{html+=fieldHTML(f)});
@@ -964,7 +1009,7 @@ function renderLib(){
   $('libList').innerHTML=all.map(s=>{
     const isPw=s.kind==='pathway';
     return`<div class="cd"><div class="flex" style="justify-content:space-between">
-      <div><span class="kind ${s.kind}">${s.kind}</span> <b>${s.title}</b>${s.generated?' <span class="mu">·gen</span>':''}${sdcBadge(s)}
+      <div><span class="kind ${s.kind}">${s.kind}</span> <b>${s.title}</b>${s.generated?' <span class="mu">·gen</span>':''}${sdcBadge(s)}${uncodedBadge(s)}
         <div class="mu">${s.desc||''}</div>
         ${isPw?`<div class="mu">Members: ${(s.members||[]).join(', ')}</div>`:`<div class="mu">${(s.fields||[]).length} fields</div>`}
       </div><div><button class="b sm" onclick="applySet('${s.id}')">Use in case</button>${isPw?'':` <button class="b sec sm" onclick="dlQ('${s.id}')">Questionnaire</button>`}</div></div></div>`;
@@ -1013,40 +1058,14 @@ async function liveCheck(){
 
 /* SDC dual authoring: Questionnaire <-> element set */
 const sdcKnown=c=>{const x=csByUri(c&&c.system);return x&&x.enabled!==false?x:null};
-const SDCT={string:'text',text:'text',url:'text',integer:'integer',decimal:'number',quantity:'number',boolean:'boolean',date:'datetime',dateTime:'datetime',time:'text',choice:'select','open-choice':'select'};
-const slug=x=>String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+/* The SDC code lives in sdc.js (one copy, also used by the server). The page supplies what depends on the app. */
+const {SDCT,UC,slug,qty}=EmrSdc;
+const SDCENV={known:c=>{const x=sdcKnown(c);return x?x.key:null},codings:exportCodings,now:()=>nowISO()};
+const authorSdc=set=>EmrSdc.authorInto(set,SDCENV);
+const isUncoded=s=>Array.isArray(s.fields)&&!s.fields.some(f=>bnds(f).length);
+const uncodedBadge=s=>s.kind!=='pathway'&&isUncoded(s)?' <span class="bd" style="background:var(--a)" title="No field has a code. The set is still usable; its FHIR output carries no Coding.">uncoded</span>':'';
 const sdcBadge=s=>s.sdc?` <span class="kind custom">SDC</span>${s.sdc.modified?' <span class="mu">modified</span>':''}${s.curation&&s.curation.label?` <span class="mu">· ${escA(s.curation.label)}${s.curation.reviewed?'':' (unreviewed)'}</span>`:''}`:'';
-function sdcToSet(q){
-  if(!q||q.resourceType!=='Questionnaire')throw Error('Not a FHIR Questionnaire');
-  const fields=[],warn=[],seen=new Set();
-  const walk=(items,path)=>(items||[]).forEach(it=>{
-    if(it.enableWhen||it.enableWhenExpression)warn.push(`${it.linkId}: conditional display not enforced`);
-    if((it.extension||[]).some(e=>/calculatedExpression|initialExpression/.test(e.url||'')))warn.push(`${it.linkId}: calculated expression ignored`);
-    if(it.type==='display')return;
-    if(it.type==='group'){walk(it.item,[...path,{linkId:it.linkId,text:it.text||''}]);return}
-    const t=SDCT[it.type];if(!t){warn.push(`${it.linkId}: type ${it.type} skipped`);return}
-    let fid=slug(it.linkId)||'q',b=fid,k=2;while(seen.has(fid))fid=b+'_'+k++;seen.add(fid);
-    const f={id:fid,linkId:it.linkId,sdcType:it.type,text:it.text||it.linkId,label:[...path.map(g=>g.text).filter(Boolean),it.text||it.linkId].join(' › '),type:t};
-    if(path.length)f.path=path;
-    if(it.required)f.required=true;
-    if(it.repeats)warn.push(`${it.linkId}: multi-answer not supported (single value kept)`);
-    const u=(it.extension||[]).find(e=>(e.url||'').endsWith('questionnaire-unit'));if(u&&u.valueCoding&&u.valueCoding.code)f.unit=u.valueCoding.code;
-    if(t==='select'){
-      const ao=it.answerOption||[];
-      f.options=ao.map(o=>String(o.valueString??o.valueCoding?.display??o.valueCoding?.code??o.valueInteger??'')).filter(Boolean);
-      ao.forEach(o=>{if(o.valueCoding)(f.optCodings=f.optCodings||{})[o.valueCoding.display||o.valueCoding.code]=o.valueCoding});
-      if(!f.options.length){f.type='text';delete f.options;warn.push(`${it.linkId}: value-set options not expanded here — captured as text`)}
-    }
-    const bl=(it.code||[]).filter(c=>c.code&&sdcKnown(c)).map(c=>({system:sdcKnown(c).key,code:String(c.code),display:c.display||'',source:'sdc'}));
-    if(bl.length)f.bindings=bl;
-    const oc=(it.code||[]).filter(c=>!(c.code&&sdcKnown(c)));if(oc.length)f.otherCodes=oc;
-    fields.push(f);
-  });
-  walk(q.item,[]);
-  if(!fields.length)throw Error('No usable items in this Questionnaire');
-  return{fields,warn,title:q.title||q.name||'Imported questionnaire',desc:q.description||'Imported FHIR Questionnaire',
-    sdc:{url:q.url||'',version:q.version||'',publisher:q.publisher||'',declaredProfiles:(q.meta&&q.meta.profile)||[],warnings:warn,original:q,importedAt:nowISO()}};
-}
+function sdcToSet(q){return EmrSdc.sdcToSet(q,SDCENV)}
 function importQ(){
   try{
     const q=JSON.parse($('q_json').value),r=sdcToSet(q);
@@ -1066,55 +1085,12 @@ function importQ(){
 }
 function loadQFile(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('q_json').value=r.result};r.readAsText(f)}
 async function loadQUrl(){const u=$('q_url').value.trim();if(!u)return;try{const r=await fetch(u);if(!r.ok)throw Error(r.status);$('q_json').value=await r.text()}catch(e){toast('Could not fetch (CORS or network). Download it and use the file picker or paste.')}}
-function nest(fields,mk,isQR){
-  const root=[],gm={};
-  fields.forEach(f=>{const it=mk(f);if(!it)return;let cur=root;
-    (f.path||[]).forEach((g,i)=>{const key=f.path.slice(0,i+1).map(x=>x.linkId).join('/');let n=gm[key];
-      if(!n){n=isQR?{linkId:g.linkId,text:g.text,item:[]}:{linkId:g.linkId,text:g.text,type:'group',item:[]};gm[key]=n;cur.push(n)}cur=n.item});
-    cur.push(it)});
-  return root;
-}
-function buildQuestionnaire(s){
-  if(s.sdc&&!s.sdc.modified&&s.sdc.original)return s.sdc.original;
-  const TQ={text:'string',number:'decimal',integer:'integer',boolean:'boolean',datetime:'dateTime',select:'choice'};
-  const item=nest(s.fields,f=>{
-    const it={linkId:f.linkId||f.id,text:f.text||f.label,type:f.sdcType&&SDCT[f.sdcType]===f.type?f.sdcType:(TQ[f.type]||'string')};
-    if(f.required)it.required=true;
-    if(f.unit&&f.type==='number')it.extension=[{url:'http://hl7.org/fhir/StructureDefinition/questionnaire-unit',valueCoding:UC[f.unit]?{system:'http://unitsofmeasure.org',code:UC[f.unit],display:f.unit}:{display:f.unit}}];
-    if(f.type==='select')it.answerOption=(f.options||[]).map(o=>f.optCodings&&f.optCodings[o]?{valueCoding:f.optCodings[o]}:{valueString:o});
-    const ec=exportCodings(f);if(ec.length)it.code=ec;
-    return it;
-  });
-  return{resourceType:'Questionnaire',url:'urn:emr-enhancer:questionnaire:'+s.id,version:String(s.version||1),name:s.id,title:s.title,status:'draft',description:s.desc||'',item};
-}
+function buildQuestionnaire(s){return EmrSdc.buildQuestionnaire(s,SDCENV)}
 function dlQ(id){const s=getSet(id);if(!s)return;const t=JSON.stringify(buildQuestionnaire(s),null,2);
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='questionnaire-'+id+'.json';a.click()}
-function ansObj(f,v){
-  if(v===''||v==null)return null;
-  if(f.sdcType==='date')return{valueDate:String(v).slice(0,10)};
-  if(f.sdcType==='url')return{valueUri:String(v)};
-  if(f.sdcType==='quantity')return{valueQuantity:qty(v,f.unit)};
-  if(f.type==='integer')return{valueInteger:+v};
-  if(f.type==='number')return{valueDecimal:+v};
-  if(f.type==='boolean')return{valueBoolean:v==='Yes'||v===true};
-  if(f.type==='datetime')return{valueDateTime:new Date(v).toISOString()};
-  if(f.optCodings&&f.optCodings[v])return{valueCoding:f.optCodings[v]};
-  return{valueString:String(v)};
-}
-function buildQR(s,pid,author){
-  const item=nest(s.fields,f=>{
-    const vals=f.repeat?getRows(f.id).map(r=>r.value):[CASE.values[f.id]];
-    const answer=vals.map(v=>ansObj(f,v)).filter(Boolean);
-    return answer.length?{linkId:f.linkId||f.id,text:f.text||f.label,answer}:null;
-  },true);
-  if(!item.length)return null;
-  const qc=(s.sdc&&!s.sdc.modified&&s.sdc.url)?s.sdc.url+(s.sdc.version?'|'+s.sdc.version:''):'urn:emr-enhancer:questionnaire:'+s.id+'|'+(s.version||1);
-  return{resourceType:'QuestionnaireResponse',questionnaire:qc,status:'in-progress',subject:{reference:pid},authored:nowISO(),author:{display:author},item};
-}
+function buildQR(s,pid,author){return EmrSdc.buildQR(s,{values:CASE.values,rows:getRows,pid,author,now:nowISO()})}
 
 /* FHIR Bundle */
-const UC={'mg/dL':'mg/dL','mmol/L':'mmol/L','mEq/L':'meq/L','g/dL':'g/dL','mmHg':'mm[Hg]','bpm':'/min','beats/min':'/min','/min':'/min','°C':'Cel','°F':'[degF]','kg':'kg','g':'g','mg':'mg','mL':'mL','L':'L','%':'%','µmol/L':'umol/L','umol/L':'umol/L','mg/L':'mg/L','U/L':'U/L','mL/h':'mL/h','mL/min':'mL/min','h':'h','min':'min'};
-const qty=(v,u)=>{const q={value:+v};if(u){q.unit=u;if(UC[u]){q.system='http://unitsofmeasure.org';q.code=UC[u]}}return q};
 const xh=t=>`<div xmlns="http://www.w3.org/1999/xhtml">${String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br/>')}</div>`;
 function patientRes(){const p=CASE.patient||{},r={resourceType:'Patient',identifier:[{system:'urn:emr-enhancer:synthetic-mrn',value:p.mrn||'SYNTHETIC-'+CASE.id}]};
   if(p.name)r.name=[{text:p.name}];const g={M:'male',F:'female',O:'other'}[p.sex];if(g)r.gender=g;return r}
@@ -1203,8 +1179,67 @@ function dlBundle(){const t=$('bj').textContent;if(!t)return toast('Build first'
 
 /* Manual create */
 function escA(x){return String(x??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+/* Create-screen options: SDC checkbox and the global code-system picker */
+const PICK_ORDER=['snomed','loinc','rxnorm','icd10','icd11','atc','local'];
+let CS_PICK=['snomed','loinc'];
+const pickSys=()=>PICK_ORDER.map(csBy).filter(x=>x&&x.enabled!==false);
+const aiSystems=()=>CS_PICK.filter(k=>k!=='local');   // Local codes are never proposed by AI
+function renderPick(){
+  $('o_sys').innerHTML=pickSys().map(x=>`<label class="chk"><input type="checkbox" data-sys="${x.key}" ${CS_PICK.includes(x.key)?'checked':''} onchange="pickChanged()">${x.label}${x.verifier?'':' <span class="mu">(no verifier)</span>'}</label>`).join('')
+    +`<label class="chk"><input type="checkbox" id="o_none" ${CS_PICK.length?'':'checked'} onchange="pickNone(this)">None</label>`;
+  const ai=aiSystems();
+  $('o_note').textContent=CS_PICK.length?`AI proposes codes only in: ${ai.length?ai.map(k=>csBy(k).label).join(', '):'(nothing: Local is never proposed by AI)'}. New binding rows start with ${csBy(CS_PICK[0]).label}.`:'None: new sets are created uncoded (flagged "uncoded", still usable). Fields can still be coded by hand.';
+  document.querySelectorAll('#c_fields .fblock').forEach(polRefresh);
+}
+function pickChanged(){CS_PICK=[...document.querySelectorAll('#o_sys [data-sys]')].filter(i=>i.checked).map(i=>i.dataset.sys);renderPick()}
+function pickNone(el){if(el.checked)CS_PICK=[];renderPick()}   // unticking None with nothing else ticked puts it back
+function optsChanged(){
+  const on=$('o_sdc').checked,b=$('sdcLimits');
+  b.style.display=on?'block':'none';
+  b.innerHTML=on?'<b>SDC mode. A Questionnaire built from an element set cannot express:</b><ul>'+EmrSdc.LIMITS.map(l=>'<li>'+l.text+'</li>').join('')+'</ul>':'';
+}
+const effSystems=f=>{const p=f&&f.codingPolicy;if(p&&p.mode==='skip')return[];if(p&&p.mode==='custom')return(p.systems||[]).filter(k=>{const x=csBy(k);return x&&x.enabled!==false});return CS_PICK.slice()};
+
+/* Manual create form: a field has any number of binding rows plus a per-field policy (global / custom / skip) */
+function sysOptions(sel){
+  return '<option value="">— system —</option>'+CODESYS.filter(x=>x.enabled!==false||x.key===sel).map(x=>`<option value="${x.key}">${x.label}${x.verifier?'':' (no verifier)'}</option>`).join('')
+    +(sel&&!csBy(sel)?`<option value="${escA(sel)}">${escA(sel)} (unknown)</option>`:'');
+}
+function blkPolicy(blk){
+  const mode=blk.querySelector('.f-pol').value;
+  if(mode==='skip')return{mode,systems:[]};
+  if(mode==='custom'){const sy=[...blk.querySelectorAll('.f-polsys [data-k]')].filter(i=>i.checked).map(i=>i.dataset.k);return sy.length?{mode,systems:sy}:{mode:'skip',systems:[]}}
+  return{mode:'global',systems:CS_PICK.slice()};
+}
+function polChange(el){polRefresh(el.closest('.fblock'))}
+function polRefresh(blk){
+  if(!blk||!blk.querySelector)return;
+  const sel=blk.querySelector('.f-pol').value;
+  blk.querySelector('.f-polsys').style.display=sel==='custom'?'flex':'none';
+  const p=blkPolicy(blk),skip=p.mode==='skip';
+  blk.querySelector('.f-binds').style.display=skip?'none':'block';blk.querySelector('.f-addb').style.display=skip?'none':'inline-block';
+  const has=[...blk.querySelectorAll('.f-binds .f-code')].some(i=>i.value.trim());
+  blk.querySelector('.f-polnote').textContent=skip?(has?'Saving removes this field’s bindings. It stays usable, uncoded.':'No code on this field.'):'';
+  blk.querySelectorAll('.f-binds .bind').forEach(r=>{
+    const sys=r.querySelector('.f-sys').value;
+    r.querySelector('.f-pw').textContent=!skip&&sys&&p.systems.length&&!p.systems.includes(sys)?'⚠ outside this field’s chosen systems':'';
+  });
+}
+function addBindRow(blk,b){
+  b=b||{};const pol=blkPolicy(blk);
+  const r=document.createElement('div');r.className='field-row bind';
+  r.innerHTML=`<select class="f-sys" style="flex:.6" onchange="polRefresh(this.closest('.fblock'))">${sysOptions(b.system)}</select>
+    <input class="f-code" placeholder="code" value="${escA(b.code)}" style="flex:.7">
+    <input class="f-disp" placeholder="display (official term)" value="${escA(b.display)}" style="flex:1.5">
+    <button class="b sec sm" onclick="verifyRow(this)">Verify</button>
+    <span class="mu f-stat" style="min-width:110px"></span><span class="gen-warn f-pw"></span>
+    <button class="b sec sm" title="Remove this binding" onclick="const k=this.closest('.fblock');this.closest('.bind').remove();polRefresh(k)">×</button>`;
+  r.querySelector('.f-sys').value=b.system||(pol.systems[0]||'');
+  if(b.code){const t=bst(b),rw=roleWarn(blk._orig,b);r.querySelector('.f-stat').textContent=(t==='verified'?STAT.verified:'unverified')+(rw?' · ⚠ '+rw:'')}
+  blk.querySelector('.f-binds').appendChild(r);polRefresh(blk);
+}
 function addFieldRow(data){
-  const box=$('c_fields'),bs=bnds(data),c=bs[0]||{};
+  const box=$('c_fields'),bs=bnds(data),pol=data?.codingPolicy||{mode:'global'};
   const b=document.createElement('div');b.className='fblock';b._orig=data?JSON.parse(JSON.stringify(data)):{};
   b.innerHTML=`<div class="field-row">
     <input class="f-id" placeholder="id" value="${escA(data?.id)}" style="flex:.7">
@@ -1214,31 +1249,34 @@ function addFieldRow(data){
     <input class="f-extra" placeholder="unit / options" value="${escA(data?.unit||(data?.options?data.options.join(','):''))}" style="flex:1">
     <label style="display:flex;align-items:center;gap:4px;font-weight:400;white-space:nowrap"><input type="checkbox" class="f-rep" style="width:auto" ${data?.repeat?'checked':''}> repeat</label>
     <button class="b sec sm" onclick="this.closest('.fblock').remove()">×</button></div>
-  <div class="field-row bind">
-    <select class="f-sys" style="flex:.6"><option value="">no code</option>${CODESYS.filter(x=>x.enabled!==false||x.key===c.system).map(x=>`<option value="${x.key}">${x.label}${x.verifier?'':' (no verifier)'}</option>`).join('')}</select>
-    <input class="f-code" placeholder="code" value="${escA(c.code)}" style="flex:.7">
-    <input class="f-disp" placeholder="display (official term)" value="${escA(c.display)}" style="flex:1.5">
-    <button class="b sec sm" onclick="verifyRow(this)">Verify</button>
-    <span class="mu f-stat" style="min-width:110px"></span>${bs.length>1?`<span class="mu" title="Extra bindings are kept when you save">+${bs.length-1} more binding(s) kept</span>`:''}</div>`;
+  <div class="field-row cpol" style="align-items:center;flex-wrap:wrap">
+    <span class="mu" style="white-space:nowrap">Code systems:</span>
+    <select class="f-pol" style="flex:.9" onchange="polChange(this)"><option value="global">global picker</option><option value="custom">custom for this field</option><option value="skip">skip (no code)</option></select>
+    <span class="f-polsys pick" style="display:none">${pickSys().map(x=>`<label class="chk"><input type="checkbox" data-k="${x.key}" ${pol.mode==='custom'&&(pol.systems||[]).includes(x.key)?'checked':''} onchange="polChange(this)">${x.label}</label>`).join('')}</span>
+    <span class="mu f-polnote"></span></div>
+  <div class="f-binds"></div>
+  <button class="b sec sm f-addb" onclick="addBindRow(this.closest('.fblock'))">+ binding</button>`;
   if(data?.type)b.querySelector('.f-type').value=data.type;
-  b.querySelector('.f-sys').value=c.system||'';
-  if(c.code){const t=bst(c),rw=roleWarn(data,c);b.querySelector('.f-stat').textContent=(t==='verified'?STAT.verified:'unverified')+(rw?' · ⚠ '+rw:'')}
+  b.querySelector('.f-pol').value=pol.mode==='custom'||pol.mode==='skip'?pol.mode:'global';
   box.appendChild(b);
+  if(bs.length)bs.forEach(x=>addBindRow(b,x));
+  else if(pol.mode!=='skip'&&effSystems(data).length)addBindRow(b);   // one empty row, pre-set to the first chosen system
+  polRefresh(b);
 }
 async function verifyRow(btn){
-  const b=btn.closest('.fblock'),stat=b.querySelector('.f-stat'),disp=b.querySelector('.f-disp');
+  const b=btn.closest('.bind'),blk=btn.closest('.fblock'),stat=b.querySelector('.f-stat'),disp=b.querySelector('.f-disp');
   const system=b.querySelector('.f-sys').value,code=b.querySelector('.f-code').value.trim();
   if(!system||!code){stat.textContent=STAT.missing;return}
   const c={system,code,display:disp.value.trim()};
   stat.textContent='checking…';
   const r=await verifyBinding(c);
   if(r==='verified'&&!disp.value.trim())disp.value=c.display;
-  const rw=roleWarn({type:b.querySelector('.f-type').value},c);
+  const rw=roleWarn({type:blk.querySelector('.f-type').value},c);
   stat.textContent=STAT[r]+(r==='mismatch'?` — server: ${MM[ck(c)]}`:'')+(rw?' · ⚠ '+rw:'');
   stat.style.color=r==='verified'?'var(--g)':'var(--a)';
   codesUI();
 }
-function resetCreate(){$('c_id').value='';$('c_title').value='';$('c_kind').value='care';$('c_desc').value='';$('c_fields').innerHTML='';addFieldRow()}
+function resetCreate(){$('o_sdc').disabled=false;$('c_id').value='';$('c_title').value='';$('c_kind').value='care';$('c_desc').value='';$('c_fields').innerHTML='';addFieldRow()}
 function saveElement(){
   const id=$('c_id').value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'_');
   const title=$('c_title').value.trim();
@@ -1250,14 +1288,22 @@ function saveElement(){
     const label=q('.f-label').value.trim();if(!label)return;
     const type=q('.f-type').value,extra=q('.f-extra').value.trim();
     const f={...(row._orig||{}),id:q('.f-id').value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'_')||'f',label,type};
-    delete f.unit;delete f.options;delete f.repeat;delete f.coding;delete f.bindings;delete f.flag;
+    delete f.unit;delete f.options;delete f.repeat;delete f.coding;delete f.bindings;delete f.flag;delete f.codingPolicy;
     if(type==='select'&&extra)f.options=extra.split(',').map(x=>x.trim()).filter(Boolean);else if(extra)f.unit=extra;
     if(q('.f-rep').checked)f.repeat=true;
-    const system=q('.f-sys').value,code=q('.f-code').value.trim();
-    const ob=bnds(row._orig),bl=[];
-    if(system&&code){const o=ob[0];bl.push({system,code,display:q('.f-disp').value.trim(),source:(o&&o.system===system&&o.code===code&&o.source)||'manual'})}
-    ob.slice(1).forEach(x=>{if(!bl.some(y=>ck(y)===ck(x)))bl.push(x)});   // extra bindings are never dropped silently
-    if(bl.length)f.bindings=bl;
+    const pol=blkPolicy(row);
+    if(pol.mode==='skip')f.codingPolicy={mode:'skip'};   // deliberate: no code on this field
+    else{
+      if(pol.mode==='custom')f.codingPolicy={mode:'custom',systems:pol.systems};
+      const ob=bnds(row._orig),bl=[];
+      row.querySelectorAll('.f-binds .bind').forEach(br=>{
+        const system=br.querySelector('.f-sys').value,code=br.querySelector('.f-code').value.trim();
+        if(!system||!code||bl.some(y=>ck(y)===ck({system,code})))return;
+        const o=ob.find(x=>x.system===system&&x.code===code);
+        bl.push({system,code,display:br.querySelector('.f-disp').value.trim(),source:(o&&o.source)||'manual'});
+      });
+      if(bl.length)f.bindings=bl;
+    }
     fields.push(f);
   });
   if(!fields.length)return toast('Add at least one field');
@@ -1265,20 +1311,23 @@ function saveElement(){
   const set={...(prev||{}),id,kind:$('c_kind').value,title,desc:$('c_desc').value.trim(),fields,custom:true};
   if(prev&&canon(prev.fields)!==canon(fields)){set.version=(prev.version||1)+1;set.history=[...(prev.history||[]),{version:prev.version||1,title:prev.title,desc:prev.desc,fields:prev.fields,at:nowISO()}]}
   else set.version=prev?.version||1;
-  if(prev?.sdc&&canon(prev.fields)!==canon(fields))set.sdc={...prev.sdc,modified:true};
+  if(prev&&prev.sdc&&!prev.sdc.authored){if(canon(prev.fields)!==canon(fields))set.sdc={...prev.sdc,modified:true}}   // imported Questionnaire: keep as before
+  else if($('o_sdc').checked)authorSdc(set);   // Questionnaire built from the fields, stored with the set
+  else{delete set.sdc;delete set.questionnaire}
   const i=REGISTRY.findIndex(s=>s.id===id);if(i>=0)REGISTRY[i]=set;else REGISTRY.push(set);
-  save();toast('Saved: '+title);renderAll();resetCreate();
+  save();toast('Saved: '+title+(isUncoded(set)?' (uncoded — still usable)':''));renderAll();resetCreate();
 }
 function renderCustomList(){
   const customs=REGISTRY.filter(s=>s.custom||s.generated||!BUILTIN.find(b=>b.id===s.id));
   if(!customs.length){$('customList').innerHTML='<span class="mu">None yet.</span>';return}
-  $('customList').innerHTML=customs.map(s=>`<div class="item"><div><span class="kind ${s.kind}">${s.kind}</span> ${s.title} <span class="mu">(${s.id})</span></div>
+  $('customList').innerHTML=customs.map(s=>`<div class="item"><div><span class="kind ${s.kind}">${s.kind}</span> ${s.title}${sdcBadge(s)}${uncodedBadge(s)} <span class="mu">(${s.id})</span></div>
     <button class="b sec sm" onclick="editCustom('${s.id}')">Edit</button></div>`).join('');
 }
 function editCustom(id){
   const s=getSet(id);if(!s)return;
   $('c_id').value=s.id;$('c_title').value=s.title;$('c_kind').value=s.kind;$('c_desc').value=s.desc||'';
   $('c_fields').innerHTML='';(s.fields||[]).forEach(f=>addFieldRow(f));
+  $('o_sdc').checked=!!s.sdc;$('o_sdc').disabled=!!(s.sdc&&!s.sdc.authored);optsChanged();
   document.querySelector('[data-t=create]').click();
 }
 
@@ -1443,6 +1492,7 @@ async function encClose(id){
 /* Init */
 $('asys').innerHTML=CODESYS.filter(x=>x.verifier&&x.enabled!==false).map(x=>`<option value="${x.key}">${x.label}</option>`).join('');
 loadSet();applyAiState();load();$('narrative').value=CASE.narrative||'';fillPatient();$('n_user').value=localStorage.getItem('vr_user')||'';
+renderPick();optsChanged();
 if(!$('c_fields').children.length)addFieldRow();
 renderAll();srvInit();
 </script>

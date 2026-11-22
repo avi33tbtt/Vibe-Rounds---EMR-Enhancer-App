@@ -15,7 +15,7 @@ SEED_PASSWORD='pick-one' npm run seed   # users: admin1, doctor1, nurse1, viewer
 npm start                          # http://127.0.0.1:3000
 ```
 
-Opening `emr-enhancer.html` directly as a file still works as the demo; registration needs the server.
+Opening `emr-enhancer.html` directly as a file still works as the demo; registration needs the server. The page loads `sdc.js` (the shared FHIR SDC code, also used by the server), so keep it in the same folder as the HTML.
 
 ## Roles (enforced on the server, see `permissions.js`)
 
