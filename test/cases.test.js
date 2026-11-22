@@ -183,7 +183,7 @@ test('the app role cannot delete, truncate, or rewrite who/what a case belongs t
   await assert.rejects(env.pool.query('DELETE FROM clinical_cases WHERE id = $1', [c.id]), /append-only/);
   await assert.rejects(env.pool.query('TRUNCATE clinical_cases'), /append-only|cannot truncate a table referenced/);   // Postgres refuses a referenced table before the trigger runs
   await assert.rejects(env.pool.query('TRUNCATE clinical_cases CASCADE'), /append-only/);
-  await assert.rejects(env.pool.query('TRUNCATE case_encounters'), /append-only/);
+  await assert.rejects(env.pool.query('TRUNCATE case_encounters'), /append-only|cannot truncate a table referenced/);   // clinical_events (B3a) now references it, so Postgres refuses first: still a refusal
   await assert.rejects(env.pool.query('TRUNCATE case_narrative_entries'), /append-only/);
   await assert.rejects(env.pool.query('TRUNCATE patients CASCADE'), /append-only/);
   for (const t of ['clinical_cases', 'case_encounters', 'case_narrative_entries']) {

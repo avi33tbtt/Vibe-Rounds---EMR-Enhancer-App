@@ -16,7 +16,7 @@ test.after(async () => { await env.close(); });
 
 // ---------- database ----------
 // Every table must be listed here. A new table fails this test until someone decides which kind it is.
-const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews'];        // never deleted: rows are archived, closed, appended or retired
+const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events'];        // never deleted: rows are archived, closed, appended or retired
 const NOT_CLINICAL = ['users', 'sessions', 'schema_migrations', 'ai_settings'];   // accounts, logins, bookkeeping, settings
 
 test('every table is classified, and every clinical table refuses DELETE', async () => {
@@ -39,6 +39,13 @@ test('every table is classified, and every clinical table refuses DELETE', async
   assert.equal((await d.post(`/api/element-sets/${ks}/versions/1/submit`, {})).status, 200);
   const inf = client(env.base); assert.equal((await inf.login('informatician1')).status, 200);
   assert.equal((await inf.post(`/api/element-sets/${ks}/versions/1/approve`, { reason: 'Keep review' })).status, 200);
+
+  // published, applied and a value recorded: the applied-set, observation and event tables have rows to protect too (task B3a)
+  const adm = client(env.base); assert.equal((await adm.login('admin1')).status, 200);
+  assert.equal((await adm.post(`/api/element-sets/${ks}/versions/1/publish`, {})).status, 200);
+  const as = await a.post(`/api/cases/${kc.body.case.id}/applied-sets`, { setId: ks, version: 1 });
+  assert.equal(as.status, 201, JSON.stringify(as.body));
+  assert.equal((await a.post(`/api/cases/${kc.body.case.id}/observations`, { observations: [{ appliedSetId: as.body.appliedSet.id, fieldKey: 'k', value: 'Keep value', effectiveAt: '2020-01-01T10:00:00Z', sourceType: 'clinician' }] })).status, 201);
 
   for (const t of CLINICAL) {
     const n = Number((await env.pool.query(`SELECT count(*) n FROM ${t}`)).rows[0].n);

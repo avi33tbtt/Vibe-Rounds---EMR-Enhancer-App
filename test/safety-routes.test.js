@@ -36,6 +36,12 @@ const MATRIX = {
   'PATCH /api/cases/:id/archive':   { guard: 'cases:write' },
   'POST /api/cases/:id/encounters': { guard: 'cases:write' },
   'POST /api/cases/:id/narrative':  { guard: 'cases:write' },
+  'POST /api/cases/:id/applied-sets': { guard: 'cases:write' },
+  'POST /api/cases/:id/applied-sets/:asid/withdraw': { guard: 'cases:write' },
+  'POST /api/cases/:id/observations': { guard: 'cases:write' },
+  'GET /api/cases/:id/timeline':    { guard: 'cases:read' },
+  'POST /api/observations/:id/correct': { guard: 'cases:write' },
+  'POST /api/observations/:id/entered-in-error': { guard: 'cases:write' },
   'GET /api/element-sets':          { guard: 'sets:read' },
   'POST /api/element-sets':         { guard: 'sets:write' },
   'GET /api/element-sets/:id':      { guard: 'sets:read' },
@@ -277,6 +283,32 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/element-sets/:id/versions/:version/retire', admin, async () => {
         const r = await admin.c.post(`/api/element-sets/${S.setId}/versions/${S.revV}/retire`, {});
         assert.equal(r.status, 200, JSON.stringify(r.body)); return ['set.retire'];
+      }],
+      ['POST /api/cases/:id/applied-sets', nurse, async () => {      // B3a: a published set is needed, so it is made, reviewed and published first (those routes have their own steps above)
+        const def = { title: 'Audit obs set', fields: [{ id: 'hr', label: 'Heart rate', type: 'number', unit: 'bpm' }] };
+        const made = await doctor.c.post('/api/element-sets', { slug: 'audit-obs-set', kind: 'custom', definition: def });
+        assert.equal(made.status, 201, JSON.stringify(made.body)); S.obsSet = made.body.set.id;
+        assert.equal((await doctor.c.post(`/api/element-sets/${S.obsSet}/versions/1/submit`, {})).status, 200);
+        assert.equal((await reviewer.c.post(`/api/element-sets/${S.obsSet}/versions/1/approve`, { reason: 'Audit approval' })).status, 200);
+        assert.equal((await admin.c.post(`/api/element-sets/${S.obsSet}/versions/1/publish`, {})).status, 200);
+        const r = await nurse.c.post(`/api/cases/${S.cid}/applied-sets`, { setId: S.obsSet, version: 1 });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); S.asid = r.body.appliedSet.id; return ['case.set_apply'];
+      }],
+      ['POST /api/cases/:id/observations', nurse, async () => {
+        const r = await nurse.c.post(`/api/cases/${S.cid}/observations`, { observations: [{ appliedSetId: S.asid, fieldKey: 'hr', value: 72, effectiveAt: '2020-01-01T10:00:00Z', sourceType: 'clinician' }] });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); S.oid = r.body.observations[0].id; return ['observation.record'];
+      }],
+      ['POST /api/observations/:id/correct', nurse, async () => {
+        const r = await nurse.c.post(`/api/observations/${S.oid}/correct`, { value: 74, sourceType: 'clinician', reason: 'Audit correction' });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); S.oid2 = r.body.observation.id; return ['observation.correct'];
+      }],
+      ['POST /api/observations/:id/entered-in-error', nurse, async () => {
+        const r = await nurse.c.post(`/api/observations/${S.oid2}/entered-in-error`, { reason: 'Audit entered in error' });
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['observation.entered_in_error'];
+      }],
+      ['POST /api/cases/:id/applied-sets/:asid/withdraw', nurse, async () => {
+        const r = await nurse.c.post(`/api/cases/${S.cid}/applied-sets/${S.asid}/withdraw`, {});
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['case.set_withdraw'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);
