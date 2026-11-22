@@ -59,7 +59,7 @@ function page() {
   return { w, d: w.document, errors };
 }
 
-// Nothing the data supplied may have become an element, and no handler other than our own may exist.
+// Nothing the data supplied may have become an element, and no inline handler may exist.
 function assertInert(w, d, id) {
   const box = d.getElementById(id);
   assert.ok(box, id + ' exists');
@@ -67,7 +67,7 @@ function assertInert(w, d, id) {
   assert.equal(bad, null, `${id}: hostile markup became an element: ${bad && bad.outerHTML}`);
   for (const el of box.querySelectorAll('*')) {
     for (const a of el.attributes) {
-      if (/^on/.test(a.name)) assert.ok(a.name === 'onclick' || a.name === 'onchange', `${id}: unexpected ${a.name} on <${el.tagName.toLowerCase()}>`);
+      if (/^on/.test(a.name)) assert.fail(`${id}: inline handler ${a.name} on <${el.tagName.toLowerCase()}> (the page has none since 6d-2c)`);
     }
   }
   assert.equal(w.__pwn, undefined, `${id}: hostile script ran`);
@@ -116,18 +116,18 @@ test('an id containing a quote cannot break out of an inline handler', () => {
     w[fn] = (...a) => got.push([fn, ...a]);
   const click = (sel, root = d) => { const el = root.querySelector(sel); assert.ok(el, 'found ' + sel); el.click(); };
   const last = (sel, back = 2) => { const all = d.querySelectorAll(sel); assert.ok(all.length >= back, 'found ' + sel); all[all.length - back].click(); };
-  last('#libList button[onclick^="applySet"]');      // built-ins come first, then the hostile set, then odd_kind
+  last('#libList button[data-act="applySet"]');      // built-ins come first, then the hostile set, then odd_kind
   last('#elementList .item');
-  click('#forms button[onclick^="removeSet"]');
-  last('#libList button[onclick^="dlQ"]');
-  click('#customList button[onclick^="editCustom"]');
+  click('#forms button[data-act="removeSet"]');
+  last('#libList button[data-act="dlQ"]');
+  click('#customList button[data-act="editCustom"]');
   click('#noteList button[data-act="signNote"]');
   click('#noteList button[data-act="toggleAmend"]');
   click('#caseList .item');
   const sel = d.querySelector('#forms select'); sel.dispatchEvent(new w.Event('change', { bubbles: true }));   // setVal(fieldId, value)
   const ta = d.querySelector('#noteList textarea'); ta.dispatchEvent(new w.Event('change', { bubbles: true })); // editNote(noteId, value)
   const add = d.querySelector('#forms .rep-add button'); d.getElementById('new_' + REP_ID).value = '5'; add.click(); // addRow(fieldId, value)
-  click('#forms button[onclick^="delRow"]');
+  click('#forms button[data-act="delRow"]');
   assert.equal(w.__pwn, undefined, 'no handler argument executed code');
   const by = fn => got.filter(g => g[0] === fn);
   assert.equal(by('applySet')[0][1], SET_ID);   // from the library button

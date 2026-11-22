@@ -30,8 +30,8 @@ function page({ store = {}, tx = {} } = {}) {
   const w = dom.window, d = w.document;
   return { w, d, errors, $: id => d.getElementById(id), ev: c => { const r = w.eval(c); return r === undefined ? r : JSON.parse(JSON.stringify(r)); } };
 }
-const tick = (p, key, on) => { const i = p.d.querySelector(`#o_sys [data-sys=${key}]`); i.checked = on; i.dispatchEvent(new p.w.Event('change')); };
-const none = p => { const i = p.$('o_none'); i.checked = true; i.dispatchEvent(new p.w.Event('change')); };
+const tick = (p, key, on) => { const i = p.d.querySelector(`#o_sys [data-sys=${key}]`); i.checked = on; i.dispatchEvent(new p.w.Event('change', { bubbles: true })); };
+const none = p => { const i = p.$('o_none'); i.checked = true; i.dispatchEvent(new p.w.Event('change', { bubbles: true })); };
 const sdcBox = (p, on) => { p.$('o_sdc').checked = on; p.$('o_sdc').dispatchEvent(new p.w.Event('change', { bubbles: true })); };
 // Fill one field block of the manual create form.
 function field(p, blk, { id, label, type = 'text', extra = '', rep = false, pol, polSys = [], binds = [] }) {

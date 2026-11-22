@@ -1,6 +1,6 @@
 'use strict';
 // Chunk 06d-2a: inline on*="" handlers move to one delegated listener (data-act / data-arg / data-ev, ACT table).
-// 6d-2b and 6d-2c convert the rest; MAX_INLINE is a ratchet that each row lowers (2c sets it to 0).
+// All inline handlers are gone (6d-2c); MAX_INLINE stays 0 so none can come back.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -8,11 +8,11 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 const { pageHtml } = require('./html');
 
-const MAX_INLINE = 31;
+const MAX_INLINE = 0;
 const src = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
 const inline = s => (s.match(/ on[a-z]+="/g) || []).length;
 
-test('inline handlers never grow (ratchet toward zero in 6d-2c)', () => {
+test('the page has zero inline on*="" handlers', () => {
   assert.ok(inline(src) <= MAX_INLINE, `${inline(src)} inline handlers, limit ${MAX_INLINE}`);
 });
 

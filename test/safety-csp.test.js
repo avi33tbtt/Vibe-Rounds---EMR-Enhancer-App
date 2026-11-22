@@ -1,6 +1,6 @@
 'use strict';
 // Chunk 06d-1: Content-Security-Policy with a per-response nonce (server half).
-// 6d-2a to 6d-2c convert the inline on*="" handlers; 6d-2c then removes the temporary script-src-attr rule pinned below.
+// Handlers were converted in 6d-2a to 6d-2c; script-src-attr is 'none' (tested below).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -56,15 +56,16 @@ test('the terminology host comes from TX_HOST / opts and is reduced to an origin
   }
 });
 
-test('TEMPORARY rule: script-src-attr allows inline handlers until 6d-2c (this test must be changed when that row removes it)', async () => {
+test("script-src-attr is 'none' and the page has no inline on*=\"\" handler (6d-2c closed the temporary rule)", async () => {
   const { base, close } = await setup();
   try {
-    const d = directives((await get(base, '/')).headers.get('content-security-policy'));
-    assert.deepEqual(d['script-src-attr'], ["'unsafe-inline'"]);
-    assert.ok(/ on(click|change|input|keydown)="/.test(fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8')), 'inline handlers still exist, which is why the rule exists');
+    const res = await get(base, '/');
+    const d = directives(res.headers.get('content-security-policy'));
+    assert.deepEqual(d['script-src-attr'], ["'none'"]);
+    assert.ok(!/unsafe-hashes/.test(res.headers.get('content-security-policy')));
+    assert.equal(((await res.text()).match(/ on[a-z]+="/g) || []).length, 0, 'inline handlers in the served page');
   } finally { await close(); }
 });
-test.todo('6d-2c: no inline on*="" handlers in the page and script-src-attr is \'none\' (flip the temporary-rule test above)');
 
 test('real Chrome: a <script> without the nonce does not run; the page itself loads with no CSP violation', async (t) => {
   let browser;
@@ -94,6 +95,11 @@ test('real Chrome: a <script> without the nonce does not run; the page itself lo
       setTimeout(() => resolve({ pwned: window.__pwned === 1, seen }), 300);
     }));
     assert.equal(r.pwned, false, 'inline script without nonce must not run');
+    const attr = await page.evaluate(() => new Promise(resolve => {
+      const b = document.createElement('button'); b.setAttribute('onclick', 'window.__attr = 1'); document.body.appendChild(b); b.click();
+      setTimeout(() => resolve(window.__attr === 1), 200);
+    }));
+    assert.equal(attr, false, 'an injected onclick attribute must not run');
     assert.ok(r.seen.some(v => v.startsWith('script-src')), 'the browser reported the violation: ' + r.seen);
     // The page's own nonce'd script did run (the app is alive).
     assert.equal(await page.evaluate(() => typeof window.liveCheck), 'function');

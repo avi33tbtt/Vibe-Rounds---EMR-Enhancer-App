@@ -46,7 +46,7 @@ const DEFAULT_LIMITS = {
 };
 
 // Content-Security-Policy (chunk 06d-1). The nonce is new for every response and is injected into the page's <script> tags.
-// TEMPORARY: script-src-attr allows the ~93 inline on*="" handlers until 6d-2c converts them (test/safety-csp.test.js pins this).
+// script-src-attr is 'none': the page has no inline on*="" handlers (6d-2c); actions run through the delegated listener.
 // style-src keeps 'unsafe-inline' (one <style> block and inline style="" attributes); it is not about script execution.
 const DEFAULT_TX_HOST = 'https://tx.fhir.org';
 function txOrigin(v) {
@@ -57,7 +57,7 @@ function cspHeader(nonce, tx) {
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
-    "script-src-attr 'unsafe-inline'",
+    "script-src-attr 'none'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
