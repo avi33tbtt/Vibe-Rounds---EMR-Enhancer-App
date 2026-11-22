@@ -1,5 +1,7 @@
 'use strict';
 const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
 const { tx } = require('./db');
 const { audit } = require('./audit');
@@ -43,6 +45,26 @@ const DEFAULT_LIMITS = {
   write: { max: 120, windowMs: 60 * 1000 },
 };
 
+// Content-Security-Policy (chunk 06d-1). The nonce is new for every response and is injected into the page's <script> tags.
+// TEMPORARY: script-src-attr allows the ~93 inline on*="" handlers until 6d-2c converts them (test/safety-csp.test.js pins this).
+// style-src keeps 'unsafe-inline' (one <style> block and inline style="" attributes); it is not about script execution.
+const DEFAULT_TX_HOST = 'https://tx.fhir.org';
+function txOrigin(v) {
+  try { const u = new URL(String(v || DEFAULT_TX_HOST)); return /^https?:$/.test(u.protocol) ? u.origin : new URL(DEFAULT_TX_HOST).origin; }
+  catch (_) { return DEFAULT_TX_HOST; }
+}
+function cspHeader(nonce, tx) {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}'`,
+    "script-src-attr 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
+    `connect-src 'self' ${tx}`,
+  ].join('; ');
+}
+
 function createApp(pool, opts = {}) {
   const app = express();
   const https = opts.https ?? envOn(process.env.HTTPS);
@@ -50,8 +72,11 @@ function createApp(pool, opts = {}) {
   const lim = Object.fromEntries(Object.entries(LIM).map(([k, v]) => [k, createLimiter(v)]));
   app.disable('x-powered-by');
   app.set('trust proxy', opts.trustProxy ?? proxyHops(process.env.TRUST_PROXY));
+  const txConnect = txOrigin(opts.txHost ?? process.env.TX_HOST);
   app.use(express.json({ limit: '50kb' }));
   app.use((req, res, next) => {
+    res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+    res.set('Content-Security-Policy', cspHeader(res.locals.cspNonce, txConnect));
     res.set({
       'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer',
@@ -81,7 +106,13 @@ function createApp(pool, opts = {}) {
   app.param('id', (_req, res, next, v) => (/^\d{1,9}$/.test(v) ? next() : res.status(404).json({ error: 'not_found' })));
 
   const html = path.join(__dirname, 'emr-enhancer.html');
-  app.get(['/', '/emr-enhancer.html'], (_req, res) => res.sendFile(html));
+  // The page is served with this response's nonce on every <script> tag (read per request; the file is small).
+  app.get(['/', '/emr-enhancer.html'], (_req, res, next) => {
+    fs.readFile(html, 'utf8', (err, src) => {
+      if (err) return next(err);
+      res.type('html').send(src.replace(/<script(?=[\s>])/g, `<script nonce="${res.locals.cspNonce}"`));
+    });
+  });
   const sdc = path.join(__dirname, 'sdc.js');   // the one shared copy of the SDC code
   app.get('/sdc.js', (_req, res) => res.sendFile(sdc));
 

@@ -20,7 +20,7 @@ test('security headers are on every response; HSTS only when HTTPS is flagged', 
         assert.match(h.get('permissions-policy'), /camera=\(\).*microphone=\(\).*geolocation=\(\)/, path);
         assert.equal(h.get('x-content-type-options'), 'nosniff', path);
         assert.equal(h.get('cache-control'), 'no-store', path);
-        assert.equal(h.get('content-security-policy'), null, 'CSP is chunk 6d, not here');
+        assert.ok(h.get('content-security-policy'), 'CSP is on every response (chunk 6d-1; details in safety-csp.test.js)');
         assert.equal(!!h.get('strict-transport-security'), https, `HSTS ${path} https=${https}`);
         if (https) assert.match(h.get('strict-transport-security'), /max-age=\d+/);
       }
