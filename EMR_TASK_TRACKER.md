@@ -42,7 +42,7 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | 6  | chunk-06-security.md | Security hardening (original) | SPLIT | | | Replaced by 6a to 6e. |
 | 6a | chunk-06a-escaping.md | Escape all user text in the page | DONE | 2026-11-22 | page + 1 test file | emr-enhancer.html, test/safety-escaping.test.js, DECISIONS.md. Shared escaper + jsA for handler ids at ~45 sites; 5 hostile-string tests. 97 tests (92 pass, 5 todo). Rest of 6 still TODO. |
 | 6b | chunk-06b-headers-cookies-ratelimit.md | Headers, Secure cookie, rate limits | DONE | 2026-11-22 | app.js, auth.js + 1 test | app.js, auth.js, ratelimit.js, test/safety-hardening.test.js, env.txt, DECISIONS.md. Headers, Secure cookie (HTTPS=1), 429 limits on login and writes, audited once per window. 106 tests (101 pass, 5 todo). Per-process limiter. |
-| 6c | chunk-06c-db-role.md | Restricted DB role, no DELETE/TRUNCATE | TODO | | 1 migration + config + tests | |
+| 6c | chunk-06c-db-role.md | Restricted DB role, no DELETE/TRUNCATE | DONE | 2026-11-22 | 1 migration + config + tests | 005_app_role.sql, MIGRATE_DATABASE_URL, tests run as emr_app, TRUNCATE todo now real. Not tried on Render. |
 | 6d | chunk-06d-csp.md | Content-Security-Policy (93 inline handlers) | TODO | | decide approach first; may need 2 sessions | |
 | 6e | chunk-06e-policy-docs.md | Retention, access, consent notes | TODO | | docs only | |
 | 7  | chunk-07-backup-deploy.md | Backup, restore, deploy (original) | SPLIT | | | Replaced by 7a to 7d. |
@@ -69,7 +69,7 @@ Suggested order: numeric. 8e and 8f can be done at any point after 6a (they fix 
 - For 7c: perform the restore on a clean machine yourself and confirm the result.
 
 ## KNOWN GAPS (5 `test.todo` tests) and where they are fixed
-(a) signer/author read from typed box, not session -> 8e. (b) `delRow` splices observation rows -> 8f. (c) TRUNCATE not blocked on patients/encounters -> 6c. (d) signed-note immutability and stale-version conflicts only in the page; element sets, cases and notes are not stored on the server -> partly 8b/8c (sets submitted for review only); full server storage is NOT planned yet. (e) `GET /api/patients/:id/encounters` not audited -> left as is.
+(a) signer/author read from typed box, not session -> 8e. (b) `delRow` splices observation rows -> 8f. (c) closed by 6c. (d) signed-note immutability and stale-version conflicts only in the page; element sets, cases and notes are not stored on the server -> partly 8b/8c (sets submitted for review only); full server storage is NOT planned yet. (e) `GET /api/patients/:id/encounters` not audited -> left as is.
 
 ## OPEN QUESTIONS
 - Plan 8 needs a choice (recorded in DECISIONS.md): only a snapshot goes to the server on "submit for review". If you want sets stored on the server all the time, say so; that is a separate, larger chunk.

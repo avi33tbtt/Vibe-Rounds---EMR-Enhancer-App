@@ -43,7 +43,7 @@ async function migrate(pool, dir = path.join(__dirname, 'migrations')) {
 module.exports = { migrate };
 
 if (require.main === module) {
-  const pool = makePool();
+  const pool = makePool(process.env.MIGRATE_DATABASE_URL || process.env.DATABASE_URL);
   migrate(pool)
     .then(a => { console.log(a.length ? 'Applied: ' + a.join(', ') : 'Up to date'); return pool.end(); })
     .catch(e => { console.error(e.message); process.exit(1); });

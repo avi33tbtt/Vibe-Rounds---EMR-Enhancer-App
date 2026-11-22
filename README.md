@@ -17,6 +17,18 @@ npm start                          # http://127.0.0.1:3000
 
 Opening `emr-enhancer.html` directly as a file still works as the demo; registration needs the server. The page loads `sdc.js` (the shared FHIR SDC code, also used by the server), so keep it in the same folder as the HTML.
 
+## Database roles (restricted app role)
+
+Migration `005_app_role.sql` creates `emr_app`, a role that owns nothing: it cannot `DROP`/`ALTER`/`CREATE`, has no `DELETE` or `TRUNCATE` on `patients`, `encounters` or `audit_log`, and only the grants the code uses. `TRUNCATE` on `patients`/`encounters`/`audit_log` is also refused by trigger, even for the owner. For real use run migrations as the owner and the server as `emr_app`:
+
+```
+psql "$MIGRATE_DATABASE_URL" -c "ALTER ROLE emr_app LOGIN PASSWORD 'choose-a-long-secret'"   # once, never in git
+export MIGRATE_DATABASE_URL=postgres://OWNER:...@host:5432/emr     # migrations + seed
+export DATABASE_URL=postgres://emr_app:choose-a-long-secret@host:5432/emr   # the server
+```
+
+Without `MIGRATE_DATABASE_URL` the server migrates and runs on `DATABASE_URL` and warns that it has owner rights (local dev only). A new migration that adds a table must grant `emr_app` only what the code needs; a test fails if `DELETE`/`TRUNCATE` is ever granted outside `sessions`. The owner needs `CREATEROLE` for the first run (superuser locally); on a managed database, check that your owner user may create roles.
+
 ## Roles (enforced on the server, see `permissions.js`)
 
 | Role | Read patients | Register | Archive/restore | Open/close encounters | Audit log | Use AI | AI switch and limits |

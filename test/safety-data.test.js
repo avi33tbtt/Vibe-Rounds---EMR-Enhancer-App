@@ -56,9 +56,55 @@ test('patients are archived, not deleted: archive and restore keep the row, who 
   assert.equal((await env.pool.query('SELECT count(*) n FROM patients WHERE id = $1', [pid])).rows[0].n, '1');
 });
 
-// Known gap, found while writing this pack: the delete-blocking triggers cover DELETE but not TRUNCATE on patients/encounters.
-// The app has no route that can do it; closing it (a trigger or restricted database privileges) belongs to chunk 06.
-test.todo('patients and encounters also refuse TRUNCATE (today only audit_log does; no app route can reach it)');
+// Chunk 06c closes the old gap: TRUNCATE is refused by trigger for everyone, and the app's database role cannot delete or alter anything.
+test('patients and encounters refuse TRUNCATE even for the owner connection (trigger), like audit_log', async () => {
+  await assert.rejects(env.pool.query('TRUNCATE encounters'), /append-only/);
+  await assert.rejects(env.pool.query('TRUNCATE patients, encounters'), /append-only/);
+  await assert.rejects(env.pool.query('TRUNCATE patients CASCADE'), /append-only/);
+  // patients is also held by a foreign key, which hides its own trigger; drop the FK inside a rolled-back transaction to prove the trigger alone refuses it
+  const c = await env.pool.connect();
+  try {
+    await c.query('BEGIN');
+    await c.query('ALTER TABLE encounters DROP CONSTRAINT encounters_patient_id_fkey');
+    await assert.rejects(c.query('TRUNCATE patients'), /patients is append-only; TRUNCATE is not allowed/);
+  } finally { await c.query('ROLLBACK'); c.release(); }
+});
+
+test('the server runs as the restricted emr_app role: no DDL, no DELETE, no TRUNCATE on clinical tables', async () => {
+  assert.equal((await env.appPool.query('SELECT current_user u')).rows[0].u, 'emr_app');
+  const role = (await env.pool.query(`SELECT rolsuper, rolcreatedb, rolcreaterole, rolcanlogin FROM pg_roles WHERE rolname = 'emr_app'`)).rows[0];
+  assert.deepEqual(role, { rolsuper: false, rolcreatedb: false, rolcreaterole: false, rolcanlogin: false }, 'no login until an operator sets a password');
+  const denied = /permission denied|must be owner/;
+  const bad = [
+    'DROP TABLE patients', 'DROP TABLE audit_log', 'ALTER TABLE patients ADD COLUMN x text', 'ALTER TABLE encounters DROP COLUMN bed',
+    'CREATE TABLE sneaky(id int)', 'DROP SCHEMA public CASCADE', 'DROP TRIGGER patients_no_delete ON patients',
+    'DELETE FROM patients', 'DELETE FROM encounters', 'DELETE FROM audit_log',
+    'TRUNCATE patients', 'TRUNCATE encounters', 'TRUNCATE audit_log', 'TRUNCATE users',
+    `UPDATE audit_log SET action = 'x'`, `UPDATE users SET role = 'admin'`, 'DELETE FROM users', 'SELECT * FROM schema_migrations',
+    `ALTER TABLE patients DISABLE TRIGGER USER`,
+  ];
+  for (const q of bad) await assert.rejects(env.appPool.query(q), denied, q);
+});
+
+test('the app role still does what the app needs: register, archive, open and close an encounter, sign in, audit', async () => {
+  const c = env.appPool;
+  const pid = (await c.query(`INSERT INTO patients(mrn, name, dob, sex, created_by) VALUES ('ROLE-1','Role Test','1980-01-01','F',(SELECT id FROM users WHERE username='nurse1')) RETURNING id`)).rows[0].id;
+  assert.equal((await c.query('UPDATE patients SET archived = true WHERE id = $1', [pid])).rowCount, 1);
+  const eid = (await c.query(`INSERT INTO encounters(patient_id, bed, opened_by) VALUES ($1,'R-1',(SELECT id FROM users WHERE username='nurse1')) RETURNING id`, [pid])).rows[0].id;
+  assert.equal((await c.query(`UPDATE encounters SET status = 'closed' WHERE id = $1`, [eid])).rowCount, 1);
+  await c.query(`INSERT INTO audit_log(action) VALUES ('role.check')`);
+  assert.equal((await c.query('SELECT count(*) n FROM audit_log')).rows.length, 1);
+});
+
+test('guard for later migrations: the app role never gets DELETE or TRUNCATE on a table other than sessions', async () => {
+  const tables = (await env.pool.query(`SELECT table_name t FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`)).rows.map(r => r.t);
+  assert.ok(tables.includes('patients') && tables.length >= 6);
+  for (const t of tables.filter(t => t !== 'sessions')) {
+    for (const priv of ['DELETE', 'TRUNCATE']) {
+      assert.equal((await env.pool.query(`SELECT has_table_privilege('emr_app', $1, $2) ok`, [t, priv])).rows[0].ok, false, `${priv} on ${t}`);
+    }
+  }
+});
 
 // ---------- page: notes ----------
 const HTML = require('./html').pageHtml();

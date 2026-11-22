@@ -6,7 +6,8 @@ const { migrate } = require('./migrate');
 const { hashPassword } = require('./auth');
 
 (async () => {
-  const pool = makePool();
+  // Creates users, so it needs the owner connection (the app role can only read users).
+  const pool = makePool(process.env.MIGRATE_DATABASE_URL || process.env.DATABASE_URL);
   await migrate(pool);
   const pw = process.env.SEED_PASSWORD || crypto.randomBytes(9).toString('base64url');
   const users = [['admin1', 'Demo Admin', 'admin'], ['doctor1', 'Demo Doctor', 'doctor'], ['nurse1', 'Demo Nurse', 'nurse'], ['viewer1', 'Demo Viewer', 'viewer']];

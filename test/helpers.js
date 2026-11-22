@@ -15,11 +15,15 @@ async function setup(appOpts = {}) {
   for (const [u, r] of [['admin1', 'admin'], ['doctor1', 'doctor'], ['nurse1', 'nurse'], ['viewer1', 'viewer']]) {
     await pool.query('INSERT INTO users(username, display_name, role, password_hash) VALUES ($1,$2,$3,$4)', [u, u, r, hashPassword(PW)]);
   }
-  const server = createApp(pool, { quiet: true, ...appOpts }).listen(0, '127.0.0.1');
+  // The app under test runs as the restricted emr_app role (migration 005), like production.
+  // `pool` stays the owner connection for fixtures and for tests that probe the database directly.
+  const appPool = makePool(URL);
+  appPool.on('connect', c => c.query('SET ROLE emr_app'));
+  const server = createApp(appPool, { quiet: true, ...appOpts }).listen(0, '127.0.0.1');
   await new Promise(r => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const close = async () => { await new Promise(r => server.close(r)); await pool.end(); };
-  return { pool, base, close };
+  const close = async () => { await new Promise(r => server.close(r)); await appPool.end(); await pool.end(); };
+  return { pool, appPool, base, close };
 }
 
 // Tiny client that keeps its own session cookie.
