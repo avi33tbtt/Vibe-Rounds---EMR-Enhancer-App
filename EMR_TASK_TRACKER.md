@@ -56,14 +56,11 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | 7 | chunk-07-backup-deploy.md | Backup, restore, deploy (original) | SPLIT |  |  | Replaced by 7a to 7d. |
 | 7a | chunk-07a-container-tls.md | Container + TLS | DONE | 2026-11-22 | Dockerfile, compose, proxy config | Run on Windows Docker Desktop: build, migrate, db-role, app healthy, seed, curl -k https://localhost/ OK. Seed does not reset passwords (wipe with down -v). |
 | 7b | chunk-07b-encrypted-backups.md | Encrypted scheduled backups | DONE | 2026-11-22 | 1 script + schedule | scripts/backup.sh, compose backup profile, safety-backup test. age + public key; tested on real PG; Docker service not run yet. |
-| 7c | chunk-07c-restore-test.md | Restore script + recorded restore | IN PROGRESS | 2026-11-22 | 1 script + 1 doc; user does the clean-machine run | restore.sh, verify-restore.sh, safety-restore test, docs/RESTORE-TEST.md. Sandbox run matches. User: do Run 2 on a clean machine, then DONE. |
-| 7d | chunk-07d-downtime-golive-docs.md | Downtime page + go-live checklist | TODO |  | docs only | Needs: 7c. |
+| 7c | chunk-07c-restore-test.md | Restore script + recorded restore | DONE | 2026-11-22 | 1 script + 1 doc | restore.sh, verify-restore.sh, safety-restore test, docs/RESTORE-TEST.md. Run 2 reported done by owner 2026-11-22; Run 2 table not yet filled in. |
+| 7d | chunk-07d-downtime-golive-docs.md | Downtime page + go-live checklist | DONE | 2026-11-22 | docs only | docs/DOWNTIME.md, docs/GO-LIVE-CHECKLIST.md. All 7 gate items have evidence or owner; none ticked. Placeholders to fill. |
 | 8 | chunk-08-review-workflow.md | Review/approval workflow (original) | SPLIT |  |  | Replaced by 8a to 8f. |
 | 8a | chunk-08a-lint.md | Shared lint module | DONE | 2026-11-22 | 1 new module + 1 test | lint.js, test/lint.test.js, DECISIONS.md. 5 rules + needsTwoReviewers; 27 tests incl. seed-set check. Full suite 142 pass, 4 todo. Page loads lint.js in 8d. |
-| 8b | chunk-08b-submit-snapshot.md | Server: submit set for review (snapshot) | TODO |  | 1 migration, routes, tests | Needs: 8a. Re-pointed at server versions by B2r. |
-| 8c | chunk-08c-review-rules.md | Reviewer rules + frozen approved version | TODO |  | routes, trigger, tests | Needs: 8b. |
-| 8d | chunk-08d-review-ui.md | Review screens + tier badges | TODO |  | page + 1 test file | Needs: 8c. |
-| 8e | chunk-08e-signer-from-session.md | Signer/author from session (core-rule gap) | TODO |  | page + tests | Page-level only; server enforcement arrives in B3c. |
+| 8e | chunk-08e-signer-from-session.md | Signer/author from session (core-rule gap) | DONE | 2026-11-22 | page + tests | emr-enhancer.html, test/safety-data.test.js, test/safety-escaping.test.js. Signer, amender and FHIR author = signed-in user; no typed box; vr_user purged. 147 pass, 3 todo. Notes still in browser. |
 | 8f | chunk-08f-entered-in-error.md | No hard delete of observation rows | TODO |  | page + tests | Page-level only; server enforcement arrives in B3a/B3b. |
 | | | **TRACK B: canonical clinical context model on the server (book Ch5)** | | | | |
 | B0 | chunk-B0-baseline-contract.md | Baseline contract: prototype objects to entities (docs only) | TODO |  | 1 markdown file | Needs: 8f. Decision 2026-11-22: server is system of record. User reviews before B1. |
@@ -71,7 +68,10 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | B1b | chunk-B1b-cases-page.md | Cases in the page via storage adapter | TODO |  | page + 1 test file | Needs: B1a. |
 | B2a | chunk-B2a-element-sets-server.md | Versioned element sets (server) | TODO |  | 1 migration, 1 routes file, tests | Needs: B1a. |
 | B2b | chunk-B2b-element-sets-page.md | Library + case pinning use server versions | TODO |  | page + 1 test file | Needs: B2a, B1b. May merge into B3a/B3b (see chunk). |
-| B2r | chunk-B2r-review-on-versions.md | Re-point review workflow at server versions | TODO |  | 1 migration + route edits | Needs: B2a, 8d. |
+| 8b | chunk-08b-submit-snapshot.md | Server: submit set for review (snapshot) | TODO |  | 1 migration, routes, tests | Needs: 8a, B2a. Reordered 2026-11-22: build on server versions (apply chunk-B2r changes here; chunk text says snapshots). |
+| 8c | chunk-08c-review-rules.md | Reviewer rules + frozen approved version | TODO |  | routes, trigger, tests | Needs: 8b. Build on server versions. |
+| 8d | chunk-08d-review-ui.md | Review screens + tier badges | TODO |  | page + 1 test file | Needs: 8c, B2b. Build on server versions. |
+| B2r | chunk-B2r-review-on-versions.md | Re-point review workflow at server versions | SKIPPED | 2026-11-22 | n/a | Merged into 8b to 8d by the reorder; do not run separately. |
 | B3a | chunk-B3a-observations-server.md | Applied sets, observations, events (server) | TODO |  | 1 migration, 1 routes file, tests | Needs: B2a. Append-only; entered-in-error. |
 | B3b | chunk-B3b-observations-page.md | Values and trajectories via server; entered-in-error UI | TODO |  | page + 1 test file | Needs: B3a, 8f. Closes todo (b). |
 | B3c | chunk-B3c-notes-server.md | Notes and signing on the server | TODO |  | 1 migration, routes, page notes, tests | Needs: B3a, 8e. Closes todos (a) and (d). |
@@ -116,7 +116,7 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 
 Suggested order: numeric within each track; tracks run A, then B, then C, then D. Exceptions that are safe: 8e and 8f can be done any time after 6a; 6e and 7d can share one session; C0 to C4 are DB-free and may run in parallel with Track B if you want faster progress (C5a onward needs B5).
 
-Optional re-order to avoid rework: do B0 to B2a before 8b to 8d, so the review workflow is built directly on server versions and B2r disappears. Say "reorder review after B2" and the tracker will be changed.
+Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged into them (SKIPPED). Next rows in order: 8e, 8f, B0, B1a, B1b, B2a, B2b, 8b, 8c, 8d.
 
 ## ITEMS ONLY YOU CAN DO (Claude cannot)
 - Turn on branch protection for `main` and require the `test` check (GitHub, Settings, Branches).
@@ -131,7 +131,7 @@ Optional re-order to avoid rework: do B0 to B2a before 8b to 8d, so the review w
 - Check terminology licences and device-software/health-data rules (go-live gate).
 
 ## KNOWN GAPS (5 `test.todo` tests) and where they are fixed
-(a) signer/author read from typed box, not session -> page-level in 8e, server-enforced in B3c. (b) `delRow` splices observation rows -> page-level in 8f, server-enforced in B3a/B3b. (c) closed by 6c. (d) signed-note immutability and stale-version conflicts only in the page; element sets, cases and notes are not stored on the server -> DECIDED 2026-11-22: full server storage is now planned (B1 to B4); notes in B3c. (e) `GET /api/patients/:id/encounters` not audited -> left as is.
+(a) signer/author: page now uses the session (8e, done); server enforcement still in B3c. (b) `delRow` splices observation rows -> page-level in 8f, server-enforced in B3a/B3b. (c) closed by 6c. (d) signed-note immutability and stale-version conflicts only in the page; element sets, cases and notes are not stored on the server -> DECIDED 2026-11-22: full server storage is now planned (B1 to B4); notes in B3c. (e) `GET /api/patients/:id/encounters` not audited -> left as is.
 
 ## DECISIONS MADE ON 2026-11-22 (also in DECISIONS.md)
 - Server-side storage is ALWAYS ON for cases, element sets, observations and notes (reverses the snapshot-only idea). Browser storage remains only as the file:// demo fallback behind one storage adapter; signed-in sessions write no clinical data to localStorage.
@@ -141,7 +141,7 @@ Optional re-order to avoid rework: do B0 to B2a before 8b to 8d, so the review w
 - Cohort engine is built against synthetic fixtures first; the EMR cohort exporter is the last row.
 
 ## OPEN QUESTIONS
-- Plan 8b to 8d were written for snapshots; keep them as they are and re-point in B2r, or re-order (see above)?
+- Resolved 2026-11-22: re-ordered, review workflow (8b to 8d) now follows B2b and is built on server versions.
 - Where do the CCIS libraries and the Intelligence App live long term: this repo (current plan) or a separate repo after C9?
 - Which clinician owns the snake-envenomation parameters used by the slice?
 - Adding any API route makes `test/safety-routes.test.js` fail until the permission matrix there is updated on purpose.

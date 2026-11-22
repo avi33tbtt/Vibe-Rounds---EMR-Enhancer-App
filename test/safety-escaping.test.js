@@ -111,6 +111,7 @@ test('each hostile string is shown literally: set title, field label, option, no
 test('an id containing a quote cannot break out of an inline handler', () => {
   const { w, d } = page();
   w.renderLib(); w.renderCustomList();
+  w.eval("Srv.user = { username: 'doc', role: 'doctor', perms: [] }"); w.renderNotes();   // the Sign button is disabled without a session (chunk 8e)
   const got = [];
   for (const fn of ['applySet', 'removeSet', 'dlQ', 'editCustom', 'signNote', 'toggleAmend', 'editNote', 'setVal', 'addRow', 'delRow', 'openCase'])
     w[fn] = (...a) => got.push([fn, ...a]);

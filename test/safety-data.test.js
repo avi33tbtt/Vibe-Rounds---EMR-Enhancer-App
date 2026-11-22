@@ -118,8 +118,10 @@ function page() {
     notes: () => JSON.parse(JSON.stringify(w.eval('CASE.notes'))),
     note: id => JSON.parse(JSON.stringify(w.eval(`CASE.notes.find(n=>n.id==='${id}')`))) };
 }
+// The signer comes from the signed-in session (Srv.user, filled by /api/me or login). Tests set that directly.
+const signIn = (p, name) => p.w.eval(name ? `Srv.user = { username: ${JSON.stringify(name)}, role: 'doctor', perms: [] }` : 'Srv.user = null');
 function draft(p, who, body) {
-  p.$('n_user').value = who; p.$('n_title').value = 'Round note'; p.$('n_body').value = body;
+  signIn(p, who); p.$('n_title').value = 'Round note'; p.$('n_body').value = body;
   p.w.addNote('free');
   return p.notes()[0].id;
 }
@@ -143,7 +145,7 @@ test('a signed note cannot be edited, re-signed or discarded; only amended, with
   p.w.discardNote(id);                                                   // cannot be discarded either (confirm() says yes)
   assert.equal(p.note(id).status, 'signed');
 
-  p.$('n_user').value = 'Someone Else'; p.w.signNote(id);                // cannot be re-signed by another name or time
+  signIn(p, 'Someone Else'); p.w.signNote(id);                // cannot be re-signed by another name or time
   assert.equal(p.note(id).signedBy, 'Dr Real'); assert.equal(p.note(id).signedAt, signed.signedAt);
 
   // the text area of a signed note is not editable in the page at all
@@ -156,10 +158,10 @@ test('a signed note cannot be edited, re-signed or discarded; only amended, with
   assert.equal(p.note(id).amendments.length, 0, 'no reason, no amendment');
   setForm('Dose corrected', 'Plan A, edited while a draft'); p.w.submitAmend(id);
   assert.equal(p.note(id).amendments.length, 0, 'unchanged text is not an amendment');
-  p.$('n_user').value = ''; setForm('Dose corrected', 'Plan B'); p.w.submitAmend(id);
-  assert.equal(p.note(id).amendments.length, 0, 'no signer name, no amendment');
+  signIn(p, null); setForm('Dose corrected', 'Plan B'); p.w.submitAmend(id);
+  assert.equal(p.note(id).amendments.length, 0, 'not signed in, no amendment');
 
-  p.$('n_user').value = 'Dr Amend'; setForm('Dose corrected', 'Plan B'); p.w.submitAmend(id);
+  signIn(p, 'Dr Amend'); setForm('Dose corrected', 'Plan B'); p.w.submitAmend(id);
   let n = p.note(id);
   assert.equal(n.amendments.length, 1);
   assert.equal(n.amendments[0].reason, 'Dose corrected'); assert.equal(n.amendments[0].by, 'Dr Amend');
@@ -202,6 +204,60 @@ test('the page contains no code that removes notes or cases', () => {
 });
 
 // Known gaps, found while writing this pack. They are real departures from the core rules, kept visible here:
-test.todo('signer, author and amender come from the signed-in session; today the page reads the typed "Signing as" box');
+// ---------- chunk 8e: signer, author and amender come from the session ----------
+test('no typed field or stored name can become the signer; without a sign-in, signing and amending are refused', () => {
+  const p = page();
+  assert.deepEqual(p.errors, []);
+  assert.equal(p.$('n_user'), null, 'the typed "Signing as" box is gone');
+  assert.doesNotMatch(HTML, /getElementById\(['"]n_user['"]\)|\$\(['"]n_user['"]\)/, 'no code reads a typed signer field');
+  // hostile attempts: a stray input with the old id, and the old localStorage key
+  const evil = p.d.createElement('input'); evil.id = 'n_user'; evil.value = 'Evil Typed'; p.d.body.appendChild(evil);
+  p.w.localStorage.setItem('vr_user', 'Evil Stored');
+
+  signIn(p, null);                                           // nobody signed in
+  p.$('n_title').value = 'T'; p.$('n_body').value = 'Plan A'; p.w.addNote('free');
+  const id = p.notes()[0].id;
+  p.w.renderNotes();
+  assert.match(p.$('n_who').textContent, /Not signed in/);
+  assert.ok(p.d.querySelector('[data-act="signNote"]').disabled, 'Sign button is disabled when nobody is signed in');
+  p.w.signNote(id);
+  assert.equal(p.note(id).status, 'draft', 'signing is refused without a session');
+
+  signIn(p, 'doctor1');
+  p.w.renderNotes();
+  assert.match(p.$('n_who').textContent, /doctor1/);
+  p.w.signNote(id);
+  assert.equal(p.note(id).signedBy, 'doctor1', 'the signer is the session user, not the typed or stored name');
+  assert.doesNotMatch(JSON.stringify(p.note(id)), /Evil/);
+
+  p.w.toggleAmend(id);
+  p.$('am_r_' + id).value = 'Fix'; p.$('am_b_' + id).value = 'Plan B'; p.w.submitAmend(id);
+  assert.equal(p.note(id).amendments[0].by, 'doctor1', 'the amender is the session user');
+  // the FHIR export author is also the session user
+  assert.match(p.w.eval('String(user)'), /Srv\.user/);
+  signIn(p, null);
+  assert.equal(p.w.eval('user()'), '', 'no session, no name');
+});
+
+test('sign-in through /api/me fills the signer; an old stored name is purged on load', async () => {
+  const errors = [];
+  const vc = new VirtualConsole(); vc.on('jsdomError', e => errors.push(e.message));
+  const dom = new JSDOM(HTML, { runScripts: 'dangerously', url: 'http://localhost/', pretendToBeVisual: true, virtualConsole: vc,
+    beforeParse(w) {
+      w.confirm = () => true;
+      w.localStorage.setItem('vr_user', 'Evil Stored');
+      const json = (o) => new Response(JSON.stringify(o), { status: 200, headers: { 'content-type': 'application/json' } });
+      // never 401 after sign-in: a 401 means "session expired" and clears the user
+      w.fetch = async (u) => String(u).endsWith('/api/me') ? json({ user: { username: 'nurse1', role: 'nurse', perms: [] } })
+        : String(u).endsWith('/api/ai/status') ? json({ ai: { enabled: false, configured: false, canUse: false, model: '', provider: '', hourlyLimit: 0, usedThisHour: 0 } })
+        : json({});
+    } });
+  const w = dom.window;
+  await new Promise(r => setTimeout(r, 300));
+  assert.deepEqual(errors, []);
+  assert.equal(w.localStorage.getItem('vr_user'), null, 'the stored typed name is removed');
+  assert.equal(w.eval('user()'), 'nurse1');
+  assert.match(w.document.getElementById('n_who').textContent, /nurse1 \(nurse\)/);
+});
 test.todo('observation rows entered on a case cannot be hard-deleted in the page (delRow splices them out today; needs a "mark entered in error" flow)');
 test.todo('server-side: signed notes are immutable on the server (notes live in the browser until a later chunk stores them there)');

@@ -315,7 +315,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <div class="pane" id="notes">
       <h3>Notes</h3>
       <div class="cd">
-        <label>Signing as</label><input id="n_user" placeholder="Your name" data-act="setUser" data-ev="input">
+        <label>Signing as</label><div id="n_who" class="mu"></div>
         <label>Title</label><input id="n_title" placeholder="e.g. Progress note">
         <label>Free text</label><textarea id="n_body"></textarea>
         <div class="flex" style="margin-top:8px"><button class="b" data-act="addNote" data-arg="free">Save as draft</button>
@@ -595,7 +595,7 @@ let REGISTRY=[],CASES=[],CASE=null,LAST_GENERATED=null;
 /* values: fieldId -> scalar | [{ts, value}] for repeat */
 
 const nowISO=()=>new Date().toISOString();
-const user=()=>($('n_user').value||'').trim();
+const user=()=>Srv.user?String(Srv.user.username||''):'';   // signer, author and amender: the signed-in session only, never a typed field
 const canon=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((r,x)=>(r[x]=v[x],r),{}):v);
 function newCaseObj(){return{id:'c_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),patient:{name:'',mrn:'',age:'',sex:''},narrative:'',applied:[],values:{},notes:[],status:'open',createdAt:nowISO(),updatedAt:nowISO()}}
 function load(){
@@ -698,22 +698,23 @@ function addNote(kind){
 }
 const nid=id=>CASE.notes.find(n=>n.id===id);
 function editNote(id,v){const n=nid(id);if(n&&n.status==='draft'){n.body=v;save()}}
-function signNote(id){const n=nid(id);if(!n||n.status!=='draft')return;if(!user())return toast('Enter your name under “Signing as”');
+function signNote(id){const n=nid(id);if(!n||n.status!=='draft')return;if(!user())return toast('Sign in to sign notes');
   n.status='signed';n.signedBy=user();n.signedAt=nowISO();save();renderNotes();toast('Signed')}
 function discardNote(id){const n=nid(id);if(n&&n.status==='draft'&&confirm('Discard this draft? It is kept, marked discarded.')){n.status='discarded';n.discardedAt=nowISO();save();renderNotes()}}
 function toggleAmend(id){AMEND[id]=!AMEND[id];renderNotes()}
 function submitAmend(id){const n=nid(id),r=$('am_r_'+id).value.trim(),b=$('am_b_'+id).value.trim();
-  if(!user())return toast('Enter your name under “Signing as”');if(!r)return toast('A reason is required');if(!b||b===noteCurrent(n))return toast('Change the text');
+  if(!user())return toast('Sign in to amend notes');if(!r)return toast('A reason is required');if(!b||b===noteCurrent(n))return toast('Change the text');
   n.amendments.push({at:nowISO(),by:user(),reason:r,body:b});AMEND[id]=false;save();renderNotes();toast('Amended')}
 function renderNotes(){
+  $('n_who').textContent=user()?`${Srv.user.username} (${Srv.user.role}), from your sign-in`:'Not signed in: you can write drafts, but signing and amending are disabled. Sign in on the Patients tab.';
   $('noteList').innerHTML=CASE.notes.map(n=>{
     const head=`<b>${escA(n.title)}</b> <span class="kind">${escA(n.kind)}</span> <span class="mu">${escA(n.status)} · ${escA(n.createdAt.slice(0,16).replace('T',' '))}</span>`;
     if(n.status==='draft')return`<div class="cd nt draft">${head}<textarea data-act="editNote" data-arg="${escA(n.id)}" data-ev="change">${escA(n.body)}</textarea>
-      <button class="b sm" data-act="signNote" data-arg="${escA(n.id)}">Sign</button><button class="b sec sm" data-act="discardNote" data-arg="${escA(n.id)}">Discard</button></div>`;
+      <button class="b sm" data-act="signNote" data-arg="${escA(n.id)}"${user()?'':' disabled title="Sign in to sign notes"'}>Sign</button><button class="b sec sm" data-act="discardNote" data-arg="${escA(n.id)}">Discard</button></div>`;
     if(n.status==='discarded')return`<div class="cd nt discarded">${head}</div>`;
     const am=n.amendments.map((x,i)=>`<div class="mu">Amendment ${i+1} · ${escA(x.by)} · ${x.at.slice(0,16).replace('T',' ')} · reason: ${escA(x.reason)}</div>`).join('');
     const form=AMEND[n.id]?`<label>Reason for amendment</label><input id="am_r_${escA(n.id)}"><label>Amended text</label><textarea id="am_b_${escA(n.id)}">${escA(noteCurrent(n))}</textarea>
-      <button class="b sm" data-act="submitAmend" data-arg="${escA(n.id)}">Submit amendment</button><button class="b sec sm" data-act="toggleAmend" data-arg="${escA(n.id)}">Cancel</button>`
+      <button class="b sm" data-act="submitAmend" data-arg="${escA(n.id)}"${user()?'':' disabled title="Sign in to amend notes"'}>Submit amendment</button><button class="b sec sm" data-act="toggleAmend" data-arg="${escA(n.id)}">Cancel</button>`
       :`<button class="b sec sm" data-act="toggleAmend" data-arg="${escA(n.id)}">Amend…</button>`;
     return`<div class="cd nt signed">${head}<pre class="body">${escA(noteCurrent(n))}</pre><div class="mu">Signed by ${escA(n.signedBy)} · ${n.signedAt.slice(0,16).replace('T',' ')}</div>${am}
       ${n.amendments.length?`<details><summary class="mu">Original (as signed)</summary><pre class="body">${escA(n.body)}</pre></details>`:''}${form}</div>`;
@@ -1419,7 +1420,7 @@ const apiMsg=r=>r.body.message||(r.status===403?'Your role does not have permiss
 function renderWho(){
   if(!Srv.user)Object.assign(AI,{on:false,configured:false,canUse:false,admin:null,left:null});
   $('who').innerHTML=Srv.user?`${escA(Srv.user.username)} (${escA(Srv.user.role)}) <a href="#" data-act="srvLogout">Sign out</a>`:'Not signed in';
-  renderBanner();renderEncounter();renderCases();applyAiState();renderAiPanel();
+  renderBanner();renderEncounter();renderCases();applyAiState();renderAiPanel();renderNotes();
 }
 async function srvInit(){
   const r=await api('GET','/api/me');
@@ -1541,7 +1542,6 @@ const ACT={
   srvLogin:()=>srvLogin(),
   suggest:()=>suggest(),
   tg:(el,e,a)=>tg(a),
-  setUser:(el)=>localStorage.setItem('vr_user',el.value),
   ptToggleForm:()=>ptToggleForm(),
   ptToggleFormOff:()=>ptToggleForm(false),
   ptRegister:()=>ptRegister(false),
@@ -1606,7 +1606,7 @@ const ACT={
 
 /* Init */
 $('asys').innerHTML=CODESYS.filter(x=>x.verifier&&x.enabled!==false).map(x=>`<option value="${x.key}">${x.label}</option>`).join('');
-loadSet();applyAiState();load();$('narrative').value=CASE.narrative||'';fillPatient();$('n_user').value=localStorage.getItem('vr_user')||'';
+loadSet();applyAiState();load();$('narrative').value=CASE.narrative||'';fillPatient();try{localStorage.removeItem('vr_user')}catch(e){}   // a typed signer name saved by an older version is purged
 renderPick();optsChanged();
 if(!$('c_fields').children.length)addFieldRow();
 renderAll();srvInit();
