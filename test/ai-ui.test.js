@@ -126,7 +126,9 @@ test('AI rank end to end: ranked ids come back through the server and apply to t
   await setServer(true);
   const ui = await openPage({ vr_set: JSON.stringify({ d: false }) });
   await ui.login('doctor1');
-  const id = ui.w.eval('REGISTRY[0].id');
+  // the demo built-ins are not in the library while signed in (B2b-1): give the page one set to rank
+  ui.w.eval("REGISTRY.push({id:'rank_set',kind:'disease',title:'Rank set',desc:'',fields:[{id:'x',label:'X',type:'text'}],version:1})");
+  const id = 'rank_set';
   reply = JSON.stringify({ ranked: [id, 'not_in_candidates'] });
   const asked = []; ui.w.prompt = m => { asked.push(m); return asked.length === 1 ? 'Sepsis' : '1'; };
   ui.w.__choice = 'send';

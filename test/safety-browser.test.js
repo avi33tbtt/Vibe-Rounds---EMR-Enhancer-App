@@ -37,6 +37,11 @@ test('browser smoke: sign in, open a case, enter a value, export the FHIR bundle
   // a registered patient to open (registration itself is covered by the API and page tests)
   const api = client(env.base); assert.equal((await api.login('nurse1')).status, 200);
   assert.equal((await api.post('/api/patients', { name: 'Smoke Patient', mrn: 'SMOKE-1', dob: '1980-06-15', sex: 'F' })).status, 201);
+  // the signed-in library is the server's published sets (B2b-1): publish a Vitals set first
+  const adm = client(env.base); assert.equal((await adm.login('admin1')).status, 200);
+  const vit = await adm.post('/api/element-sets', { slug: 'vitals', kind: 'care', definition: { title: 'Vitals', desc: 'Core vital signs (repeating)', fields: [
+    { id: 'hr', label: 'Heart rate', type: 'integer', unit: '/min', repeat: true, bindings: [{ system: 'loinc', code: '8867-4', display: 'Heart rate' }] }] } });
+  assert.equal(vit.status, 201); assert.equal((await adm.post(`/api/element-sets/${vit.body.set.id}/versions/1/publish`)).status, 200);
 
   const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();

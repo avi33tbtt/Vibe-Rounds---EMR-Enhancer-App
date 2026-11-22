@@ -204,6 +204,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <!-- LIBRARY -->
     <div class="pane" id="lib">
       <h3>Element &amp; Pathway Library</h3>
+      <div id="libSrv"></div>
       <div id="libList"></div>
     </div>
 
@@ -654,8 +655,9 @@ function applySet(id,fromPathway){
   if(isApplied(id)){toast('Already applied');return}
   const s=getSet(id);if(!s)return;
   if(s.kind==='pathway'){
-    (s.members||[]).forEach(mid=>{if(!isApplied(mid))CASE.applied.push({setId:mid,version:ver(mid),addedAt:nowISO(),fromPathway:id})});
-    toast('Pathway applied: '+s.title);
+    let skip=0;
+    (s.members||[]).forEach(mid=>{if(isApplied(mid))return;if(!getSet(mid)){skip++;return}CASE.applied.push({setId:mid,version:ver(mid),addedAt:nowISO(),fromPathway:id})});
+    toast('Pathway applied: '+s.title+(skip?` (${skip} set(s) are not in the library and were skipped)`:''));
   }else{
     CASE.applied.push({setId:id,version:ver(id),addedAt:nowISO(),fromPathway:fromPathway||null});
     toast('Added: '+s.title);
@@ -720,7 +722,7 @@ function interimRead(){
 function interimWrite(mark){
   const im=interimRead(),cases=im.cases,imported={...im.imported,...(mark||{})};
   [CASE,...CASES].forEach(c=>{if(c&&c.serverId)cases[c.serverId]={applied:c.applied,values:c.values,notes:c.notes}});
-  const customs=REGISTRY.filter(s=>!BUILTIN.find(b=>b.id===s.id));
+  const customs=REGISTRY.filter(s=>!s.srv&&!BUILTIN.find(b=>b.id===s.id));
   try{localStorage.setItem('vr_interim',JSON.stringify({_temporary:'applied sets, values and notes of server cases; synthetic data only; removed in B3',cases,customs,imported}))}catch(e){toast('Storage full')}
 }
 function fromRow(r,old){
@@ -731,7 +733,7 @@ function fromRow(r,old){
     status:r.status==='archived'?'archived':'open',createdAt:r.created_at,updatedAt:r.updated_at}
 }
 function storeEnter(){   // after sign-in: server cases replace the demo cases on screen; the demo data stays in localStorage untouched
-  const im=interimRead();if(im.customs)REGISTRY=[...BUILTIN,...im.customs];
+  const im=interimRead();REGISTRY=[...(im.customs||[])];   // the library comes from the server (libLoad); the demo built-ins are not shown while signed in
   CASES=[];CASE=blankCase();Store.dirty=null;clearTimeout(Store.nt);conflictHide();
   fillPatient();$('narrative').value='';$('narSt').textContent='';renderAll();
 }
@@ -1161,6 +1163,7 @@ async function verifyGenerated(){
 }
 function commitGenerated(apply){
   if(!LAST_GENERATED)return;
+  if(srvLocked(LAST_GENERATED.id))return toast(SRV_RO);
   const set=LAST_GENERATED;Object.keys(GEN_STASH).forEach(k=>delete GEN_STASH[k]);
   if($('o_sdc').checked)authorSdc(set);
   const i=REGISTRY.findIndex(s=>s.id===set.id);
@@ -1285,15 +1288,91 @@ function renderForms(){
   area.innerHTML=html;
 }
 function renderLib(){
+  renderLibSrv();
   const all=[...PATHWAYS,...REGISTRY];
   $('libList').innerHTML=all.map(s=>{
     const isPw=s.kind==='pathway';
     return`<div class="cd"><div class="flex" style="justify-content:space-between">
-      <div><span class="kind ${escA(s.kind)}">${escA(s.kind)}</span> <b>${escA(s.title)}</b>${s.generated?' <span class="mu">·gen</span>':''}${sdcBadge(s)}${uncodedBadge(s)}
+      <div><span class="kind ${escA(s.kind)}">${escA(s.kind)}</span> <b>${escA(s.title)}</b>${s.generated?' <span class="mu">·gen</span>':''}${s.srv?` <span class="kind">server v${Number(s.srv.version)}</span>`:''}${sdcBadge(s)}${uncodedBadge(s)}
         <div class="mu">${escA(s.desc||'')}</div>
         ${isPw?`<div class="mu">Members: ${escA((s.members||[]).join(', '))}</div>`:`<div class="mu">${(s.fields||[]).length} fields</div>`}
       </div><div><button class="b sm" data-act="applySet" data-arg="${escA(s.id)}">Use in case</button>${isPw?'':` <button class="b sec sm" data-act="dlQ" data-arg="${escA(s.id)}">Questionnaire</button>`}</div></div></div>`;
   }).join('');
+}
+
+/* ---------- Server library (B2b-1) ----------
+   Signed in: the library is the PUBLISHED sets on the server (latest published version of each). They are read-only here.
+   The demo built-ins are not shown; an admin can import the minimum demo library once, as published v1 (no reviewer yet: 8c).
+   Pinning an exact version on a case, the visible diff and the explicit update are done in B3a/B3b, not here. */
+const LIB={busy:false,msg:'',loaded:false};
+const SRV_RO='Sets from the server library are read-only. Make a new version through the library API, or use a different id.';
+const srvLocked=id=>{const s=REGISTRY.find(x=>x.id===id);return!!(s&&s.srv)};
+const DEMO_IMPORT=['basic_emr','glucose_ss','dka_ctx','snake_ctx'];
+const DEF_FIELD_KEYS=['id','label','type','unit','options','repeat','required','derived','flag','rationale','citation','codingPolicy','linkId','sdcType','text','path'];
+function libDef(s){   // the whitelist the server accepts: declarative text, true/false, lists and objects only
+  const fields=(s.fields||[]).map(f=>{
+    const o={};copyFieldKeys(f,o);
+    const bs=bnds(f).map(b=>{const x={system:String(b.system),code:String(b.code)};if(b.display)x.display=String(b.display);if(['manual','llm','sdc'].includes(b.source))x.source=b.source;return x});
+    if(bs.length)o.bindings=bs;
+    return o;
+  });
+  const d={title:s.title,fields};if(s.desc)d.desc=s.desc;return d;
+}
+function copyFieldKeys(f,o){DEF_FIELD_KEYS.forEach(k=>{if(f[k]!==undefined&&f[k]!==null)o[k]=JSON.parse(JSON.stringify(f[k]))})}
+function libApply(sets){
+  const ids=new Set(sets.map(x=>x.id));
+  REGISTRY=[...sets,...REGISTRY.filter(x=>!x.srv&&!ids.has(x.id)&&!BUILTIN.find(b=>b.id===x.id))];
+  LIB.loaded=true;renderAll();
+}
+async function libLoad(){
+  if(!srvMode())return;
+  LIB.msg='';
+  if(!srvCan('sets:read')){LIB.msg='Your role cannot read the library.';return libApply([])}
+  const l=await api('GET','/api/element-sets');
+  if(!Srv.user)return;
+  if(l.status!==200){LIB.msg='The library could not be loaded: '+apiMsg(l);return libApply([])}
+  const pubs=(l.body.sets||[]).filter(x=>x.published_version);
+  const res=await Promise.all(pubs.map(x=>api('GET','/api/element-sets/'+x.id+'/versions/'+x.published_version)));
+  if(!Srv.user)return;
+  const sets=[];let skipped=0;
+  res.forEach((r,i)=>{
+    const x=pubs[i],v=r.status===200&&r.body.version,d=v&&v.definition;
+    if(!d||!Array.isArray(d.fields)){skipped++;return}
+    sets.push({id:x.slug,kind:x.kind,title:d.title,desc:d.desc||'',fields:d.fields,version:v.version,sdc:d.sdc,
+      srv:{setId:x.id,version:v.version,checksum:v.checksum,publishedBy:v.published_by}});
+  });
+  if(skipped)LIB.msg=skipped+' published set(s) could not be read and are left out.';
+  libApply(sets);
+}
+function renderLibSrv(){
+  const box=$('libSrv');if(!box)return;
+  if(!srvMode()){box.innerHTML='';return}
+  const have=new Set(REGISTRY.filter(x=>x.srv).map(x=>x.id)),todo=DEMO_IMPORT.filter(id=>!have.has(id));
+  let h=`<div class="note">Signed in: this library is read from the server (published versions only) and is read-only here.${LIB.msg?' '+escA(LIB.msg):''}</div>`;
+  if(srvCan('sets:write')&&srvCan('sets:publish')&&todo.length)
+    h+=`<div class="cd"><b>Import the demo library</b><div class="mu" style="margin:4px 0 8px">One time, as published v1, by you (${escA(Srv.user.username)}): ${todo.map(id=>escA(BUILTIN.find(b=>b.id===id).title)).join(', ')}. Synthetic demo content, not reviewed yet.</div><button class="b sm" data-act="libImport"${LIB.busy?' disabled':''}>Import and publish</button></div>`;
+  box.innerHTML=h;
+}
+async function libImport(){
+  if(LIB.busy||!srvCan('sets:write')||!srvCan('sets:publish'))return;
+  const have=new Set(REGISTRY.filter(x=>x.srv).map(x=>x.id)),todo=DEMO_IMPORT.filter(id=>!have.has(id));
+  if(!todo.length)return;
+  if(!confirm('Create and publish version 1 of these demo sets on the server?\n\n'+todo.map(id=>'- '+BUILTIN.find(b=>b.id===id).title).join('\n')+'\n\nPublished versions cannot be changed afterwards.'))return;
+  LIB.busy=true;renderLibSrv();
+  const out=[];
+  try{
+    for(const id of todo){
+      const b=BUILTIN.find(x=>x.id===id);
+      const c=await api('POST','/api/element-sets',{slug:id,kind:b.kind,definition:libDef(b)});
+      if(!Srv.user)return;
+      if(c.status!==201){out.push(b.title+': '+(c.status===409?'a set with this id already exists on the server (not changed)':apiMsg(c))+'.');continue}
+      const p=await api('POST','/api/element-sets/'+c.body.set.id+'/versions/1/publish',{checksum:c.body.version.checksum});
+      if(!Srv.user)return;
+      out.push(p.status===200?b.title+': published v1.':b.title+': created as a draft but not published ('+apiMsg(p)+').');
+    }
+  }finally{LIB.busy=false}
+  await libLoad();
+  if(Srv.user){LIB.msg=out.join(' ');renderLibSrv();toast(out.length?out[out.length-1]:'Nothing imported')}
 }
 
 /* Codes UI */
@@ -1350,6 +1429,7 @@ function importQ(){
   try{
     const q=JSON.parse($('q_json').value),r=sdcToSet(q);
     const prev=q.url?REGISTRY.find(x=>x.sdc&&x.sdc.url===q.url):null;
+    if(prev&&prev.srv)return toast(SRV_RO);
     let id=prev?prev.id:'sdc_'+(slug(q.name||q.id||r.title)||'q');
     if(!prev){const b=id;let n=2;while(getSet(id))id=b+'_'+n++}
     const set={id,kind:$('q_kind').value,title:r.title,desc:r.desc,fields:r.fields,custom:true,sdc:r.sdc,
@@ -1592,6 +1672,7 @@ function saveElement(){
   });
   if(!fields.length)return toast('Add at least one field');
   const prev=REGISTRY.find(s=>s.id===id);
+  if(prev&&prev.srv)return toast(SRV_RO);
   const set={...(prev||{}),id,kind:$('c_kind').value,title,desc:$('c_desc').value.trim(),fields,custom:true};
   if(prev&&canon(prev.fields)!==canon(fields)){set.version=(prev.version||1)+1;set.history=[...(prev.history||[]),{version:prev.version||1,title:prev.title,desc:prev.desc,fields:prev.fields,at:nowISO()}]}
   else set.version=prev?.version||1;
@@ -1602,13 +1683,13 @@ function saveElement(){
   save();toast('Saved: '+title+(isUncoded(set)?' (uncoded — still usable)':''));renderAll();resetCreate();
 }
 function renderCustomList(){
-  const customs=REGISTRY.filter(s=>s.custom||s.generated||!BUILTIN.find(b=>b.id===s.id));
+  const customs=REGISTRY.filter(s=>!s.srv&&(s.custom||s.generated||!BUILTIN.find(b=>b.id===s.id)));
   if(!customs.length){$('customList').innerHTML='<span class="mu">None yet.</span>';return}
   $('customList').innerHTML=customs.map(s=>`<div class="item"><div><span class="kind ${escA(s.kind)}">${escA(s.kind)}</span> ${escA(s.title)}${sdcBadge(s)}${uncodedBadge(s)} <span class="mu">(${escA(s.id)})</span></div>
     <button class="b sec sm" data-act="editCustom" data-arg="${escA(s.id)}">Edit</button></div>`).join('');
 }
 function editCustom(id){
-  const s=getSet(id);if(!s)return;
+  const s=getSet(id);if(!s)return;if(s.srv)return toast(SRV_RO);
   $('c_id').value=s.id;$('c_title').value=s.title;$('c_kind').value=s.kind;$('c_desc').value=s.desc||'';
   $('c_fields').innerHTML='';(s.fields||[]).forEach(f=>addFieldRow(f));
   $('o_sdc').checked=!!s.sdc;$('o_sdc').disabled=!!(s.sdc&&!s.sdc.authored);optsChanged();
@@ -1680,7 +1761,7 @@ function renderWho(){
 }
 async function srvInit(){
   const r=await api('GET','/api/me');
-  if(r.status===200){Srv.user=r.body.user;storeEnter();await loadLinkedAll();await aiRefresh()}
+  if(r.status===200){Srv.user=r.body.user;storeEnter();await libLoad();await loadLinkedAll();await aiRefresh()}
   renderWho();
 }
 async function loadLinkedAll(){
@@ -1698,7 +1779,7 @@ async function srvLogin(){
   const r=await api('POST','/api/login',{username:$('lg_u').value.trim(),password:$('lg_p').value});
   $('lg_p').value='';
   if(r.status!==200){$('lg_err').textContent=r.status===401?'Wrong username or password.':apiMsg(r);return}
-  Srv.user=r.body.user;storeEnter();await loadLinkedAll();await aiRefresh();renderWho();ptShow();
+  Srv.user=r.body.user;storeEnter();await libLoad();await loadLinkedAll();await aiRefresh();renderWho();ptShow();
 }
 async function srvLogout(){await storeFlush();await api('POST','/api/logout');Srv.user=null;Srv.pts={};storeLeave();renderWho();ptShow()}
 
@@ -1825,6 +1906,7 @@ const ACT={
   toggleAmend:(el,e,a)=>toggleAmend(a),
   removeSet:(el,e,a)=>removeSet(a),
   applySet:(el,e,a)=>applySet(a),
+  libImport:()=>libImport(),
   verifyGenerated:()=>verifyGenerated(),
   markRowError:(el,e,a)=>markRowError(a,Number(el.getAttribute('data-arg2'))),
   toggleShowErr:(el)=>{SHOW_ERR=!!el.checked;renderForms()},

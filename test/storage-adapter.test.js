@@ -84,7 +84,9 @@ test('signed in: vr_traj is never written; applied sets, values and notes go to 
   assert.doesNotMatch(a.$('pbanner').textContent, /Demo Only/);             // signed in: demo cases are not shown
   assert.match(a.$('encPanel').textContent, /No case is open/);
   await a.open(pid);
-  const setId = a.ev('REGISTRY.find(s=>s.kind!=="pathway").id');
+  // the demo built-ins are not in the library while signed in (B2b-1), so give the page one set to apply
+  a.ev('REGISTRY.push({id:"adapter_set",kind:"care",title:"Adapter set",fields:[{id:"x",label:"X",type:"text"}]})');
+  const setId = 'adapter_set';
   a.w.applySet(setId); write(a, 'typed while signed in'); await a.w.storeFlush();
   assert.equal(a.ls('vr_traj'), raw, 'vr_traj must be byte-for-byte untouched while signed in');
   const interim = JSON.parse(a.ls('vr_interim')), sid = a.ev('CASE.serverId');

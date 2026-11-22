@@ -94,7 +94,10 @@ test('page: the import button exists only for signed-in roles that may write cas
 });
 
 test('page: preview shows exactly what is sent; one click imports once; vr_traj is untouched; interim data follows', async () => {
-  const a = await openPage({ vr_traj: DEMO }); await a.login('nurse1'); await a.openImport();
+  const a = await openPage({ vr_traj: DEMO }); await a.login('nurse1');
+  // the demo built-ins are not in the signed-in library (B2b-1): put the set the first demo case uses into it
+  a.w.eval("REGISTRY.push({id:'dm_ctx',kind:'disease',title:'DM',desc:'',fields:[{id:'glu',label:'Glucose',type:'number'}],version:1})");
+  await a.openImport();
   assert.equal(a.$('importBox').style.display, 'block');
   const pre = () => a.$('imp_pre_c_d1').textContent;
   assert.match(pre(), /choose a patient/);
