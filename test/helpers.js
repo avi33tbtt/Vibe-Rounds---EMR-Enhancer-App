@@ -12,7 +12,7 @@ async function setup(appOpts = {}) {
   const pool = makePool(URL);
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
   await migrate(pool);
-  for (const [u, r] of [['admin1', 'admin'], ['doctor1', 'doctor'], ['nurse1', 'nurse'], ['viewer1', 'viewer']]) {
+  for (const [u, r] of [['admin1', 'admin'], ['doctor1', 'doctor'], ['nurse1', 'nurse'], ['viewer1', 'viewer'], ['informatician1', 'informatician'], ['informatician2', 'informatician']]) {
     await pool.query('INSERT INTO users(username, display_name, role, password_hash) VALUES ($1,$2,$3,$4)', [u, u, r, hashPassword(PW)]);
   }
   // The app under test runs as the restricted emr_app role (migration 005), like production.

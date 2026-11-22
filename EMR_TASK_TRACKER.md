@@ -73,8 +73,10 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | B2b-1 | chunk-B2b-element-sets-page.md | Library from server; one-time demo-library import as published v1 (items 1) | DONE | 2026-11-22 | page + 1 test file | emr-enhancer.html, library-page test, 4 tests edited, DECISIONS.md. Server library, admin imports 4 demo sets as v1, read-only. 195 tests (190 pass, 2 todo, 3 skipped). Pin is B3. |
 | B2b-2 | chunk-B2b-element-sets-page.md | Pin exact version, visible diff, explicit update, export uses pin (items 2, 3) | SKIPPED | 2026-11-22 | n/a | Merged into B3a/B3b (case_applied_sets stores the version id). Do not run separately. |
 | 8b | chunk-08b-submit-snapshot.md | Server: submit set for review (snapshot) | DONE | 2026-11-22 | 1 migration, routes, tests | 008 migration, review.js, matrix+audit tests. Submit draft version to in_review, lint gate, DB-frozen. Codes fail lint (no server verifier). 204 tests (202 pass, 2 todo). |
-| 8c | chunk-08c-review-rules.md | Reviewer rules + frozen approved version | TODO |  | routes, trigger, tests | Needs: 8b. Build on server versions. |
-| 8d | chunk-08d-review-ui.md | Review screens + tier badges | TODO |  | page + 1 test file | Needs: 8c, B2b-1. Build on server versions. |
+| 8c | chunk-08c-review-rules.md | Reviewer rules + frozen approved version | DONE | 2026-11-22 | routes, trigger, tests | 009 migration, review.js, seed, tests. Role informatician; no self-review; 2 reviewers if flagged; DB-enforced. Publish not tied to review yet (8c-2). 215 tests (213 pass, 2 todo). |
+| 8c-2 | chunk-08c-review-rules.md | Publish only an approved (`reviewed`) version; demo import goes through review | TODO |  | routes + sets tests + page import | Needs: 8c. Closes the gap: an admin can still publish a draft. Changes B2a/B2b-1 tests; decide who publishes (informatician?). |
+| X1 | (requested) | OPD and IPD sets + one-click pathways (OPD, IPD admission, IPD discharge) | DONE | 2026-11-22 | page + tests | emr-enhancer.html, test/clinic-pathways.test.js, test/library-page.test.js. 4 sets, 3 pathways, Start buttons, Suggest; demo import now 9 sets. No doses/codes. 220 tests (218 pass, 2 todo). |
+| 8d | chunk-08d-review-ui.md | Review screens + tier badges | TODO |  | page + 1 test file | Needs: 8c, 8c-2, B2b-1. Build on server versions. |
 | B2r | chunk-B2r-review-on-versions.md | Re-point review workflow at server versions | SKIPPED | 2026-11-22 | n/a | Merged into 8b to 8d by the reorder; do not run separately. |
 | B3a | chunk-B3a-observations-server.md | Applied sets, observations, events (server) | TODO |  | 1 migration, 1 routes file, tests | Needs: B2a. Append-only; entered-in-error. Also stores the version pin (from B2b-2). |
 | B3b | chunk-B3b-observations-page.md | Values and trajectories via server; entered-in-error UI | TODO |  | page + 1 test file | Needs: B3a, 8f. Closes todo (b). Also does B2b-2: pin, diff, explicit update, export from pin. |
@@ -116,5 +118,5 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - Resolved 2026-11-22: re-ordered, review workflow (8b to 8d) now follows B2b and is built on server versions.
 - Resolved 2026-11-22: CCIS lives in its own repo (Vibe-Rounds---CCIS). The snake-envenomation parameter owner question is now tracked there.
 - Which clinician owns the snake-envenomation parameters used by the slice?
-- Who may publish element sets? B2a made `sets:publish` admin-only because no informatician role exists. Add the role (users.role change, seed, role tests) or allow doctors?
+- Who may publish element sets? 8c added the `informatician` role (review only). Publish is still admin-only: decide in 8c-2 whether informaticians publish too.
 - Adding any API route makes `test/safety-routes.test.js` fail until the permission matrix there is updated on purpose.

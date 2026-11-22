@@ -2,7 +2,7 @@
 // Shared helpers for the safety-test pack (chunk 05).
 const { createApp } = require('../app');
 
-const ROLES = ['admin', 'doctor', 'nurse', 'viewer'];
+const ROLES = ['admin', 'doctor', 'nurse', 'viewer', 'informatician'];
 
 // Every route the app really registers, as 'METHOD /path', read from Express itself,
 // so a route added later cannot hide from the safety tests.

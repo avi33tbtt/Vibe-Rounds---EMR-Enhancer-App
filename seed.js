@@ -10,7 +10,8 @@ const { hashPassword } = require('./auth');
   const pool = makePool(process.env.MIGRATE_DATABASE_URL || process.env.DATABASE_URL);
   await migrate(pool);
   const pw = process.env.SEED_PASSWORD || crypto.randomBytes(9).toString('base64url');
-  const users = [['admin1', 'Demo Admin', 'admin'], ['doctor1', 'Demo Doctor', 'doctor'], ['nurse1', 'Demo Nurse', 'nurse'], ['viewer1', 'Demo Viewer', 'viewer']];
+  const users = [['admin1', 'Demo Admin', 'admin'], ['doctor1', 'Demo Doctor', 'doctor'], ['nurse1', 'Demo Nurse', 'nurse'], ['viewer1', 'Demo Viewer', 'viewer'],
+    ['informatician1', 'Demo Informatician 1', 'informatician'], ['informatician2', 'Demo Informatician 2', 'informatician']];
   for (const [u, n, r] of users) {
     await pool.query(`INSERT INTO users(username, display_name, role, password_hash) VALUES ($1,$2,$3,$4) ON CONFLICT (username) DO NOTHING`, [u, n, r, hashPassword(pw)]);
   }

@@ -7,9 +7,10 @@ const PERMS = {
   'encounters:write':  ['admin', 'doctor', 'nurse'],
   'cases:read':        ['admin', 'doctor', 'nurse', 'viewer'],
   'cases:write':       ['admin', 'doctor', 'nurse'],   // create, edit title/status, archive/restore, link encounters, add narrative
-  'sets:read':         ['admin', 'doctor', 'nurse', 'viewer'],   // element-set library and versions
+  'sets:read':         ['admin', 'doctor', 'nurse', 'viewer', 'informatician'],   // element-set library and versions
   'sets:write':        ['admin', 'doctor'],                      // create a set, add a draft version (D5: create/edit = admin and doctor)
   'sets:submit':       ['admin', 'doctor'],                      // submit a draft version for review (8b)
+  'sets:review':       ['informatician'],                        // approve or reject a version in review (8c); not the author or submitter (checked per version)
   'sets:publish':      ['admin'],                                // publish and retire a version (no separate informatician role exists yet)
   'audit:read':        ['admin'],
   'ai:use':            ['admin', 'doctor'],   // draft / rank element sets with the server-side AI

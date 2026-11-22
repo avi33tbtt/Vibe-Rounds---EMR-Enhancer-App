@@ -82,12 +82,12 @@ test('seed.js creates users only: no patients, encounters, rules or content, AI 
     const run = () => execFileSync(process.execPath, ['seed.js'], { cwd: ROOT, env: { ...process.env, DATABASE_URL: URL, SEED_PASSWORD: 'Seed-test-pw-1' }, encoding: 'utf8' });
     run(); run();    // twice: running it again must not duplicate or add anything
     const users = (await pool.query('SELECT username, role, password_hash, active FROM users ORDER BY username')).rows;
-    assert.deepEqual(users.map(u => [u.username, u.role]), [['admin1', 'admin'], ['doctor1', 'doctor'], ['nurse1', 'nurse'], ['viewer1', 'viewer']]);
+    assert.deepEqual(users.map(u => [u.username, u.role]), [['admin1', 'admin'], ['doctor1', 'doctor'], ['informatician1', 'informatician'], ['informatician2', 'informatician'], ['nurse1', 'nurse'], ['viewer1', 'viewer']]);
     for (const u of users) { assert.match(u.password_hash, /^scrypt\$[0-9a-f]+\$[0-9a-f]+$/); assert.ok(!u.password_hash.includes('Seed-test-pw-1')); }
     const tables = (await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`)).rows.map(r => r.table_name);
     const filled = {};
     for (const t of tables) filled[t] = Number((await pool.query(`SELECT count(*) n FROM ${t}`)).rows[0].n);
-    const expected = { users: 4, schema_migrations: filled.schema_migrations, ai_settings: 1 };
+    const expected = { users: 6, schema_migrations: filled.schema_migrations, ai_settings: 1 };
     for (const t of tables) assert.equal(filled[t], expected[t] ?? 0, `seed left ${filled[t]} row(s) in ${t}`);
     assert.equal((await pool.query('SELECT enabled FROM ai_settings')).rows[0].enabled, false, 'AI is off after seeding');
     assert.ok(!tables.some(t => /rule|band|alert|threshold/i.test(t)), 'no rules/bands tables exist');

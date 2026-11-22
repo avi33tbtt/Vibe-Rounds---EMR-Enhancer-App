@@ -196,7 +196,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         </div>
       </div>
       <div id="formArea">
-        <div class="empty" id="formEmpty">Apply a pathway, generate a context, or add elements.</div>
+        <div class="empty" id="formEmpty"><b>Start the consult:</b> <button class="b sm" data-act="applySet" data-arg="pw_opd">OPD consultation</button> <button class="b sm" data-act="applySet" data-arg="pw_ipd">IPD admission</button><div class="mu" style="margin-top:8px">Or apply another pathway, generate a context, or add elements.</div></div>
         <div id="forms"></div>
       </div>
     </div>
@@ -575,6 +575,87 @@ const BUILTIN=[
      {id:'wbct',label:'20-min WBCT',type:'select',options:['Clotted','Unclotted','Not done']},
      {id:'swell',label:'Local swelling grade',type:'select',options:['0','1','2','3']},
      {id:'asv_vials',label:'Initial ASV vials',type:'integer'}
+   ]},
+  {id:'opd_visit',kind:'template',title:'OPD consultation',desc:'Outpatient visit: history, examination, assessment, plan, follow-up',
+   fields:[
+     {id:'opd_visit_type',label:'Visit type',type:'select',options:['New visit','Follow-up','Review of results','Referral in','Other']},
+     {id:'opd_cc',label:'Presenting complaint(s)',type:'text'},
+     {id:'opd_onset',label:'Onset and duration',type:'text'},
+     {id:'opd_hpi',label:'History of present illness',type:'text'},
+     {id:'opd_pmh',label:'Past medical and surgical history',type:'text'},
+     {id:'opd_meds',label:'Current medicines (as reported by the patient)',type:'text'},
+     {id:'opd_allergy',label:'Allergies',type:'select',options:['None known','Known (describe in the details field)','Not asked']},
+     {id:'opd_allergy_detail',label:'Allergy details (substance and reaction)',type:'text'},
+     {id:'opd_fsh',label:'Family and social history (tobacco, alcohol, occupation)',type:'text'},
+     {id:'opd_ros',label:'Review of systems',type:'text'},
+     {id:'opd_exam_gen',label:'General examination',type:'text'},
+     {id:'opd_exam_sys',label:'Systemic examination',type:'text'},
+     {id:'opd_results',label:'Results and reports reviewed today',type:'text'},
+     {id:'opd_impression',label:'Impression / working diagnosis',type:'text'},
+     {id:'opd_ddx',label:'Differential diagnosis',type:'text'},
+     {id:'opd_ix',label:'Investigations ordered',type:'text'},
+     {id:'opd_plan',label:'Treatment and prescriptions (as decided by the clinician)',type:'text'},
+     {id:'opd_advice',label:'Advice and counselling given',type:'text'},
+     {id:'opd_warn',label:'Warning signs explained to the patient',type:'boolean'},
+     {id:'opd_referral',label:'Referral (to whom and why)',type:'text'},
+     {id:'opd_dispo',label:'Disposition',type:'select',options:['Home with advice','Home with prescription','Referred','Advised admission (start the IPD pathway)','Other']},
+     {id:'opd_fu',label:'Follow-up (when and with whom)',type:'text'}
+   ]},
+  {id:'ipd_admission',kind:'template',title:'IPD admission note',desc:'Admission history, examination, risk checks and initial plan',
+   fields:[
+     {id:'adm_time',label:'Admission date and time',type:'datetime'},
+     {id:'adm_source',label:'Source of admission',type:'select',options:['Emergency department','OPD','Transfer from another facility','Elective / planned','Other']},
+     {id:'adm_unit',label:'Ward / unit and responsible consultant',type:'text'},
+     {id:'adm_reason',label:'Reason for admission',type:'text'},
+     {id:'adm_cc',label:'Presenting complaint(s) and duration',type:'text'},
+     {id:'adm_hpi',label:'History of present illness',type:'text'},
+     {id:'adm_pmh',label:'Past medical and surgical history',type:'text'},
+     {id:'adm_meds',label:'Medicines taken before admission (medicine reconciliation)',type:'text'},
+     {id:'adm_allergy',label:'Allergies',type:'select',options:['None known','Known (describe in the details field)','Not asked']},
+     {id:'adm_allergy_detail',label:'Allergy details (substance and reaction)',type:'text'},
+     {id:'adm_fsh',label:'Family and social history',type:'text'},
+     {id:'adm_exam_gen',label:'General examination',type:'text'},
+     {id:'adm_exam_sys',label:'Systemic examination',type:'text'},
+     {id:'adm_prov_dx',label:'Provisional diagnosis',type:'text'},
+     {id:'adm_problems',label:'Problem list',type:'text'},
+     {id:'adm_ix',label:'Initial investigations ordered',type:'text'},
+     {id:'adm_plan',label:'Initial management plan and orders',type:'text'},
+     {id:'adm_diet',label:'Diet and fluids ordered',type:'text'},
+     {id:'adm_activity',label:'Activity and mobility',type:'text'},
+     {id:'adm_vte',label:'Clot-prevention (VTE) risk assessed',type:'boolean'},
+     {id:'adm_fall',label:'Fall risk assessed',type:'boolean'},
+     {id:'adm_pressure',label:'Pressure-injury risk assessed',type:'boolean'},
+     {id:'adm_consent',label:'Consent for admission and treatment recorded',type:'boolean'},
+     {id:'adm_escalation',label:'Escalation and resuscitation plan (as discussed with patient / family)',type:'text'},
+     {id:'adm_contact',label:'Family member informed (who)',type:'text'}
+   ]},
+  {id:'ipd_progress',kind:'care',title:'IPD progress note',desc:'Daily ward-round note (repeating)',
+   fields:[
+     {id:'prg_time',label:'Note date and time',type:'datetime',repeat:true},
+     {id:'prg_subj',label:'Subjective: how the patient is',type:'text',repeat:true},
+     {id:'prg_obj',label:'Objective: examination and new results',type:'text',repeat:true},
+     {id:'prg_assess',label:'Assessment, problem by problem',type:'text',repeat:true},
+     {id:'prg_plan',label:'Plan until the next review',type:'text',repeat:true},
+     {id:'prg_orders',label:'Orders changed today',type:'text',repeat:true},
+     {id:'prg_pending',label:'Results and consults pending',type:'text',repeat:true},
+     {id:'prg_family',label:'Discussed with patient / family',type:'boolean',repeat:true}
+   ]},
+  {id:'ipd_discharge',kind:'template',title:'IPD discharge summary',desc:'Final diagnosis, course, medicines, follow-up',
+   fields:[
+     {id:'dis_time',label:'Discharge date and time',type:'datetime'},
+     {id:'dis_type',label:'Type of discharge',type:'select',options:['Routine discharge','Discharge against medical advice','Transfer to another facility','Died in hospital','Left without notice']},
+     {id:'dis_dx',label:'Final diagnosis',type:'text'},
+     {id:'dis_proc',label:'Procedures done',type:'text'},
+     {id:'dis_course',label:'Summary of hospital course',type:'text'},
+     {id:'dis_cond',label:'Condition at discharge',type:'select',options:['Improved','Stable','Unchanged','Worse']},
+     {id:'dis_meds',label:'Medicines on discharge (as prescribed by the clinician)',type:'text'},
+     {id:'dis_med_changes',label:'Changes to usual medicines explained',type:'boolean'},
+     {id:'dis_pending',label:'Results pending at discharge',type:'text'},
+     {id:'dis_fu',label:'Follow-up plan (where, when, with whom)',type:'text'},
+     {id:'dis_fu_date',label:'Follow-up appointment',type:'datetime'},
+     {id:'dis_advice',label:'Advice: diet, activity, wound care',type:'text'},
+     {id:'dis_warn',label:'Warning signs explained; when to return',type:'boolean'},
+     {id:'dis_given',label:'Discharge summary given to the patient',type:'boolean'}
    ]}
 ];
 
@@ -583,7 +664,10 @@ const PATHWAYS=[
   {id:'pw_dm',kind:'pathway',title:'DM pathway',desc:'Diabetes admission',members:['basic_emr','vitals','dm_ctx','glucose_ss','hba1c_mon']},
   {id:'pw_dm_ckd_foot',kind:'pathway',title:'DM + CKD + Foot Ulcer',desc:'Complex diabetic foot',members:['basic_emr','vitals','dm_ctx','ckd_ctx','foot_ulcer','glucose_ss','urine_io']},
   {id:'pw_dka',kind:'pathway',title:'DKA pathway',desc:'Time-critical DKA',members:['basic_emr','vitals','dka_ctx','glucose_ss']},
-  {id:'pw_snake',kind:'pathway',title:'Snake-bite pathway',desc:'Envenomation starter',members:['basic_emr','vitals','snake_ctx']}
+  {id:'pw_snake',kind:'pathway',title:'Snake-bite pathway',desc:'Envenomation starter',members:['basic_emr','vitals','snake_ctx']},
+  {id:'pw_opd',kind:'pathway',title:'OPD consultation',desc:'Start an outpatient consult: history, examination, plan, vitals',members:['opd_visit','vitals']},
+  {id:'pw_ipd',kind:'pathway',title:'IPD admission',desc:'Admission note, vitals and daily progress notes',members:['ipd_admission','vitals','ipd_progress']},
+  {id:'pw_ipd_discharge',kind:'pathway',title:'IPD discharge',desc:'Add on the day of discharge',members:['ipd_discharge']}
 ];
 
 const DEMO_SNAKE={id:'gen_snake',kind:'disease',title:'Snake envenomation (hemotoxic)',desc:'Demo schema',
@@ -1307,7 +1391,7 @@ function renderLib(){
 const LIB={busy:false,msg:'',loaded:false};
 const SRV_RO='Sets from the server library are read-only. Make a new version through the library API, or use a different id.';
 const srvLocked=id=>{const s=REGISTRY.find(x=>x.id===id);return!!(s&&s.srv)};
-const DEMO_IMPORT=['basic_emr','glucose_ss','dka_ctx','snake_ctx'];
+const DEMO_IMPORT=['basic_emr','glucose_ss','dka_ctx','snake_ctx','vitals','opd_visit','ipd_admission','ipd_progress','ipd_discharge'];
 const DEF_FIELD_KEYS=['id','label','type','unit','options','repeat','required','derived','flag','rationale','citation','codingPolicy','linkId','sdcType','text','path'];
 function libDef(s){   // the whitelist the server accepts: declarative text, true/false, lists and objects only
   const fields=(s.fields||[]).map(f=>{
@@ -1707,7 +1791,8 @@ function suggest(){
     {keys:['dka','ketoacidosis'],sets:['dka_ctx','glucose_ss'],pw:'pw_dka'},
     {keys:['snake','envenom','asv','bite'],sets:['snake_ctx'],pw:'pw_snake'},
     {keys:['urine','output','input','fluid'],sets:['urine_io'],pw:null},
-    {keys:['vital','bp','heart rate','spo2'],sets:['vitals'],pw:null}
+    {keys:['vital','bp','heart rate','spo2'],sets:['vitals'],pw:null},
+    {keys:['discharge','discharged'],sets:['ipd_discharge'],pw:'pw_ipd_discharge'}
   ];
   rules.forEach(r=>{
     if(r.keys.some(k=>text.includes(k))){
@@ -1715,7 +1800,7 @@ function suggest(){
       if(r.pw){const p=PATHWAYS.find(x=>x.id===r.pw);if(p&&!(p.members||[]).every(m=>isApplied(m))&&!suggestions.find(x=>x.id===r.pw))suggestions.push({type:'pathway',id:r.pw,title:p.title})}
     }
   });
-  if(!CASE.applied.length)suggestions.unshift({type:'pathway',id:'pw_basic',title:'Basic admission'});
+  if(!CASE.applied.length)suggestions.unshift({type:'pathway',id:'pw_opd',title:'OPD consultation'},{type:'pathway',id:'pw_ipd',title:'IPD admission'},{type:'pathway',id:'pw_basic',title:'Basic admission'});
   if(!suggestions.length){toast('No strong suggestions — try keywords or generate a context.');return}
   const msg=suggestions.map((s,i)=>`${i+1}. [${s.type}] ${s.title}`).join('\n');
   const n=parseInt(prompt('Suggestions:\n\n'+msg),10);

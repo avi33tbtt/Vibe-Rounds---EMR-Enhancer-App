@@ -10,7 +10,7 @@ const { setup, client, PW } = require('./helpers');
 let env, admin;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 async function until(fn, what) { for (let i = 0; i < 150; i++) { if (await fn()) return; await wait(30); } throw new Error('timed out: ' + what); }
-const DEMO = ['basic_emr', 'glucose_ss', 'dka_ctx', 'snake_ctx'];
+const DEMO = ['basic_emr', 'glucose_ss', 'dka_ctx', 'snake_ctx', 'vitals', 'opd_visit', 'ipd_admission', 'ipd_progress', 'ipd_discharge'];
 
 test.after(async () => { if (env) await env.close(); });
 // The set tables are append-only (the database refuses DELETE and TRUNCATE), so every test starts from a freshly migrated database.
@@ -56,26 +56,26 @@ test('signed in with an empty server library: no demo built-ins are shown; only 
   }
 });
 
-test('the admin imports the minimum demo library once: four sets, published v1 by the session user, then the offer is gone', async () => {
+test('the admin imports the minimum demo library once: the demo sets, published v1 by the session user, then the offer is gone', async () => {
   await reset();
   const ui = await openPage(); await ui.login('admin1');
   const before = ui.fetched.length;
   importBtn(ui).click();
-  await until(() => ui.ev('LIB.busy') === false && setIds(ui).length === 4, 'import finished');
+  await until(() => ui.ev('LIB.busy') === false && setIds(ui).length === DEMO.length, 'import finished');
   assert.deepEqual(setIds(ui), [...DEMO].sort());
   assert.equal(importBtn(ui), null, 'nothing left to import');
   const sent = ui.fetched.slice(before).filter(f => f.method === 'POST');
-  assert.equal(sent.length, 8, 'one create and one publish per set');
+  assert.equal(sent.length, 2 * DEMO.length, 'one create and one publish per set');
   for (const f of sent) assert.doesNotMatch(f.body, /createdBy|publishedBy|published_by|author/i, 'no actor is sent in a body');
 
   const list = (await admin.get('/api/element-sets')).body.sets;
-  assert.equal(list.length, 4);
+  assert.equal(list.length, DEMO.length);
   for (const s of list) assert.equal(s.published_version, 1);
   const v = (await admin.get(`/api/element-sets/${list[0].id}/versions/1`)).body.version;
   assert.equal(v.status, 'published'); assert.equal(v.published_by, 'admin1');
   assert.match(ui.$('libList').textContent, /server v1/);
   const aud = await env.pool.query(`SELECT count(*)::int AS n FROM audit_log WHERE action = 'set.publish'`);
-  assert.equal(aud.rows[0].n, 4);
+  assert.equal(aud.rows[0].n, DEMO.length);
 
   // the codes the demo carried survive as bindings, and nothing outside the whitelist was sent
   const glu = ui.ev('JSON.stringify(REGISTRY.find(s=>s.id==="glucose_ss").fields[0])');
@@ -93,8 +93,8 @@ test('a slug that already exists on the server is left alone and reported; the o
   assert.equal(made.status, 201);   // a draft: not in the signed-in library
   const ui = await openPage(); await ui.login('admin1');
   importBtn(ui).click();
-  await until(() => ui.ev('LIB.busy') === false && setIds(ui).length === 3, 'partial import');
-  assert.deepEqual(setIds(ui), ['basic_emr', 'glucose_ss', 'snake_ctx']);
+  await until(() => ui.ev('LIB.busy') === false && setIds(ui).length === DEMO.length - 1, 'partial import');
+  assert.deepEqual(setIds(ui), DEMO.filter(id => id !== 'dka_ctx').sort());
   assert.match(ui.$('libSrv').textContent, /already exists on the server/);
   const row = (await admin.get(`/api/element-sets/${made.body.set.id}`)).body;
   assert.equal(row.set.title, 'Someone else’s DKA'); assert.equal(row.versions.length, 1); assert.equal(row.versions[0].status, 'draft');
@@ -146,11 +146,11 @@ test('server sets are read-only in the page and never copied into the browser', 
 test('a pathway applies only the members that are in the library and says how many were skipped', async () => {
   await reset();
   const ui = await openPage(); await ui.login('admin1');
-  importBtn(ui).click(); await until(() => ui.ev('LIB.busy') === false && setIds(ui).length === 4, 'import');
+  importBtn(ui).click(); await until(() => ui.ev('LIB.busy') === false && setIds(ui).length === DEMO.length, 'import');
   ui.ev('CASE.applied.length=0');
-  ui.w.applySet('pw_basic');   // basic_emr + vitals; vitals is not in the library
-  assert.deepEqual(ui.evj('CASE.applied.map(a=>a.setId)'), ['basic_emr']);
-  assert.match(ui.$('toast').textContent, /1 set\(s\) are not in the library/);
+  ui.w.applySet('pw_dm');   // basic_emr, vitals, dm_ctx, glucose_ss, hba1c_mon: dm_ctx and hba1c_mon are not in the library
+  assert.deepEqual(ui.evj('CASE.applied.map(a=>a.setId)'), ['basic_emr', 'vitals', 'glucose_ss']);
+  assert.match(ui.$('toast').textContent, /2 set\(s\) are not in the library/);
   await ui.close();
 });
 

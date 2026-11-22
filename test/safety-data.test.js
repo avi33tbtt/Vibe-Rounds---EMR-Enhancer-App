@@ -16,7 +16,7 @@ test.after(async () => { await env.close(); });
 
 // ---------- database ----------
 // Every table must be listed here. A new table fails this test until someone decides which kind it is.
-const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions'];        // never deleted: rows are archived, closed, appended or retired
+const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews'];        // never deleted: rows are archived, closed, appended or retired
 const NOT_CLINICAL = ['users', 'sessions', 'schema_migrations', 'ai_settings'];   // accounts, logins, bookkeeping, settings
 
 test('every table is classified, and every clinical table refuses DELETE', async () => {
@@ -34,6 +34,11 @@ test('every table is classified, and every clinical table refuses DELETE', async
   // one element set with a version: the set tables have rows to protect too (task B2a)
   const d = client(env.base); assert.equal((await d.login('doctor1')).status, 200);
   assert.equal((await d.post('/api/element-sets', { slug: 'keep-set', kind: 'custom', definition: { title: 'Keep set', fields: [{ id: 'k', label: 'K', type: 'text' }] } })).status, 201);
+  // submitted and reviewed: the review table has a row to protect too (task 8c)
+  const ks = (await env.pool.query(`SELECT id FROM element_sets WHERE slug = 'keep-set'`)).rows[0].id;
+  assert.equal((await d.post(`/api/element-sets/${ks}/versions/1/submit`, {})).status, 200);
+  const inf = client(env.base); assert.equal((await inf.login('informatician1')).status, 200);
+  assert.equal((await inf.post(`/api/element-sets/${ks}/versions/1/approve`, { reason: 'Keep review' })).status, 200);
 
   for (const t of CLINICAL) {
     const n = Number((await env.pool.query(`SELECT count(*) n FROM ${t}`)).rows[0].n);

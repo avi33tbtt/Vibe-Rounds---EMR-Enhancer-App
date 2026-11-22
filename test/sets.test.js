@@ -243,8 +243,8 @@ test('publish: only a draft can be published; the version is then frozen by the 
   await assert.rejects(env.pool.query(`UPDATE element_sets SET kind = 'care' WHERE id = $1`, [id]), /identity/);
   await assert.rejects(env.pool.query(`DELETE FROM element_set_versions WHERE element_set_id = $1`, [id]), /append-only/);
   await assert.rejects(env.pool.query('DELETE FROM element_sets WHERE id = $1', [id]), /append-only/);
-  await assert.rejects(env.pool.query('TRUNCATE element_set_versions'), /append-only/);
-  await assert.rejects(env.pool.query('TRUNCATE element_sets CASCADE'), /append-only/);
+  await assert.rejects(env.pool.query('TRUNCATE element_set_versions'), /append-only|referenced in a foreign key/);   // since 8c the reviews table references versions
+  await assert.rejects(env.pool.query('TRUNCATE element_sets CASCADE'), /append-only|referenced in a foreign key/);
   assert.deepEqual(await stored(), frozen, 'nothing changed');
   // a second version of the set is a new row; version 1 stays as it was
   const v2 = await doctor.post(`/api/element-sets/${id}/versions`, { definition: DEF('Frozen set, edited') });

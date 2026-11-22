@@ -44,6 +44,8 @@ const MATRIX = {
   'POST /api/element-sets/:id/versions/:version/submit': { guard: 'sets:submit' },
   'GET /api/element-sets/:id/versions/:version/review': { guard: 'sets:read' },
   'GET /api/review-queue':          { guard: 'sets:read' },
+  'POST /api/element-sets/:id/versions/:version/approve': { guard: 'sets:review' },
+  'POST /api/element-sets/:id/versions/:version/reject': { guard: 'sets:review' },
   'POST /api/element-sets/:id/versions/:version/publish': { guard: 'sets:publish' },
   'POST /api/element-sets/:id/versions/:version/retire': { guard: 'sets:publish' },
   'GET /api/audit':                 { guard: 'audit:read' },
@@ -60,9 +62,10 @@ const EXPECTED_ROLES = {
   'encounters:write':  ['admin', 'doctor', 'nurse'],
   'cases:read':        ['admin', 'doctor', 'nurse', 'viewer'],
   'cases:write':       ['admin', 'doctor', 'nurse'],
-  'sets:read':         ['admin', 'doctor', 'nurse', 'viewer'],
+  'sets:read':         ['admin', 'doctor', 'nurse', 'viewer', 'informatician'],
   'sets:write':        ['admin', 'doctor'],
   'sets:submit':       ['admin', 'doctor'],
+  'sets:review':       ['informatician'],
   'sets:publish':      ['admin'],
   'audit:read':        ['admin'],
   'ai:use':            ['admin', 'doctor'],
@@ -195,13 +198,13 @@ test('audit coverage: every write route leaves an audit row, written from the se
     const fake = { username: 'mallory', role: 'admin', user: 'mallory', userId: 1, actor: 'mallory', createdBy: 1, signedBy: 'mallory' };
     const S = {};   // shared state between steps
     const who = (u, c) => ({ u, c });
-    const nurse = who('nurse1', client(aenv.base)), doctor = who('doctor1', client(aenv.base)), admin = who('admin1', client(aenv.base));
+    const nurse = who('nurse1', client(aenv.base)), reviewer = who('informatician1', client(aenv.base)), doctor = who('doctor1', client(aenv.base)), admin = who('admin1', client(aenv.base));
     const rows = async () => (await aenv.pool.query('SELECT * FROM audit_log ORDER BY id')).rows;
 
     const steps = [
       ['POST /api/login', null, async () => {                        // login is public: success and failure are both audited
         assert.equal((await nurse.c.login('nurse1', 'wrong-password')).status, 401);
-        for (const w of [nurse, doctor, admin]) assert.equal((await w.c.login(w.u)).status, 200);
+        for (const w of [nurse, doctor, admin, reviewer]) assert.equal((await w.c.login(w.u)).status, 200);
         return ['login.failed', 'login'];
       }],
       ['POST /api/patients', nurse, async () => {
@@ -254,7 +257,18 @@ test('audit coverage: every write route leaves an audit row, written from the se
         const v = await doctor.c.post(`/api/element-sets/${S.setId}/versions`, { definition: { title: 'Audit set v3', fields: [{ id: 'a', label: 'A', type: 'text' }] } });
         assert.equal(v.status, 201, JSON.stringify(v.body));
         const r = await doctor.c.post(`/api/element-sets/${S.setId}/versions/${v.body.version.version}/submit`, {});
-        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['set.submit'];
+        assert.equal(r.status, 200, JSON.stringify(r.body)); S.revV = v.body.version.version; return ['set.submit'];
+      }],
+      ['POST /api/element-sets/:id/versions/:version/approve', reviewer, async () => {
+        const r = await reviewer.c.post(`/api/element-sets/${S.setId}/versions/${S.revV}/approve`, { reason: 'Audit approval' });
+        assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.status, 'reviewed'); return ['set.approve'];
+      }],
+      ['POST /api/element-sets/:id/versions/:version/reject', reviewer, async () => {
+        const v = await doctor.c.post(`/api/element-sets/${S.setId}/versions`, { definition: { title: 'Audit set v4', fields: [{ id: 'a', label: 'A', type: 'text' }] } });
+        assert.equal(v.status, 201, JSON.stringify(v.body));
+        assert.equal((await doctor.c.post(`/api/element-sets/${S.setId}/versions/${v.body.version.version}/submit`, {})).status, 200);
+        const r = await reviewer.c.post(`/api/element-sets/${S.setId}/versions/${v.body.version.version}/reject`, { reason: 'Audit rejection' });
+        assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.status, 'rejected'); return ['set.reject'];
       }],
       ['POST /api/element-sets/:id/versions/:version/publish', admin, async () => {
         const r = await admin.c.post(`/api/element-sets/${S.setId}/versions/${S.setV}/publish`, {});
