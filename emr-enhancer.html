@@ -206,6 +206,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <div class="pane" id="lib">
       <h3>Element &amp; Pathway Library</h3>
       <div id="libSrv"></div>
+      <div id="libVers"></div>
       <div id="libList"></div>
     </div>
 
@@ -1465,6 +1466,64 @@ async function libImport(){
   }finally{LIB.busy=false}
   await libLoad();
   if(Srv.user){LIB.msg=out.join(' ');renderLibSrv();toast(out.length?out[out.length-1]:'Nothing imported')}
+  await verLoad();
+}
+
+/* ---------- Set versions: status badges and Submit for review (8d-2) ----------
+   Shows every server version with its state. `local draft` = draft, in review or rejected; `local reviewed` = approved, published or
+   retired. Anything past draft is frozen (the server and the database refuse changes); a change is a new version, made through the
+   library API (the page has no draft editor). Submit sends nothing but the request: the server records who and when, and runs the lint
+   check, whose findings are shown here. Review itself is the Review tab (8d-1). All text is escaped. */
+const VER={items:[],err:{},lint:{},busy:false,loaded:false,msg:''};
+const VER_LBL={draft:'draft',in_review:'in review',rejected:'rejected',reviewed:'approved',published:'published',retired:'retired'};
+const VER_NOTE={in_review:'Waiting for a reviewer.',rejected:'Rejected: this version is final. Write a new version.',reviewed:'Approved and frozen. An admin publishes it.',published:'Published and frozen.',retired:'Retired and frozen.'};
+const verTier=st=>['reviewed','published','retired'].includes(st)?'local reviewed':'local draft';
+async function verLoad(){
+  if(!srvCan('sets:read')){VER.items=[];VER.loaded=false;VER.err={};VER.lint={};return renderVers()}
+  const l=await api('GET','/api/element-sets');
+  if(!srvCan('sets:read'))return;
+  if(l.status!==200){VER.msg='The versions could not be loaded: '+apiMsg(l);VER.items=[];VER.loaded=true;return renderVers()}
+  const sets=l.body.sets||[];
+  const det=await Promise.all(sets.map(x=>api('GET','/api/element-sets/'+x.id)));
+  if(!srvCan('sets:read'))return;
+  VER.items=[];
+  sets.forEach((x,i)=>{if(det[i].status===200)(det[i].body.versions||[]).forEach(v=>VER.items.push({set_id:x.id,slug:x.slug,title:x.title,...v}))});
+  VER.msg='';VER.loaded=true;renderVers();
+}
+function verFindings(fs){return fs.length?`<ul>${fs.map(f=>`<li><span class="gen-warn">${escA(f.severity)}</span> ${escA(f.rule)} · ${escA(f.path)}: ${escA(f.message)}</li>`).join('')}</ul>`:''}
+function renderVers(){
+  const box=$('libVers');if(!box)return;
+  if(!srvMode()||!srvCan('sets:read')){box.innerHTML='';return}
+  const canSub=srvCan('sets:submit');
+  let h=`<div class="cd"><b>Set versions</b> <button class="b sec sm" data-act="verReload">Refresh</button><div class="mu" style="margin:4px 0">Every version on the server and its state. Past draft a version is frozen; changes are a new version.${VER.msg?' '+escA(VER.msg):''}</div>`;
+  if(VER.loaded&&!VER.items.length&&!VER.msg)h+='<div class="empty">No versions on the server yet.</div>';
+  VER.items.slice().sort((a,b)=>a.slug<b.slug?-1:a.slug>b.slug?1:b.version-a.version).forEach(v=>{
+    const key=v.set_id+':'+v.version,lbl=VER_LBL[v.status]||v.status;
+    h+=`<div style="margin:6px 0;padding-top:6px;border-top:1px solid var(--b,#ddd)"><span class="bd" style="background:var(${v.status==='rejected'?'--r':verTier(v.status)==='local draft'?'--a':'--g'})">${escA(verTier(v.status))}</span> <b>${escA(v.title)}</b> <span class="mu">${escA(v.slug)} · v${escA(v.version)} · ${escA(lbl)} · by ${escA(v.created_by)}</span>`;
+    if(v.status==='draft')h+=canSub?` <button class="b sm" data-act="verSubmit" data-arg="${escA(key)}"${VER.busy?' disabled':''}>Submit for review</button>`:' <span class="mu">Draft. Your role cannot submit it.</span>';
+    else h+=` <span class="mu">${escA(VER_NOTE[v.status]||'')}</span>`;
+    if(VER.err[key])h+=`<div class="gen-warn">${escA(VER.err[key])}</div>`;
+    if(VER.lint[key])h+=verFindings(VER.lint[key]);
+    h+='</div>';
+  });
+  box.innerHTML=h+'</div>';
+}
+async function verSubmit(arg){
+  const m=/^(\d+):(\d+)$/.exec(arg||'');if(!m||VER.busy||!srvCan('sets:submit'))return;
+  const key=arg;delete VER.err[key];delete VER.lint[key];
+  if(!confirm('Submit this version for review? After that it is frozen and cannot be edited.'))return;
+  VER.busy=true;renderVers();
+  const r=await api('POST','/api/element-sets/'+m[1]+'/versions/'+m[2]+'/submit',{});
+  VER.busy=false;if(!srvCan('sets:read'))return;
+  if(r.status===200){
+    const fs=(r.body.review&&r.body.review.lint&&r.body.review.lint.findings)||[];
+    toast('Submitted for review.');await verLoad();
+    if(fs.length){VER.lint[key]=fs;renderVers()}
+    return;
+  }
+  VER.err[key]=apiMsg(r);
+  const lint=r.body&&r.body.lint&&r.body.lint.findings;if(lint)VER.lint[key]=lint;
+  if(r.status===409)await verLoad();else renderVers();
 }
 
 /* ---------- Reviewer queue (8d-1) ----------
@@ -1883,7 +1942,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     document.querySelectorAll('nav button,.pane').forEach(x=>x.classList.remove('on'));
     b.classList.add('on');$(b.dataset.t).classList.add('on');
     $('sidebar').style.display=b.dataset.t==='case'?'flex':'none';
-    if(b.dataset.t==='lib')renderLib();
+    if(b.dataset.t==='lib'){renderLib();verLoad()}
     if(b.dataset.t==='review')reviewLoad();
     if(b.dataset.t==='create')renderCustomList();
     if(b.dataset.t==='codes')codesUI();
@@ -1913,7 +1972,7 @@ const apiMsg=r=>r.body.message||(r.status===403?'Your role does not have permiss
 function renderWho(){
   if(!Srv.user)Object.assign(AI,{on:false,configured:false,canUse:false,admin:null,left:null});
   $('who').innerHTML=Srv.user?`${escA(Srv.user.username)} (${escA(Srv.user.role)}) <a href="#" data-act="srvLogout">Sign out</a>`:'Not signed in';
-  renderBanner();renderEncounter();renderCases();renderSrvCase();applyAiState();renderAiPanel();renderNotes();renderReviewNav();
+  renderBanner();renderEncounter();renderCases();renderSrvCase();applyAiState();renderAiPanel();renderNotes();renderReviewNav();renderVers();
 }
 async function srvInit(){
   const r=await api('GET','/api/me');
@@ -2066,6 +2125,8 @@ const ACT={
   reviewApprove:(el,e,a)=>reviewDecide('approve',a),
   reviewReject:(el,e,a)=>reviewDecide('reject',a),
   reviewReload:()=>reviewLoad(),
+  verReload:()=>verLoad(),
+  verSubmit:(el,e,a)=>verSubmit(a),
   verifyGenerated:()=>verifyGenerated(),
   markRowError:(el,e,a)=>markRowError(a,Number(el.getAttribute('data-arg2'))),
   toggleShowErr:(el)=>{SHOW_ERR=!!el.checked;renderForms()},
