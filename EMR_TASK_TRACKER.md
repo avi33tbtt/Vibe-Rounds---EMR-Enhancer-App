@@ -25,6 +25,10 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 
 ---
 
+**Added 2026-11-22 (plan extension).** Rows B0 to D8b extend the plan toward the book's Chapters 5 to 10. Rules that apply to every new row: use the next free migration number (never a fixed one); every new route updates the permission matrix and audit tests on purpose; every new table gets only the grants `emr_app` needs and no DELETE/TRUNCATE on clinical data; CCIS libraries (`ccis-*.js`) are pure JS with no database access; data files live in `ccis/`; tests are `test/ccis-*.test.js`. The "Needs:" text in Notes lists prerequisite rows: do not start a row whose prerequisites are not DONE.
+
+---
+
 ## STATUS LEGEND
 `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` | `SKIPPED` | `SPLIT` (replaced by sub-tasks)
 
@@ -32,45 +36,112 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 
 | ID | Plan file | Task | Status | Date | Size guard | Notes (one line) |
 |----|-----------|------|--------|------|------------|------------------|
-| 0  | (all) | Read plan, populate table | DONE | 2026-11-21 | | |
-| 1  | chunk-01-registration-screens.md | Registration screens | DONE | 2026-11-21 | | Server, patients, encounters, audit, roles created. |
-| 2  | chunk-02-code-registry.md | Code-system registry + bindings[] | DONE | 2026-11-21 | | 9 systems; verified-only export. Live tx.fhir.org not tried. |
-| 3  | chunk-03-create-screen.md | Unified create screen | DONE | 2026-11-21 | | SDC checkbox, code picker, `sdc.js`. |
-| 4a | chunk-04-ai-browser.md | AI in browser, minimal payload | DONE | 2026-11-21 | | Superseded by 4b (no key in browser). |
-| 4b | chunk-04-ai-server.md | AI on the server | DONE | 2026-11-22 | | Mock provider only; real provider call not tried. |
-| 5  | chunk-05-safety-tests.md | Safety-test pack + CI | DONE | 2026-11-22 | | | 5  | chunk-05-safety-tests.md | Safety-test pack + CI | DONE | 2026-11-22 | | 92 tests (87 pass, 5 todo). CI workflow never run on GitHub yet. |
-| 6  | chunk-06-security.md | Security hardening (original) | SPLIT | | | Replaced by 6a to 6e. |
-| 6a | chunk-06a-escaping.md | Escape all user text in the page | DONE | 2026-11-22 | page + 1 test file | emr-enhancer.html, test/safety-escaping.test.js, DECISIONS.md. Shared escaper + jsA for handler ids at ~45 sites; 5 hostile-string tests. 97 tests (92 pass, 5 todo). Rest of 6 still TODO. |
+| 0 | (all) | Read plan, populate table | DONE | 2026-11-21 |  |  |
+| 1 | chunk-01-registration-screens.md | Registration screens | DONE | 2026-11-21 |  | Server, patients, encounters, audit, roles created. |
+| 2 | chunk-02-code-registry.md | Code-system registry + bindings[] | DONE | 2026-11-21 |  | 9 systems; verified-only export. Live tx.fhir.org not tried. |
+| 3 | chunk-03-create-screen.md | Unified create screen | DONE | 2026-11-21 |  | SDC checkbox, code picker, `sdc.js`. |
+| 4a | chunk-04-ai-browser.md | AI in browser, minimal payload | DONE | 2026-11-21 |  | Superseded by 4b (no key in browser). |
+| 4b | chunk-04-ai-server.md | AI on the server | DONE | 2026-11-22 |  | Mock provider only; real provider call not tried. |
+| 5 | chunk-05-safety-tests.md | Safety-test pack + CI | DONE | 2026-11-22 |  | 92 tests (87 pass, 5 todo). CI workflow never run on GitHub yet. |
+| 6 | chunk-06-security.md | Security hardening (original) | SPLIT |  |  | Replaced by 6a to 6e. |
+| 6a | chunk-06a-escaping.md | Escape all user text in the page | DONE | 2026-11-22 | page + 1 test file | emr-enhancer.html, test/safety-escaping.test.js, DECISIONS.md. Shared escaper + jsA for handler ids at ~45 sites; 5 hostile-string tests. 97 tests (92 pass, 5 todo). |
 | 6b | chunk-06b-headers-cookies-ratelimit.md | Headers, Secure cookie, rate limits | DONE | 2026-11-22 | app.js, auth.js + 1 test | app.js, auth.js, ratelimit.js, test/safety-hardening.test.js, env.txt, DECISIONS.md. Headers, Secure cookie (HTTPS=1), 429 limits on login and writes, audited once per window. 106 tests (101 pass, 5 todo). Per-process limiter. |
 | 6c | chunk-06c-db-role.md | Restricted DB role, no DELETE/TRUNCATE | DONE | 2026-11-22 | 1 migration + config + tests | 005_app_role.sql, MIGRATE_DATABASE_URL, tests run as emr_app, TRUNCATE todo now real. Not tried on Render. |
-| 6d | chunk-06d-csp.md | Content-Security-Policy (93 inline handlers) | TODO | | decide approach first; may need 2 sessions | |
-| 6e | chunk-06e-policy-docs.md | Retention, access, consent notes | TODO | | docs only | |
-| 7  | chunk-07-backup-deploy.md | Backup, restore, deploy (original) | SPLIT | | | Replaced by 7a to 7d. |
-| 7a | chunk-07a-container-tls.md | Container + TLS | TODO | | Dockerfile, compose, proxy config | |
-| 7b | chunk-07b-encrypted-backups.md | Encrypted scheduled backups | TODO | | 1 script + schedule | |
-| 7c | chunk-07c-restore-test.md | Restore script + recorded restore | TODO | | 1 script + 1 doc; user does the clean-machine run | |
-| 7d | chunk-07d-downtime-golive-docs.md | Downtime page + go-live checklist | TODO | | docs only | |
-| 8  | chunk-08-review-workflow.md | Review/approval workflow (original) | SPLIT | | | Replaced by 8a to 8f. |
-| 8a | chunk-08a-lint.md | Shared lint module | TODO | | 1 new module + 1 test | |
-| 8b | chunk-08b-submit-snapshot.md | Server: submit set for review (snapshot) | TODO | | 1 migration, routes, tests | |
-| 8c | chunk-08c-review-rules.md | Reviewer rules + frozen approved version | TODO | | routes, trigger, tests | |
-| 8d | chunk-08d-review-ui.md | Review screens + tier badges | TODO | | page + 1 test file | |
-| 8e | chunk-08e-signer-from-session.md | Signer/author from session (core-rule gap) | TODO | | page + tests | |
-| 8f | chunk-08f-entered-in-error.md | No hard delete of observation rows | TODO | | page + tests | |
+| 6d | chunk-06d-csp.md | Content-Security-Policy (93 inline handlers) | SPLIT |  |  | Replaced by 6d-1, 6d-2a, 6d-2b, 6d-2c. Option A (delegated listener) chosen 2026-11-22. |
+| 6d-1 | chunk-06d1-csp-header.md | CSP header + per-response nonce (server half) | TODO |  | app.js + serve code + 1 test | Temporary unsafe-hashes for attributes, flagged by a test.todo. |
+| 6d-2a | chunk-06d2-handlers.md | Delegated listener + convert handlers 1 to 30 | TODO |  | about 30 handlers | Needs: 6d-1. |
+| 6d-2b | chunk-06d2-handlers.md | Convert handlers 31 to 62 | TODO |  | about 30 handlers | Needs: 6d-2a. |
+| 6d-2c | chunk-06d2-handlers.md | Convert the rest; remove unsafe-hashes; zero inline handlers | TODO |  | about 30 handlers | Needs: 6d-2b. Closes 6d. |
+| 6e | chunk-06e-policy-docs.md | Retention, access, consent notes | TODO |  | docs only | Can share a session with 7d. |
+| 7 | chunk-07-backup-deploy.md | Backup, restore, deploy (original) | SPLIT |  |  | Replaced by 7a to 7d. |
+| 7a | chunk-07a-container-tls.md | Container + TLS | TODO |  | Dockerfile, compose, proxy config | A health route needs the permission matrix updated. |
+| 7b | chunk-07b-encrypted-backups.md | Encrypted scheduled backups | TODO |  | 1 script + schedule | Needs: 7a. |
+| 7c | chunk-07c-restore-test.md | Restore script + recorded restore | TODO |  | 1 script + 1 doc; user does the clean-machine run | Needs: 7b. |
+| 7d | chunk-07d-downtime-golive-docs.md | Downtime page + go-live checklist | TODO |  | docs only | Needs: 7c. |
+| 8 | chunk-08-review-workflow.md | Review/approval workflow (original) | SPLIT |  |  | Replaced by 8a to 8f. |
+| 8a | chunk-08a-lint.md | Shared lint module | TODO |  | 1 new module + 1 test |  |
+| 8b | chunk-08b-submit-snapshot.md | Server: submit set for review (snapshot) | TODO |  | 1 migration, routes, tests | Needs: 8a. Re-pointed at server versions by B2r. |
+| 8c | chunk-08c-review-rules.md | Reviewer rules + frozen approved version | TODO |  | routes, trigger, tests | Needs: 8b. |
+| 8d | chunk-08d-review-ui.md | Review screens + tier badges | TODO |  | page + 1 test file | Needs: 8c. |
+| 8e | chunk-08e-signer-from-session.md | Signer/author from session (core-rule gap) | TODO |  | page + tests | Page-level only; server enforcement arrives in B3c. |
+| 8f | chunk-08f-entered-in-error.md | No hard delete of observation rows | TODO |  | page + tests | Page-level only; server enforcement arrives in B3a/B3b. |
+| | | **TRACK B: canonical clinical context model on the server (book Ch5)** | | | | |
+| B0 | chunk-B0-baseline-contract.md | Baseline contract: prototype objects to entities (docs only) | TODO |  | 1 markdown file | Needs: 8f. Decision 2026-11-22: server is system of record. User reviews before B1. |
+| B1a | chunk-B1a-cases-server.md | Persistent cases: migration, API, permissions | TODO |  | 1 migration, 1 routes file, tests | Needs: B0. |
+| B1b | chunk-B1b-cases-page.md | Cases in the page via storage adapter | TODO |  | page + 1 test file | Needs: B1a. |
+| B2a | chunk-B2a-element-sets-server.md | Versioned element sets (server) | TODO |  | 1 migration, 1 routes file, tests | Needs: B1a. |
+| B2b | chunk-B2b-element-sets-page.md | Library + case pinning use server versions | TODO |  | page + 1 test file | Needs: B2a, B1b. May merge into B3a/B3b (see chunk). |
+| B2r | chunk-B2r-review-on-versions.md | Re-point review workflow at server versions | TODO |  | 1 migration + route edits | Needs: B2a, 8d. |
+| B3a | chunk-B3a-observations-server.md | Applied sets, observations, events (server) | TODO |  | 1 migration, 1 routes file, tests | Needs: B2a. Append-only; entered-in-error. |
+| B3b | chunk-B3b-observations-page.md | Values and trajectories via server; entered-in-error UI | TODO |  | page + 1 test file | Needs: B3a, 8f. Closes todo (b). |
+| B3c | chunk-B3c-notes-server.md | Notes and signing on the server | TODO |  | 1 migration, routes, page notes, tests | Needs: B3a, 8e. Closes todos (a) and (d). |
+| B4 | chunk-B4-pathways.md | Pathway versions and composition | TODO |  | 1 migration, routes, page, tests | Needs: B3a. Split server/page if large. |
+| B5 | chunk-B5-context-service.md | Context service: versioned minimal envelope | TODO |  | 1 module, 1 route, tests | Needs: B3a, B4. Input contract for CCIS. |
+| | | **TRACK C: CCIS schemas, validators and first vertical slice (book Ch9)** | | | | |
+| C0 | chunk-C0-ccis-spec.md | CCIS spec baseline (docs only) | TODO |  | 3 markdown files | Can start any time after 8f; DB-free. User approves freeze. |
+| C1a | chunk-C1a-schemas-core.md | Schemas: manifest, element, terminology binding | TODO |  | 3 schemas + module + tests | Needs: C0. Adds Ajv (pinned). |
+| C1b | chunk-C1b-schemas-pathway-node.md | Schemas: pathway, decision node | TODO |  | 2 schemas + tests | Needs: C1a. |
+| C1c | chunk-C1c-schemas-analytics.md | Schemas: analytics package, execution manifest, validation record, run result | TODO |  | 4 schemas + tests | Needs: C1b. |
+| C2a | chunk-C2a-reference-valid.md | Reference artefacts (valid) + synthetic fixtures | TODO |  | JSON files + 1 test | Needs: C1c. Use case: snake envenomation process metrics. |
+| C2b | chunk-C2b-reference-invalid.md | Research candidate, FHIR Mode example, invalid per layer | TODO |  | JSON files | Needs: C2a. |
+| C3a | chunk-C3a-validator-1.md | Validator layers 1 to 3 | TODO |  | 1 module + CLI + tests | Needs: C2b. |
+| C3b | chunk-C3b-validator-2.md | Validator layers 4 to 5 (semantic, graph) | TODO |  | 1 module + tests | Needs: C3a. |
+| C3c | chunk-C3c-validator-3.md | Validator layers 6 to 8 (safety, tests, governance) | TODO |  | 1 module + tests | Needs: C3b. |
+| C4 | chunk-C4-compiler.md | Compiler: canonical form, checksum, equivalence | TODO |  | 1 module + tests | Needs: C3c. |
+| C5a | chunk-C5a-runtime-import.md | Runtime: import context envelope | TODO |  | 1 module + tests | Needs: B5, C4. |
+| C5b | chunk-C5b-compatibility.md | Runtime: compatibility resolver | TODO |  | 1 module + tests | Needs: C5a. |
+| C5c | chunk-C5c-executor.md | Runtime: constrained executor + decision path | TODO |  | 1 module + tests | Needs: C5b. No eval. |
+| C6 | chunk-C6-run-records.md | Immutable run records + API | TODO |  | 1 migration, 1 routes file, tests | Needs: C5c, B5. |
+| C7 | chunk-C7-test-marketplace.md | Local test marketplace: publish, resolve, pin | TODO |  | 1 module + index + tests | Needs: C4. |
+| C8 | chunk-C8-result-viewer.md | Result viewer (ci.html) | TODO |  | 1 page + route + tests | Needs: C6. |
+| C9 | chunk-C9-vertical-slice.md | First conformant vertical slice + CCIS 0.1 baseline | TODO |  | 1 test file + docs | Needs: C6, C7, C8. User reviews limitations. |
+| | | **TRACK D: analytics catalogue, decision graphs, cohorts, FHIR, governance (book Ch8, Ch10)** | | | | |
+| D1a | chunk-D1a-templates-core.md | Analytics templates 1 to 3 (threshold, trend, score) | TODO |  | 3 templates + fixtures | Needs: C9. |
+| D1b | chunk-D1b-templates-more.md | Templates 4 to 6 (monitoring gap, eligibility, follow-up due) | TODO |  | 3 templates + fixtures | Needs: D1a. Medication-safety and staging BLOCKED until a clinician owner supplies rules. |
+| D1c | chunk-D1c-catalogue-discovery.md | Catalogue discovery + status labels | TODO |  | 1 module + tests | Needs: D1b, C7. |
+| D2a | chunk-D2a-decision-graph-engine.md | Decision graph: schema, static checks, executor | TODO |  | 1 schema + executor + tests | Needs: C5c. |
+| D2b | chunk-D2b-graph-code-authoring.md | Decision graph authoring: code/structured editor | TODO |  | 1 page section/CLI + tests | Needs: D2a. Visual node builder is later. |
+| D2c | chunk-D2c-llm-drafting.md | LLM drafting for graphs/templates (drafts only) | TODO |  | 1 route file + tests | Needs: D2b. |
+| D3 | chunk-D3-research-to-package.md | Research paper to traceable analytics package | TODO |  | 1 module + route + tests | Needs: D2c, D1a. |
+| D4a | chunk-D4a-cohort-definition.md | Cohort definition schema + validator | TODO |  | 1 schema + rules + tests | Needs: C9. |
+| D4b | chunk-D4b-cohort-evaluator.md | Cohort evaluator (3-valued) on synthetic data | TODO |  | 1 module + fixtures + tests | Needs: D4a. |
+| D4c | chunk-D4c-cohort-analytics.md | Cohort analytics execution + aggregation + provenance | TODO |  | 1 module + tests | Needs: D4b, D1a. |
+| D4d | chunk-D4d-cohort-access.md | Population-level access, purpose, small-cell control | TODO |  | 1 routes file + permissions + tests | Needs: D4c, B5. |
+| D5a | chunk-D5a-fhir-capability.md | FHIR Mode profile + capability matrix | TODO |  | docs + 1 test | Needs: C9. |
+| D5b | chunk-D5b-fhir-roundtrip.md | FHIR Mode round-trip + negative tests | TODO |  | tests + fixtures | Needs: D5a. |
+| D6 | chunk-D6-governance.md | External review + release governance | TODO |  | docs + 1 script + tests | Needs: C9, D1c. |
+| D7 | chunk-D7-evaluation.md | Quality + reliability evaluation (CI job) | TODO |  | 1 workflow edit + script + docs | Needs: D4c. |
+| D8a | chunk-D8a-cohort-package-contract.md | Cohort data package contract + import acceptance | TODO |  | 1 spec + schema + module + tests | Needs: D4d, B5. |
+| D8b | chunk-D8b-emr-cohort-exporter.md | EMR Enhancer cohort exporter | TODO |  | 1 routes file + page dialog + tests | Needs: D8a, B3c, D4d. Last row. |
 
-Suggested order: numeric. 8e and 8f can be done at any point after 6a (they fix core-rule gaps and do not depend on review work). 6e and 7d are short and can share one session.
+Suggested order: numeric within each track; tracks run A, then B, then C, then D. Exceptions that are safe: 8e and 8f can be done any time after 6a; 6e and 7d can share one session; C0 to C4 are DB-free and may run in parallel with Track B if you want faster progress (C5a onward needs B5).
+
+Optional re-order to avoid rework: do B0 to B2a before 8b to 8d, so the review workflow is built directly on server versions and B2r disappears. Say "reorder review after B2" and the tracker will be changed.
 
 ## ITEMS ONLY YOU CAN DO (Claude cannot)
 - Turn on branch protection for `main` and require the `test` check (GitHub, Settings, Branches).
 - Look at the first GitHub Actions run (the workflow has never run).
 - Try one real AI provider call (`AI_PROVIDER`, `AI_API_KEY`, `AI_MODEL` in `.env` and Render), then tick Enable AI as admin.
 - Try the app in a real browser with real synthetic data; Node 20 and other PostgreSQL versions are untested.
-- Tick the finished chunks in `emr-plan-chunks/02-roadmap.md` (items 01 to 05 are still unticked there).
+- Tick the finished chunks in `emr-plan-chunks/02-roadmap.md` (items 01 to 05 are still unticked there); later items are tracked in `03-roadmap-track-bcd.md`.
 - For 7c: perform the restore on a clean machine yourself and confirm the result.
+- Review and approve: B0 mapping (before B1), C0 spec freeze (before C1), C9 limitations list (before Track D).
+- Name a clinician owner for any clinical rule content (thresholds, bands, medication safety, staging). Until then those templates stay BLOCKED and parameters stay disabled.
+- Arrange an independent clinical reviewer before any package is labelled `validated` (D1c, D6).
+- Check terminology licences and device-software/health-data rules (go-live gate).
 
 ## KNOWN GAPS (5 `test.todo` tests) and where they are fixed
-(a) signer/author read from typed box, not session -> 8e. (b) `delRow` splices observation rows -> 8f. (c) closed by 6c. (d) signed-note immutability and stale-version conflicts only in the page; element sets, cases and notes are not stored on the server -> partly 8b/8c (sets submitted for review only); full server storage is NOT planned yet. (e) `GET /api/patients/:id/encounters` not audited -> left as is.
+(a) signer/author read from typed box, not session -> page-level in 8e, server-enforced in B3c. (b) `delRow` splices observation rows -> page-level in 8f, server-enforced in B3a/B3b. (c) closed by 6c. (d) signed-note immutability and stale-version conflicts only in the page; element sets, cases and notes are not stored on the server -> DECIDED 2026-11-22: full server storage is now planned (B1 to B4); notes in B3c. (e) `GET /api/patients/:id/encounters` not audited -> left as is.
+
+## DECISIONS MADE ON 2026-11-22 (also in DECISIONS.md)
+- Server-side storage is ALWAYS ON for cases, element sets, observations and notes (reverses the snapshot-only idea). Browser storage remains only as the file:// demo fallback behind one storage adapter; signed-in sessions write no clinical data to localStorage.
+- CSP uses option A (delegated listener, no inline handlers), split into 6d-1 and 6d-2a to 6d-2c.
+- CCIS code: root-level `ccis-*.js` (pure, no DB) plus `ccis/` for schemas, examples, fixtures and spec; JSON Schema validated with one pinned dependency (Ajv); runtime is a whitelist interpreter, never `eval`.
+- First vertical-slice use case: snake envenomation process metrics (bite-to-ASV interval, clotting-test documentation completeness). No doses or bands; parameters supplied by a local clinician and disabled by default.
+- Cohort engine is built against synthetic fixtures first; the EMR cohort exporter is the last row.
 
 ## OPEN QUESTIONS
-- Plan 8 needs a choice (recorded in DECISIONS.md): only a snapshot goes to the server on "submit for review". If you want sets stored on the server all the time, say so; that is a separate, larger chunk.
-- Adding any API route (for example a health check in 7a) makes `test/safety-routes.test.js` fail until the permission matrix there is updated on purpose.
+- Plan 8b to 8d were written for snapshots; keep them as they are and re-point in B2r, or re-order (see above)?
+- Where do the CCIS libraries and the Intelligence App live long term: this repo (current plan) or a separate repo after C9?
+- Which clinician owns the snake-envenomation parameters used by the slice?
+- Adding any API route makes `test/safety-routes.test.js` fail until the permission matrix there is updated on purpose.
