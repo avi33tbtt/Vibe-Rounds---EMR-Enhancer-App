@@ -7,7 +7,7 @@ const { hashPassword } = require('../auth');
 const URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 const PW = 'test-password-1';
 
-async function setup() {
+async function setup(appOpts = {}) {
   if (!URL) throw new Error('Set TEST_DATABASE_URL to an empty scratch database (it is wiped).');
   const pool = makePool(URL);
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
@@ -15,7 +15,7 @@ async function setup() {
   for (const [u, r] of [['admin1', 'admin'], ['doctor1', 'doctor'], ['nurse1', 'nurse'], ['viewer1', 'viewer']]) {
     await pool.query('INSERT INTO users(username, display_name, role, password_hash) VALUES ($1,$2,$3,$4)', [u, u, r, hashPassword(PW)]);
   }
-  const server = createApp(pool, { quiet: true }).listen(0, '127.0.0.1');
+  const server = createApp(pool, { quiet: true, ...appOpts }).listen(0, '127.0.0.1');
   await new Promise(r => server.once('listening', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const close = async () => { await new Promise(r => server.close(r)); await pool.end(); };

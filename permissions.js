@@ -6,6 +6,8 @@ const PERMS = {
   'patients:archive':  ['admin', 'doctor'],
   'encounters:write':  ['admin', 'doctor', 'nurse'],
   'audit:read':        ['admin'],
+  'ai:use':            ['admin', 'doctor'],   // draft / rank element sets with the server-side AI
+  'ai:admin':          ['admin'],             // the AI on/off switch, model and request limits
 };
 const can = (role, perm) => (PERMS[perm] || []).includes(role);
 const permsFor = role => Object.keys(PERMS).filter(p => can(role, p));

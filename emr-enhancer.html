@@ -111,7 +111,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 
 <dialog id="aiDlg">
   <b>Review before sending to the AI provider</b>
-  <div class="mu" style="margin:4px 0">Exactly this request will be sent, and nothing else. Your API key is added as a header and is not shown. Synthetic data only.</div>
+  <div class="mu" style="margin:4px 0">The server will send exactly this request to the AI provider, and nothing else. The server adds its own API key; it is never shown here and never reaches this browser. Synthetic data only.</div>
   <pre class="raw" id="aiDlgBody"></pre>
   <form method="dialog" class="flex" style="justify-content:flex-end;margin-top:8px">
     <button class="b sec sm" value="cancel">Cancel</button>
@@ -120,20 +120,24 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 </dialog>
 
 <div id="setPanel" class="cd">
-  <label style="display:flex;align-items:center;gap:8px;font-weight:600">
-    <input type="checkbox" id="aiOn" style="width:auto"> Enable AI (off by default)
-  </label>
-  <div class="note">When off, nothing is ever sent to an AI provider and the AI buttons are disabled. When on, every call shows the exact payload first and is sent only after you click Send. The payload holds only: primary diagnosis, titles/ids of applied element sets and pathways, and your optional instructions. Never patient name, MRN, age, sex, dates, entered values, narrative or notes.</div>
-  <label>Provider</label>
-  <select id="prov"><option value="or">OpenRouter</option><option value="an">Anthropic</option></select>
-  <label>Model</label>
-  <input id="model" placeholder="e.g. anthropic/claude-sonnet-4.5">
-  <label>API key (browser only)</label>
-  <input id="key" type="password">
+  <b>AI</b>
+  <div class="note" id="aiStatus"></div>
+  <div id="aiAdmin" style="display:none">
+    <label style="display:flex;align-items:center;gap:8px;font-weight:600">
+      <input type="checkbox" id="aiOn" style="width:auto"> Enable AI on this server (off by default)
+    </label>
+    <label>Model (optional; leave empty to use the server's AI_MODEL)</label>
+    <input id="aiModel" maxlength="100">
+    <label>Requests per user per hour</label>
+    <input id="aiHourly" type="number" min="1" max="500">
+    <label>Requests per day, all users</label>
+    <input id="aiDaily" type="number" min="1" max="5000">
+    <div class="note">Only an administrator sees these. The provider and its key are set on the server (AI_PROVIDER, AI_API_KEY), not here.</div>
+  </div>
+  <div class="note">When AI is off, nothing is ever sent to an AI provider and the AI buttons are disabled. When it is on, every call first shows you the exact request, with identifying details removed, and is sent by the server only after you click Send. The request holds only: primary diagnosis, titles/ids of library items, and your optional instructions. Never patient name, MRN, age, sex, dates, entered values, narrative or notes. The provider key is held by the server only.</div>
   <label style="display:flex;align-items:center;gap:8px;font-weight:500">
-    <input type="checkbox" id="demo" style="width:auto"> Demo mode (no key — snake / DKA only)
+    <input type="checkbox" id="demo" style="width:auto"> Demo mode (no AI call — snake / DKA only)
   </label>
-  <div class="note">The key is stored in this browser only and can be read by anyone who uses this browser. Use your own key. Synthetic data only.</div>
   <button class="b" onclick="saveSet()">Save settings</button>
 </div>
 
@@ -207,14 +211,14 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <b>A · Generate from diagnosis (LLM or demo)</b>
         <div class="note">The model proposes fields and <i>candidate</i> bindings, only in the code systems ticked above. Bindings are stored in the element set itself (not in FHIR) and stay <b>unverified</b> until looked up on a terminology server <i>and</i> the display matches. No doses or therapeutic thresholds are requested.</div>
         <label>Primary diagnosis</label>
-        <input id="gen_dx" placeholder="e.g. Acute ischemic stroke">
+        <input id="gen_dx" maxlength="200" placeholder="e.g. Acute ischemic stroke">
         <div class="mu">Examples:
           <a href="#" onclick="return fillDx(this)">Snake envenomation (hemotoxic)</a> ·
           <a href="#" onclick="return fillDx(this)">Diabetic ketoacidosis</a> ·
           <a href="#" onclick="return fillDx(this)">Sepsis</a>
         </div>
         <label>Instructions (optional — do not enter patient details)</label>
-        <textarea id="gen_ins" placeholder="e.g. focus on time-critical intervals"></textarea>
+        <textarea id="gen_ins" maxlength="500" placeholder="e.g. focus on time-critical intervals"></textarea>
         <div class="flex" style="margin-top:10px">
           <button class="b" id="genBtn" data-ai onclick="generate()">Generate element set</button>
           <span class="mu" id="genStatus"></span>
@@ -367,8 +371,22 @@ const toast=m=>{ $('toast').textContent=m; setTimeout(()=>{if($('toast').textCon
 const tg=id=>{const e=$(id);e.style.display=e.style.display==='block'?'none':'block'};
 
 /* Settings */
-function loadSet(){try{const s=JSON.parse(localStorage.getItem('vr_set')||'{}');$('prov').value=s.p||'or';$('model').value=s.m||'';$('key').value=s.k||'';$('demo').checked=s.d!==false&&!s.k;$('aiOn').checked=s.a===true}catch(e){}}
-function saveSet(){try{localStorage.setItem('vr_set',JSON.stringify({p:$('prov').value,m:$('model').value,k:$('key').value,d:$('demo').checked,a:$('aiOn').checked}))}catch(e){}applyAiState();tg('setPanel');toast('Settings saved')}
+/* Only the demo-mode choice is kept in this browser. The AI provider, model and key are server-side (chunk 04b). */
+function demoPref(){try{const d=JSON.parse(localStorage.getItem('vr_set')||'{}').d;return typeof d==='boolean'?d:null}catch(e){return null}}
+function purgeLegacyAiSettings(){   // older versions stored provider, model and API key here: remove them
+  try{const raw=localStorage.getItem('vr_set');if(raw===null)return;const d=demoPref();localStorage.setItem('vr_set',JSON.stringify(d===null?{}:{d}))}
+  catch(e){try{localStorage.removeItem('vr_set')}catch(_){}}
+}
+const demoOn=()=>{const d=demoPref();return d===null?!AI.configured:d};
+function loadSet(){purgeLegacyAiSettings();$('demo').checked=demoOn()}
+async function saveSet(){
+  try{localStorage.setItem('vr_set',JSON.stringify({d:$('demo').checked}))}catch(e){}
+  if(AI.admin){
+    const r=await api('PUT','/api/ai/settings',{enabled:$('aiOn').checked,model:$('aiModel').value.trim(),hourlyLimitPerUser:Number($('aiHourly').value),dailyLimitTotal:Number($('aiDaily').value)});
+    if(r.status!==200){toast(apiMsg(r));return}
+  }
+  await aiRefresh();tg('setPanel');toast('Settings saved');
+}
 
 /* Systems */
 /* Code-system registry (chunk 02). A field carries bindings[]; each binding is {system:<registry key>, code, display, source?}.
@@ -568,17 +586,7 @@ const DEMO_DKA={id:'gen_dka',kind:'disease',title:'Diabetic ketoacidosis',desc:'
   ]};
 [...BUILTIN,DEMO_SNAKE,DEMO_DKA].forEach(migrateSet);
 
-const SYS_HINT={snomed:'SNOMED CT for findings and procedures',loinc:'LOINC for lab and vital-sign observations',rxnorm:'RxNorm only for medication fields (drug names, never doses)',icd10:'ICD-10 only for diagnosis/condition fields (cannot be machine-verified here: leave empty unless certain)',icd11:'ICD-11 only for diagnosis/condition fields (cannot be machine-verified here: leave empty unless certain)',atc:'ATC only for medication-class fields (cannot be machine-verified here: leave empty unless certain)'};
-/* The prompt names only the ticked systems. With none ticked it asks for no codes at all. */
-function sysPrompt(systems){
-  const sy=(systems||[]).map(csBy).filter(x=>x&&x.key!=='local'&&x.enabled!==false);
-  const b=sy.length?`,"bindings":[{"system":"${sy.map(x=>x.key).join('|')}","code":"","display":""}]`:'';
-  const term=sy.length?`\nTerminology: "bindings" are CANDIDATES that will be machine-verified, so give the exact official display term. Allowed systems ONLY: ${sy.map(x=>x.key).join(', ')} (${sy.map(x=>SYS_HINT[x.key]).filter(Boolean).join('; ')}). Never use any other system. At most one binding per allowed system per field. If you are not certain of a code, leave "bindings" as an empty array (an empty binding is better than a wrong one).`:'\nTerminology: do NOT include codes or bindings.';
-  return `You are a clinical informatics assistant. Return ONLY valid JSON (no prose, no markdown):
-{"id":"snake_case","kind":"disease|care","title":"","desc":"","fields":[{"id":"snake_case","label":"","type":"datetime|number|integer|select|boolean|text","unit":"","options":[],"required":false,"repeat":false${b},"rationale":""}]}.
-8-14 high-yield fields. Prioritise time-critical intervals, severity, therapy. Use select only with options. For serial observations set repeat:true.${term}
-Safety: do NOT include drug doses, dose calculations, therapeutic target ranges, or protocol thresholds anywhere (labels, options, rationale). Capture what to record, not what to do. Use the diagnosis as title.`;
-}
+/* The AI system prompts live on the server (ai.js); the browser only sends a whitelisted payload. */
 
 /* State */
 let REGISTRY=[],CASES=[],CASE=null,LAST_GENERATED=null;
@@ -714,12 +722,32 @@ function renderNotes(){
 /* LLM generate */
 function fillDx(a){$('gen_dx').value=a.textContent;return false}
 /* AI: off by default; whitelist payload; exact preview before every call */
-const SYS_RANK=`You rank EXISTING library items for relevance to a diagnosis. Return ONLY valid JSON: {"ranked":["id","id"]}. Use only ids from "candidates", at most 8, most relevant first. Do not include doses, thresholds or protocol text.`;
-const savedSettings=()=>{try{return JSON.parse(localStorage.getItem('vr_set')||'{}')}catch(e){return{}}};
-const aiEnabled=()=>savedSettings().a===true;
+/* AI state comes from the server: the admin switch, whether a provider key exists there, and this user's role and limits. */
+const AI={on:false,configured:false,canUse:false,model:'',provider:'',limit:null,left:null,admin:null};
+const aiEnabled=()=>AI.on&&AI.canUse;
+async function aiRefresh(){
+  if(Srv.user){
+    const r=await api('GET','/api/ai/status');
+    if(r.status===200){const a=r.body.ai;Object.assign(AI,{on:a.enabled,configured:a.configured,canUse:a.canUse,model:a.model,provider:a.provider,limit:a.hourlyLimit,left:Math.max(0,a.hourlyLimit-a.usedThisHour),admin:a.admin||null})}
+  }
+  applyAiState();renderAiPanel();
+}
+function renderAiPanel(){
+  const el=$('aiStatus');if(!el)return;
+  let t;
+  if(!Srv.user)t='Sign in on the Patients tab to use AI. The provider key is held by the server, never by this browser.';
+  else if(!AI.on)t='AI is OFF (set by an administrator). Nothing is sent to any AI provider.';
+  else if(!AI.canUse)t='AI is on, but your role cannot use it.';
+  else if(!AI.configured)t='AI is on, but the server has no provider key yet. Only Demo mode works.'+(AI.admin&&AI.admin.problem?' Server setup: '+AI.admin.problem+'.':'');
+  else t=`AI is on · ${AI.provider} · model ${AI.model||'(not set)'} · you have ${AI.left} of ${AI.limit} requests left this hour.`;
+  el.textContent=t;
+  $('aiAdmin').style.display=AI.admin?'block':'none';
+  if(AI.admin){$('aiOn').checked=AI.on;$('aiModel').value=AI.admin.modelOverride;$('aiModel').placeholder=AI.admin.serverModel?'server default: '+AI.admin.serverModel:'e.g. anthropic/claude-sonnet-4.5';$('aiHourly').value=AI.limit;$('aiDaily').value=AI.admin.dailyLimit}
+  $('demo').checked=demoOn();
+}
 function applyAiState(){
-  const on=aiEnabled();
-  document.querySelectorAll('[data-ai]').forEach(b=>{b.disabled=!on;b.title=on?'':'AI is off — enable it in Settings'});
+  const on=aiEnabled(),why=!Srv.user?'Sign in to use AI':!AI.canUse?'Your role cannot use AI':'AI is off — an administrator can enable it in Settings';
+  document.querySelectorAll('[data-ai]').forEach(b=>{b.disabled=!on;b.title=on?'':why});
 }
 /* Whitelist: every key is picked explicitly. Never spreads or reads patient, narrative, values or notes. */
 function appliedForPayload(){
@@ -743,35 +771,29 @@ function aiPayload(kind,diagnosis,instructions){
   }
   return p;
 }
-function buildAiRequest(kind,payload,s){
-  const sys=kind==='rank'?SYS_RANK:sysPrompt(payload.systems);
-  const user=kind==='rank'?JSON.stringify(payload):`Diagnosis: ${payload.diagnosis}`+(payload.instructions?`\nExtra: ${payload.instructions}`:'');
-  if(s.p==='an')return{url:'https://api.anthropic.com/v1/messages',
-    headers:{'content-type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    authName:'x-api-key',authValue:s.k,
-    body:JSON.stringify({model:s.m,max_tokens:3000,system:sys,messages:[{role:'user',content:user}]})};
-  return{url:'https://openrouter.ai/api/v1/chat/completions',
-    headers:{'content-type':'application/json'},authName:'Authorization',authValue:'Bearer '+s.k,
-    body:JSON.stringify({model:s.m,max_tokens:3000,messages:[{role:'system',content:sys},{role:'user',content:user}]})};
-}
-function confirmSend(req){
+const prettyBody=b=>{try{return JSON.stringify(JSON.parse(b),null,2)}catch(e){return String(b)}};
+/* The server built this request (after removing identifying details) and will send exactly it. Nothing goes out without the click. */
+function confirmSend(pv){
   return new Promise(res=>{
-    const d=$('aiDlg');
-    $('aiDlgBody').textContent=`POST ${req.url}\n`+Object.entries(req.headers).map(([k,v])=>`${k}: ${v}`).join('\n')+`\n${req.authName}: (your key — not shown)\n\n`+req.body;
+    const d=$('aiDlg'),red=(pv.redactions||[]).map(r=>`${r.count} ${r.kind}`).join(', ');
+    $('aiDlgBody').textContent=`Sent by the server to ${pv.provider} (model ${pv.model}). Nothing is sent from this browser to the provider.\n`+
+      (red?`Identifying details removed before sending: ${red}\n`:'No identifying details were found to remove (this check is not a guarantee).\n')+
+      `\n${pv.method} ${pv.url}\n`+Object.entries(pv.headers).map(([k,v])=>`${k}: ${v}`).join('\n')+`\n${pv.auth}\n\n`+prettyBody(pv.body);
     d.returnValue='';
     d.addEventListener('close',()=>res(d.returnValue==='send'),{once:true});
     d.showModal();
   });
 }
 async function callAI(kind,payload){
-  if(!aiEnabled())throw Error('AI is off. Enable it in Settings.');
-  const s=savedSettings();
-  if(!s.k||!s.m)throw Error('Set provider, model and key in Settings (or Demo mode for snake/DKA).');
-  const req=buildAiRequest(kind,payload,s);
-  if(!await confirmSend(req)){const e=Error('Cancelled — nothing was sent.');e.name='AiCancel';throw e}
-  const r=await fetch(req.url,{method:'POST',signal:AbortSignal.timeout(60000),headers:{...req.headers,[req.authName]:req.authValue},body:req.body});
-  const j=await r.json();if(!r.ok)throw Error(j.error?.message||r.status);
-  return s.p==='an'?j.content[0].text:j.choices[0].message.content;
+  if(!aiEnabled())throw Error('AI is off. An administrator can enable it in Settings.');
+  if(!AI.configured)throw Error('The server has no AI provider key yet. Ask the administrator, or use Demo mode.');
+  const pv=await api('POST','/api/ai/preview',{kind,payload});
+  if(pv.status!==200)throw Error(apiMsg(pv));
+  if(!await confirmSend(pv.body)){const e=Error('Cancelled — nothing was sent.');e.name='AiCancel';throw e}
+  const r=await api('POST','/api/ai/run',{previewId:pv.body.previewId});
+  if(r.status!==200){aiRefresh();throw Error(apiMsg(r))}
+  AI.left=r.body.remainingThisHour;renderAiPanel();
+  return r.body.text;
 }
 async function aiRank(){
   if(!aiEnabled())return toast('AI is off — enable it in Settings.');
@@ -831,14 +853,14 @@ async function generate(){
   const dx=$('gen_dx').value.trim();if(!dx)return toast('Enter a diagnosis');
   const btn=$('genBtn');btn.disabled=true;btn.textContent='Generating…';$('genStatus').textContent='';$('genPreview').style.display='none';LAST_GENERATED=null;
   try{
-    const s=JSON.parse(localStorage.getItem('vr_set')||'{}'),systems=aiSystems();
+    const systems=aiSystems();
     if($('o_sdc').checked)$('genStatus').textContent='SDC mode: the Questionnaire will not express enableWhen, calculated expressions or value-set options.';
-    const demoOn=s.d!==false&&!s.k;
+    const useDemo=demoOn();
     let set;
-    if(demoOn){
+    if(useDemo){
       if(/snake|envenom/i.test(dx))set={...DEMO_SNAKE,id:'gen_snake_'+Date.now().toString(36)};
       else if(/dka|ketoacid/i.test(dx))set={...DEMO_DKA,id:'gen_dka_'+Date.now().toString(36)};
-      else throw Error('Demo mode only has Snake envenomation and DKA. Add a model key for other diagnoses.');
+      else throw Error('Demo mode only has Snake envenomation and DKA. Untick Demo mode in Settings to use the server AI for other diagnoses.');
     }
     if(!set){
       const t=await callAI('gen',aiPayload('gen',dx,$('gen_ins').value));
@@ -1390,12 +1412,13 @@ async function api(method,path,body){
 }
 const apiMsg=r=>r.body.message||(r.status===403?'Your role does not have permission for this action.':r.status===0?r.body.message:'Something went wrong ('+(r.body.error||r.status)+').');
 function renderWho(){
+  if(!Srv.user)Object.assign(AI,{on:false,configured:false,canUse:false,admin:null,left:null});
   $('who').innerHTML=Srv.user?`${escA(Srv.user.username)} (${escA(Srv.user.role)}) <a href="#" onclick="srvLogout();return false">Sign out</a>`:'Not signed in';
-  renderBanner();renderEncounter();renderCases();
+  renderBanner();renderEncounter();renderCases();applyAiState();renderAiPanel();
 }
 async function srvInit(){
   const r=await api('GET','/api/me');
-  if(r.status===200){Srv.user=r.body.user;await loadLinkedAll()}
+  if(r.status===200){Srv.user=r.body.user;await loadLinkedAll();await aiRefresh()}
   renderWho();
 }
 async function loadLinkedAll(){
@@ -1413,7 +1436,7 @@ async function srvLogin(){
   const r=await api('POST','/api/login',{username:$('lg_u').value.trim(),password:$('lg_p').value});
   $('lg_p').value='';
   if(r.status!==200){$('lg_err').textContent=r.status===401?'Wrong username or password.':apiMsg(r);return}
-  Srv.user=r.body.user;await loadLinkedAll();renderWho();ptShow();
+  Srv.user=r.body.user;await loadLinkedAll();await aiRefresh();renderWho();ptShow();
 }
 async function srvLogout(){await api('POST','/api/logout');Srv.user=null;Srv.pts={};renderWho();ptShow()}
 

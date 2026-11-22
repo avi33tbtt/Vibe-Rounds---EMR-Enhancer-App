@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { JSDOM, VirtualConsole } = require('jsdom');
 const { pageHtml } = require('./html');
 const Sdc = require('../sdc');
+const { genPrompt } = require('../ai');
 
 const HTML = pageHtml();
 const J = x => JSON.parse(JSON.stringify(x));   // values from the jsdom window have a different Object prototype
@@ -76,8 +77,8 @@ test('one copy: the page and Node (the server) build the identical Questionnaire
 
 test('AI prompt names only the ticked systems; with None it asks for no codes at all', () => {
   const p = page();
-  const req = () => JSON.parse(p.w.buildAiRequest('gen', p.w.aiPayload('gen', 'Sepsis', ''), { p: 'or', m: 'm', k: 'k' }).body);
-  const sysText = () => req().messages[0].content;
+  // the browser sends only the whitelisted payload; the system prompt is built from it on the server (ai.js)
+  const sysText = () => genPrompt(J(p.w.aiPayload('gen', 'Sepsis', '')).systems);
   assert.deepEqual(J(p.w.aiPayload('gen', 'Sepsis', '').systems), ['snomed', 'loinc']);
   tick(p, 'snomed', false); tick(p, 'loinc', false); tick(p, 'icd10', true);
   assert.deepEqual(J(p.w.aiPayload('gen', 'Sepsis', '').systems), ['icd10']);
@@ -117,7 +118,8 @@ test('generated bindings: only ticked systems survive, tagged llm, empty when un
 });
 
 test('demo generation respects the picker too (and keeps bindings that the old code dropped)', async () => {
-  const p = page({ store: { vr_set: JSON.stringify({ a: true, d: true }) } });
+  const p = page({ store: { vr_set: JSON.stringify({ d: true }) } });
+  p.w.eval('Object.assign(AI, { on: true, canUse: true, configured: true })');   // as the server would report it for a doctor
   p.$('gen_dx').value = 'Diabetic ketoacidosis'; await p.w.generate();
   const withDefault = p.ev('LAST_GENERATED').fields.reduce((n, f) => n + (f.bindings || []).length, 0);
   assert.ok(withDefault > 0, 'default picker keeps SNOMED/LOINC demo bindings');
@@ -130,7 +132,8 @@ test('demo generation respects the picker too (and keeps bindings that the old c
 });
 
 test('SDC mode lists what a Questionnaire cannot express before generating; the box is off by default', () => {
-  const p = page({ store: { vr_set: JSON.stringify({ a: true, d: false, p: 'or', m: 'm', k: 'k' }) } });
+  const p = page({ store: { vr_set: JSON.stringify({ d: false }) } });
+  p.w.eval('Object.assign(AI, { on: true, canUse: true, configured: true })');
   p.w.callAI = () => new Promise(() => {});   // a model call that is still waiting (e.g. the preview dialog is open)
   assert.equal(p.$('sdcLimits').style.display, 'none');
   sdcBox(p, true);

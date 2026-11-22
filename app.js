@@ -5,6 +5,7 @@ const { tx } = require('./db');
 const { audit } = require('./audit');
 const { permsFor } = require('./permissions');
 const A = require('./auth');
+const { mountAi } = require('./ai');
 
 const PATIENT_SELECT = `
   SELECT p.id, p.mrn, p.name, p.dob, p.sex, p.archived, p.created_at,
@@ -195,6 +196,9 @@ function createApp(pool, opts = {}) {
     const { rows } = await pool.query('SELECT id, at, username, role, action, entity_type, entity_id, detail FROM audit_log ORDER BY id DESC LIMIT $1', [limit]);
     res.json({ entries: rows });
   });
+
+  /* ---------- AI (chunk 04b): off by default, key only in the server environment ---------- */
+  mountAi(app, pool, opts);
 
   app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
   app.use((err, _req, res, _next) => {
