@@ -36,6 +36,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: age, used by the backup test
+        run: sudo apt-get update && sudo apt-get install -y age
       - name: Create .env (test values only; the npm scripts read it)
         run: cp env.txt .env
       - name: Browser used by the smoke test

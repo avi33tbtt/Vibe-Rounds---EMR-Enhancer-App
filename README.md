@@ -22,12 +22,7 @@ Opening `emr-enhancer.html` directly as a file still works as the demo; registra
 `docker compose up` starts the whole stack: `db` (PostgreSQL 16), two one-shot steps (`migrate` runs the migrations as the owner; `db-role` sets the `emr_app` login password), `app` (the server, running as the restricted `emr_app` role) and `caddy` (the reverse proxy that does the TLS). Only ports 80 and 443 are published; the app has no published port, and the database port is bound to this machine only (127.0.0.1). The three steps:
 
 ```
-cp env.txt .env
-```
-
-**Now open `.env` and set `EMR_APP_PASSWORD` before going on.** It is blank in `env.txt` on purpose, and the start stops without it. Use letters and digits only. Also change `POSTGRES_PASSWORD` and `SEED_PASSWORD`, and set `SITE_ADDRESS` if you have a domain. Then:
-
-```
+cp env.txt .env                              # then edit .env: POSTGRES_PASSWORD, EMR_APP_PASSWORD, SEED_PASSWORD, SITE_ADDRESS
 docker compose up -d --build                 # builds the image, migrates, starts the app and the proxy
 docker compose run --rm app node seed.js     # once: creates admin1, doctor1, nurse1, viewer1 with SEED_PASSWORD
 ```
@@ -38,9 +33,27 @@ Then open `https://localhost` (or your domain) and sign in as `admin1`.
 - **Local trial (`SITE_ADDRESS=localhost`):** Caddy makes its own certificate, so the browser warns until you trust it: `docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt`, then import that file into your browser or system. A quick check without the browser: `curl -k https://localhost/`. `HTTPS=1` (the default here) also sends the HSTS header, which makes a browser insist on HTTPS for that host name; if that gets in the way of plain-http dev on `localhost`, set `HTTPS=0` in `.env` for the trial only.
 - **Real domain:** set `SITE_ADDRESS=emr.example.org`, point its DNS at the server, and keep ports 80 and 443 open: Caddy then gets and renews a public certificate by itself. Keep `HTTPS=1`.
 - **Day to day:** `docker compose down` stops everything and keeps the data (the `pgdata` volume); `docker compose down -v` also wipes the database. After `git pull`, run `docker compose up -d --build`; new migrations apply on their own.
-- **If `docker compose up` says `db-role` "didn't complete successfully":** `up -d` hides the reason, so run `docker compose logs db-role`. The usual cause is an empty `EMR_APP_PASSWORD` in `.env`. Fix `.env`, then run `docker compose up -d` again (no rebuild needed). The `seed.js` command fails with the same message until the stack starts.
 - **Tests and local dev** still use only the database: `npm run db:up` starts just `db`.
 - Still **synthetic data only**; do not expose a real deployment before the go-live gate in the tracker.
+
+## Encrypted backups
+
+`scripts/backup.sh` dumps the whole database (`audit_log` included) with `pg_dump`, encrypts it with [age](https://github.com/FiloSottile/age) straight from the pipe (no plain copy is written), and saves `emr-<UTC time>.dump.age` plus a `.sha256` file. It keeps the newest `BACKUP_KEEP` (default 14) and removes older ones. It encrypts to a **public** key, so the server can write backups but cannot read them. Restoring is chunk 7c.
+
+1. **Make the key pair on a different machine** (your own computer, not the server). Install age, then: `age-keygen -o backup-key.txt`. It prints `Public key: age1...`. Keep `backup-key.txt` somewhere safe and off the server (a password manager or an offline disk). **If it is lost, the backups cannot be opened.**
+2. Put only the public key in `.env`: `BACKUP_AGE_RECIPIENT=age1...`
+3. Start the backup service: `docker compose --profile backup up -d --build`. It backs up at once and then every `BACKUP_INTERVAL_HOURS` (default 24). Files appear in `./backups` (set `BACKUP_DIR` to change it; the folder is gitignored). Check it with `docker compose logs backup`. A failed run says so in the log and retries after an hour.
+4. **Copy `./backups` to another place** (another machine or storage) on a schedule you control. Backups on the same disk as the database do not survive that disk dying.
+
+Check that a backup is intact and unreadable without the key (PowerShell users: use `-o`, because `>` would damage a binary file):
+
+```
+sha256sum -c emr-<time>.dump.age.sha256              # PowerShell: Get-FileHash <file> -Algorithm SHA256 (compare with the .sha256 file)
+age -d -i backup-key.txt -o check.dump emr-<time>.dump.age    # works only with the private key
+pg_restore -l check.dump                               # lists the tables, including audit_log; then delete check.dump
+```
+
+Without the private key the file is just random bytes starting with `age-encryption.org`. `test/safety-backup.test.js` proves this on every run: the script, the checksum, the wrong-key failure and the keep-N rule. It needs `age` and `pg_dump` installed (CI installs them). One-off run without Docker: `BACKUP_AGE_RECIPIENT=age1... BACKUP_DIR=./backups BACKUP_DATABASE_URL=$DATABASE_URL bash scripts/backup.sh`.
 
 ## Database roles (restricted app role)
 

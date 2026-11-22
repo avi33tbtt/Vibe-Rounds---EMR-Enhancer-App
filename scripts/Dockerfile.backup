@@ -1,0 +1,5 @@
+# Backup image: the same PostgreSQL 16 client tools as the database, plus age. The script is mounted by compose.
+FROM postgres:16
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends age \
+ && rm -rf /var/lib/apt/lists/*

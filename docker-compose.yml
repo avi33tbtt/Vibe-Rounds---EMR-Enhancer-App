@@ -72,6 +72,31 @@ services:
       retries: 5
       start_period: 20s
 
+  # Encrypted backups (chunk 7b). Off unless you start it with: docker compose --profile backup up -d --build
+  # It encrypts to a PUBLIC key (BACKUP_AGE_RECIPIENT); the private key never lives on this server. See README, "Encrypted backups".
+  backup:
+    profiles: ["backup"]
+    build:
+      context: ./scripts
+      dockerfile: Dockerfile.backup
+    image: emr-backup
+    restart: unless-stopped
+    entrypoint: ["bash", "/scripts/backup.sh", "--loop"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+    volumes:
+      - ./scripts/backup.sh:/scripts/backup.sh:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
   caddy:
     image: caddy:2
     restart: unless-stopped
