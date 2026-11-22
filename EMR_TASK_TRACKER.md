@@ -76,7 +76,9 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | 8c | chunk-08c-review-rules.md | Reviewer rules + frozen approved version | DONE | 2026-11-22 | routes, trigger, tests | 009 migration, review.js, seed, tests. Role informatician; no self-review; 2 reviewers if flagged; DB-enforced. Publish not tied to review yet (8c-2). 215 tests (213 pass, 2 todo). |
 | 8c-2 | chunk-08c-review-rules.md | Publish only an approved (`reviewed`) version; demo import goes through review | DONE | 2026-11-22 | routes + sets tests + page import | 010 migration, sets.js, permissions.js, page, helpers + 6 tests, DECISIONS.md. DB + route refuse unreviewed publish; import submits, no codes. 227 tests (225 pass, 2 todo). |
 | X1 | (requested) | OPD and IPD sets + one-click pathways (OPD, IPD admission, IPD discharge) | DONE | 2026-11-22 | page + tests | emr-enhancer.html, test/clinic-pathways.test.js, test/library-page.test.js. 4 sets, 3 pathways, Start buttons, Suggest; demo import now 9 sets. No doses/codes. 220 tests (218 pass, 2 todo). |
-| 8d | chunk-08d-review-ui.md | Review screens + tier badges | TODO |  | page + 1 test file | Needs: 8c, 8c-2, B2b-1. Build on server versions. |
+| 8d | chunk-08d-review-ui.md | Review screens + tier badges | SPLIT | 2026-11-22 |  | Replaced by 8d-1 and 8d-2: page edit would pass 200 lines (queue + status list + submit + badges). Nothing built. |
+| 8d-1 | chunk-08d-review-ui.md | Reviewer queue screen (item 3): list, lint findings, approve/reject with reason, who/when from the server; hidden from nurse/viewer | TODO |  | page + 1 test file | Needs: 8c-2. Uses GET /api/review-queue, GET .../review, POST .../approve and .../reject. Escape all text. No new routes. |
+| 8d-2 | chunk-08d-review-ui.md | My set versions: status badges (`draft`, `in review`, `approved`, `published`) + Submit for review with lint findings (items 1, 2, 4) | TODO |  | page + 1 test file | Needs: 8d-1. Lists server versions by status (library shows published only); frozen after submit. Creating a new draft version in the page is NOT included: decide first (open question). |
 | B2r | chunk-B2r-review-on-versions.md | Re-point review workflow at server versions | SKIPPED | 2026-11-22 | n/a | Merged into 8b to 8d by the reorder; do not run separately. |
 | B3a | chunk-B3a-observations-server.md | Applied sets, observations, events (server) | TODO |  | 1 migration, 1 routes file, tests | Needs: B2a. Append-only; entered-in-error. Also stores the version pin (from B2b-2). |
 | B3b | chunk-B3b-observations-page.md | Values and trajectories via server; entered-in-error UI | TODO |  | page + 1 test file | Needs: B3a, 8f. Closes todo (b). Also does B2b-2: pin, diff, explicit update, export from pin. |
@@ -114,6 +116,7 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - First CCIS slice (in the CCIS repo): snake envenomation process metrics. No doses or bands; parameters from a local clinician, disabled by default. The EMR cohort exporter is the last EMR row.
 
 ## OPEN QUESTIONS
+- 8d-2: the page cannot create or edit server drafts (library is read-only). Either 8d-2 only shows and submits drafts made elsewhere (demo import, API), or add a draft editor row first. Default if you do not decide: show and submit only.
 - Resolved 2026-11-22: interim data while signed in = option B (`vr_interim`, removed in B3b/B3c). Built in B1b-1.
 - Resolved 2026-11-22: re-ordered, review workflow (8b to 8d) now follows B2b and is built on server versions.
 - Resolved 2026-11-22: CCIS lives in its own repo (Vibe-Rounds---CCIS). The snake-envenomation parameter owner question is now tracked there.
