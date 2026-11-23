@@ -33,8 +33,12 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 
 ---
 
+**Added 2026-11-23 (small-row split).** DM3, DM4, D8b and every R row are now split into small sub-rows, sized for one free-tier session each. R sub-rows have no chunk file yet: when you say "start roadmap" and a row is next, its first step is to write its chunk file (docs only, from the R brief in `04-demo-and-roadmap.md`, stating the context impact), then build. If a sub-row still looks too big, STOP and split it again.
+
+---
+
 ## STATUS LEGEND
-`TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` | `SKIPPED` | `SPLIT` (replaced by sub-tasks) | `MOVED` (now tracked in the CCIS repo)
+`TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` | `SKIPPED` | `SPLIT` (replaced by sub-tasks) | `MOVED` (now tracked in the CCIS repo) | `LOCKED` (not yet started; do not pick)
 
 ## TASK LIST
 
@@ -105,23 +109,93 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | DM1 | chunk-DM1-seed-demo.md | One-command demo seed and reset (`demo:seed`, `demo:reset`) | DONE | 2026-11-23 | 1 script, 1 test | scripts/seed-demo.js, test/demo-seed.test.js, package.json, DECISIONS.md. Via real routes; idempotent; reset archives. 8 values, 1 Unknown, 1 missing. |
 | DM2a | chunk-DM2a-run-results-server.md | Import and acknowledge CCIS run records: `ccis_runs`, `ccis_run_acks`, 3 routes, permissions | DONE | 2026-11-23 | 1 migration, 3 routes, tests | ccis-runs.js, 015 migration, 5 schemas, ajv to deps, 5 test files, DECISIONS. Record needs x-envelopeSha256 (DM3 adds it). 337 tests, 3 skipped (no Chrome). |
 | DM2b | chunk-DM2b-insights-panel.md | CCIS insights panel in the case screen (import file, view, acknowledge, demo-parameter banner) | DONE | 2026-11-23 | page edit + 1 test file | emr-enhancer.html, test/ccis-page.test.js, DECISIONS.md. Panel: list, detail, banners, import, acknowledge. 344 tests, 3 skipped (no Chrome). Browser not tried. |
-| DM3 | chunk-DM3-bridge.md | `scripts/demo-bridge.js`: envelope -> CCIS CLI child process -> import | TODO |  | 1 script, 1 test | Needs DM2a and CCIS DS4. Must add `x-envelopeSha256` (hash of the exported file) to the record: see DECISIONS DM2a. |
-| DM4 | chunk-DM4-demo-polish.md | Demo runbook, banners, end-to-end test | TODO |  | docs + 1 test + banner | Needs DM1, DM2b, DM3, CCIS DS7. |
+| DM3 | chunk-DM3-bridge.md | `scripts/demo-bridge.js`: envelope -> CCIS CLI child process -> import | SPLIT | 2026-11-23 | | Replaced by DM3a to DM3d. Found: EMR concept ids (`snake-envenomation-timing.*`) differ from CCIS (`snake.envenomation-timing.*`) and select words differ from codes: a mapping step is needed. Nothing built. |
+| DM3a | chunk-DM3a-export-file.md | Bridge step 1: log in, `GET /context`, write the file unchanged, return path and SHA-256 (equals the `context_exports` hash) | TODO |  | 1 script, 1 test | Needs DM1, B5b. |
+| DM3b | chunk-DM3b-map-ids.md | `scripts/demo-map.js`: pure `mapEnvelope` (concept ids and select words to CCIS names; unknown value throws; input untouched; output validates) | TODO |  | 1 script, 1 test | Pure code, no DB. |
+| DM3c | chunk-DM3c-run-cli.md | `runCcis`: spawn `ccis-cli.js run` (array args, no shell, `CCIS_PATH`, timeout), add `x-envelopeSha256` of the ORIGINAL file | TODO |  | same script, 1 test | Needs DM3b; CCIS DS4 is DONE. Stub CLI in tests. |
+| DM3d | chunk-DM3d-import-and-npm.md | Import via `POST /ccis-runs`, `npm run demo:run -- <case id>`, retry gives `alreadyImported` | TODO |  | same script, 1 test, package.json | Needs DM3a, DM3c, DM2a. |
+| DM4 | chunk-DM4-demo-polish.md | Demo runbook, banners, end-to-end test | SPLIT | 2026-11-23 | docs + 1 test + banner | Replaced by DM4a to DM4c. Nothing built. |
+| DM4a | chunk-DM4-demo-polish.md | Persistent "Synthetic data, prototype" banner on every page; staged features labelled "planned" (item 2) | TODO |  | page edit + 1 small test | Needs DM2b. No new features. |
+| DM4b | chunk-DM4-demo-polish.md | One end-to-end test: seed -> envelope -> map -> stub CLI -> import -> acknowledge (item 3); fix only rough edges it finds on the demo path (item 4) | TODO |  | 1 test file | Needs DM1, DM2b, DM3d. Stub CLI; real CLI run is DM4c. |
+| DM4c | chunk-DM4-demo-polish.md | `docs/DEMO-RUNBOOK.md`: clean-machine setup, reset, click path, known limits, staged list; owner checklist for screen backup and two rehearsals (items 1, 5) | TODO |  | docs only | Needs DM4a, DM4b, CCIS DS7. Rehearsal is yours. |
 | | | **TRACK R: full advanced-EMR roadmap (LOCKED until DM4 DONE and "start roadmap")** | | | | |
-| R0 | (written when reached) | Split `emr-enhancer.html` into modules, no behaviour change | LOCKED |  |  | Do before R1. |
-| R1 | (written when reached) | A. Advanced OPD: complaints, symptom attributes, adaptive history, examination, assessment and plan | LOCKED |  |  | Context impact must be stated. |
-| R2 | (written when reached) | B. Terminology: server code search and verification, LOINC/ICD bindings, local terms, versions | LOCKED |  |  | Licence check first (you). |
-| R3 | (written when reached) | D. Longitudinal record: problems, allergies, medication history, results, timeline | LOCKED |  |  | Adds envelope sections. |
-| R4 | (written when reached) | C. Orders and results: medications, investigations, results, abnormal acknowledgement, referrals, procedures | LOCKED |  |  | Needs clinician owner and drug-data licence decision. Split per order type. |
-| R5 | (written when reached) | C. IPD: admission, progress, medication administration, discharge | LOCKED |  |  | Needs R4. |
-| R6 | (written when reached) | E. FHIR R4 export, Questionnaire/Bundle import, conformance tests | LOCKED |  |  | Verified codings only. |
-| R7 | (written when reached) | F. Integration hardening: batch envelope (D8b), versioning policy, retention, de-identification review | LOCKED |  |  | Absorbs D8b. |
-| R8 | (written when reached) | Clinical validation: workflow tests, clinician walkthrough, privacy/security review, safety case | LOCKED |  |  | Mostly your tasks. |
+| R0 | (written when reached) | Split `emr-enhancer.html` into modules, no behaviour change | SPLIT | 2026-11-23 |  | Replaced by R0a to R0e. Still LOCKED. |
+| R0a | 04-demo-and-roadmap.md (R brief) | Module loading under the CSP (nonce, same origin), test helper that finds code in the new files; no behaviour change | LOCKED |  | 1 build/serve edit + 1 test | Do first. Ratchet tests keep passing. |
+| R0b | 04-demo-and-roadmap.md (R brief) | Move shared core out of the page: escaper, storage adapter, session, ACT table (delegated listener) | LOCKED |  | page + new module + tests edited | No behaviour change. |
+| R0c | 04-demo-and-roadmap.md (R brief) | Move screens group 1: patients, encounters, cases list | LOCKED |  | new module + page edit | One screen group per row. |
+| R0d | 04-demo-and-roadmap.md (R brief) | Move screens group 2: library, review, versions, pathways | LOCKED |  | new module + page edit |  |
+| R0e | 04-demo-and-roadmap.md (R brief) | Move case workspace: pins, values, notes, insights panel; page file only wires modules | LOCKED |  | new module + page edit | Check no inline handlers return. |
+| R1 | (written when reached) | A. Advanced OPD: complaints, symptom attributes, adaptive history, examination, assessment and plan | SPLIT | 2026-11-23 |  | Replaced by R1a to R1f. Still LOCKED. |
+| R1a | 04-demo-and-roadmap.md (R brief) | Complaint picker screen + OPD complaint sets (data only, no codes, no doses) | LOCKED |  | page + 1 test file | Context impact: none (uses sets). |
+| R1b | 04-demo-and-roadmap.md (R brief) | Structured symptom attributes (onset, duration, severity as fields) | LOCKED |  | page + set definitions + test | Context impact: new observation kinds only; state it. |
+| R1c | 04-demo-and-roadmap.md (R brief) | Adaptive history: follow-up fields shown by earlier answers (display logic only, no thresholds) | LOCKED |  | page + 1 test file | Context impact: none. |
+| R1d | 04-demo-and-roadmap.md (R brief) | Structured examination fields | LOCKED |  | set definitions + page + test | Context impact: new observation kinds. |
+| R1e | 04-demo-and-roadmap.md (R brief) | Assessment and plan block (free text and optional verified code) | LOCKED |  | page + 1 test file | Notes stay server-side and immutable once signed. |
+| R1f | 04-demo-and-roadmap.md (R brief) | Quick and detailed mode switch | LOCKED |  | page + 1 test file | Display only; same data. |
+| R2 | (written when reached) | B. Terminology: server code search and verification, LOINC/ICD bindings, local terms, versions | SPLIT | 2026-11-23 |  | Replaced by R2a to R2f. Still LOCKED. |
+| R2a | 04-demo-and-roadmap.md (R brief) | YOUR task: terminology licence check (ICD, LOINC, local terms) | LOCKED |  | none | Gate. Nothing in R2b onward starts before you confirm. |
+| R2b | 04-demo-and-roadmap.md (R brief) | Migration: terminology systems, versions, concepts (no DELETE); loader script for a small licensed or open sample | LOCKED |  | 1 migration + 1 script + tests |  |
+| R2c | 04-demo-and-roadmap.md (R brief) | Server routes: search and verify (code exists AND display matches); matrix and audit tests | LOCKED |  | 1 routes file + tests | Context impact: bindings carry version. |
+| R2d | 04-demo-and-roadmap.md (R brief) | Lint accepts server-verified codes; restore codes on demo glucose, DKA, vitals sets via new versions | LOCKED |  | lint + sets + tests | Fixes the "lost codes on import" open item. |
+| R2e | 04-demo-and-roadmap.md (R brief) | Page code picker uses the server; unverified never exported | LOCKED |  | page + 1 test file |  |
+| R2f | 04-demo-and-roadmap.md (R brief) | Local terms: add, review, publish (admin and informatician rules as sets) | LOCKED |  | 1 migration + routes + tests |  |
+| R3 | (written when reached) | D. Longitudinal record: problems, allergies, medication history, results, timeline | SPLIT | 2026-11-23 |  | Replaced by R3a to R3i. Still LOCKED. |
+| R3a | 04-demo-and-roadmap.md (R brief) | Problems: migration + routes (add, resolve with reason, entered-in-error; no delete) | LOCKED |  | 1 migration + 1 routes file + tests |  |
+| R3b | 04-demo-and-roadmap.md (R brief) | Problems in the page | LOCKED |  | page + 1 test file |  |
+| R3c | 04-demo-and-roadmap.md (R brief) | Allergies: migration + routes (same rules) | LOCKED |  | 1 migration + 1 routes file + tests |  |
+| R3d | 04-demo-and-roadmap.md (R brief) | Allergies in the page | LOCKED |  | page + 1 test file |  |
+| R3e | 04-demo-and-roadmap.md (R brief) | Medication history (recorded list only, no orders): server | LOCKED |  | 1 migration + 1 routes file + tests | Orders stay in R4. |
+| R3f | 04-demo-and-roadmap.md (R brief) | Medication history in the page | LOCKED |  | page + 1 test file |  |
+| R3g | 04-demo-and-roadmap.md (R brief) | Timeline: server read route across cases | LOCKED |  | 1 routes file + tests |  |
+| R3h | 04-demo-and-roadmap.md (R brief) | Timeline in the page | LOCKED |  | page + 1 test file |  |
+| R3i | 04-demo-and-roadmap.md (R brief) | Envelope sections problems and allergies (CCIS schema version bump first, in the CCIS repo) | LOCKED |  | envelope.js + contracts + tests | Context impact: new sections; needs CCIS agreement. |
+| R4 | (written when reached) | C. Orders and results: medications, investigations, results, abnormal acknowledgement, referrals, procedures | SPLIT | 2026-11-23 |  | Replaced by R4a to R4j. Still LOCKED. |
+| R4a | 04-demo-and-roadmap.md (R brief) | YOUR task: name clinician owner; decide drug-data licence | LOCKED |  | none | Gate. Nothing in R4b onward starts first. |
+| R4b | 04-demo-and-roadmap.md (R brief) | Medication orders: migration + routes (order, change with reason, stop; no delete) | LOCKED |  | 1 migration + 1 routes file + tests | Signer from session. No doses suggested by AI. |
+| R4c | 04-demo-and-roadmap.md (R brief) | Medication orders in the page | LOCKED |  | page + 1 test file |  |
+| R4d | 04-demo-and-roadmap.md (R brief) | Medication reconciliation (compare history and orders, explicit accept) | LOCKED |  | routes + page + tests | Split again if over guard. |
+| R4e | 04-demo-and-roadmap.md (R brief) | Investigation orders: server | LOCKED |  | 1 migration + 1 routes file + tests |  |
+| R4f | 04-demo-and-roadmap.md (R brief) | Specimen and results: server (append-only, correction by new row) | LOCKED |  | 1 migration + 1 routes file + tests |  |
+| R4g | 04-demo-and-roadmap.md (R brief) | Investigations, results and abnormal acknowledgement in the page | LOCKED |  | page + 1 test file |  |
+| R4h | 04-demo-and-roadmap.md (R brief) | Referrals: server + page (split if large) | LOCKED |  | routes + page + tests |  |
+| R4i | 04-demo-and-roadmap.md (R brief) | Procedures: server + page (split if large) | LOCKED |  | routes + page + tests |  |
+| R4j | 04-demo-and-roadmap.md (R brief) | Envelope sections orders and results (CCIS schema bump first) | LOCKED |  | envelope.js + contracts + tests | Context impact: new sections. |
+| R5 | (written when reached) | C. IPD: admission, progress, medication administration, discharge | SPLIT | 2026-11-23 |  | Replaced by R5a to R5h. Still LOCKED. |
+| R5a | 04-demo-and-roadmap.md (R brief) | Admission record: server | LOCKED |  | 1 migration + 1 routes file + tests | Needs R4. |
+| R5b | 04-demo-and-roadmap.md (R brief) | Admission in the page | LOCKED |  | page + 1 test file |  |
+| R5c | 04-demo-and-roadmap.md (R brief) | Progress notes (reuse notes with a type): server and page | LOCKED |  | routes + page + tests |  |
+| R5d | 04-demo-and-roadmap.md (R brief) | Medication administration record: server (append-only) | LOCKED |  | 1 migration + 1 routes file + tests |  |
+| R5e | 04-demo-and-roadmap.md (R brief) | Medication administration record in the page | LOCKED |  | page + 1 test file |  |
+| R5f | 04-demo-and-roadmap.md (R brief) | Discharge and follow-up: server | LOCKED |  | 1 migration + 1 routes file + tests |  |
+| R5g | 04-demo-and-roadmap.md (R brief) | Discharge and follow-up in the page | LOCKED |  | page + 1 test file |  |
+| R5h | 04-demo-and-roadmap.md (R brief) | Envelope section administrations (CCIS schema bump first) | LOCKED |  | envelope.js + contracts + tests | Context impact: new section. |
+| R6 | (written when reached) | E. FHIR R4 export, Questionnaire/Bundle import, conformance tests | SPLIT | 2026-11-23 |  | Replaced by R6a to R6g. Still LOCKED. |
+| R6a | 04-demo-and-roadmap.md (R brief) | FHIR Observation export from verified codings only (check what exists) | LOCKED |  | 1 module + 1 test file |  |
+| R6b | 04-demo-and-roadmap.md (R brief) | FHIR Condition export (problems) | LOCKED |  | 1 module + 1 test file | Needs R3b. |
+| R6c | 04-demo-and-roadmap.md (R brief) | FHIR AllergyIntolerance export | LOCKED |  | 1 module + 1 test file | Needs R3d. |
+| R6d | 04-demo-and-roadmap.md (R brief) | FHIR MedicationRequest export | LOCKED |  | 1 module + 1 test file | Needs R4c. |
+| R6e | 04-demo-and-roadmap.md (R brief) | Questionnaire import into element sets (draft only, goes through review) | LOCKED |  | 1 module + 1 test file |  |
+| R6f | 04-demo-and-roadmap.md (R brief) | Bundle import (draft only, audited) | LOCKED |  | 1 module + 1 test file |  |
+| R6g | 04-demo-and-roadmap.md (R brief) | Conformance test pack against a public validator | LOCKED |  | tests + 1 doc |  |
+| R7 | (written when reached) | F. Integration hardening: batch envelope (D8b), versioning policy, retention, de-identification review | SPLIT | 2026-11-23 |  | Replaced by R7a to R7d. Still LOCKED. |
+| R7a | 04-demo-and-roadmap.md (R brief) | Batch envelope export = D8b-1 to D8b-3 (do not duplicate) | LOCKED |  | n/a | Absorbs D8b. |
+| R7b | 04-demo-and-roadmap.md (R brief) | Envelope versioning policy (docs) and a test that old versions still validate | LOCKED |  | docs + 1 test |  |
+| R7c | 04-demo-and-roadmap.md (R brief) | Run-record retention rule (docs) and a check that nothing is deleted | LOCKED |  | docs + 1 test |  |
+| R7d | 04-demo-and-roadmap.md (R brief) | De-identification review: checklist and tests on `deid.js` | LOCKED |  | docs + 1 test file | Final sign-off is yours. |
+| R8 | (written when reached) | Clinical validation: workflow tests, clinician walkthrough, privacy/security review, safety case | SPLIT | 2026-11-23 |  | Replaced by R8a to R8e. Still LOCKED. |
+| R8a | 04-demo-and-roadmap.md (R brief) | End-to-end workflow test pack (OPD, IPD, demo path) | LOCKED |  | tests |  |
+| R8b | 04-demo-and-roadmap.md (R brief) | Clinician walkthrough script and feedback form (docs) | LOCKED |  | docs only | Walkthrough is yours. |
+| R8c | 04-demo-and-roadmap.md (R brief) | Privacy and security review checklist with evidence links (docs) | LOCKED |  | docs only | Review is yours. |
+| R8d | 04-demo-and-roadmap.md (R brief) | Safety case draft (hazards, controls, residual risk) (docs) | LOCKED |  | docs only | Clinical owner signs. |
+| R8e | 04-demo-and-roadmap.md (R brief) | YOUR task: go-live gate sign-off | LOCKED |  | none | Not for clinical use until done. |
 | | | **TRACK C and D: MOVED to the CCIS repo** (https://github.com/avi33tbtt/Vibe-Rounds---CCIS) | | | | |
 | C0 to C9 | (CCIS repo) | CCIS spec, schemas, validator, compiler, runtime, run records, marketplace, viewer, first slice | MOVED | 2026-11-22 |  | Replaced by CCIS phases 0 to 3. Do not build here. |
 | D1a to D7 | (CCIS repo) | Templates, decision graphs, cohorts, FHIR Mode, governance, evaluation | MOVED | 2026-11-22 |  | Replaced by CCIS phases 4 to 6. Do not build here. |
 | D8a | (CCIS repo) | Cohort data package contract | MOVED | 2026-11-22 |  | Now CCIS row 6.4. |
-| D8b | chunk-D8b-emr-cohort-exporter.md | EMR Enhancer cohort exporter | BLOCKED |  | 1 routes file + page dialog + tests | Needs: B3c, B5, and CCIS row 6.4 (cohort package contract). Last EMR row. Chunk file predates the CCIS plan: re-read it against CCIS 6.4 first. |
+| D8b | chunk-D8b-emr-cohort-exporter.md | EMR Enhancer cohort exporter | SPLIT | 2026-11-23 | 1 routes file + page dialog + tests | Replaced by D8b-1 to D8b-3. Still BLOCKED (needs CCIS 6.4). Nothing built. |
+| D8b-1 | chunk-D8b-emr-cohort-exporter.md | Server: `POST /api/cohort-export` (permission `cohort:export`), cohort selection, only fields the purpose needs, de-identified by default, manifest, audit of purpose and counts; matrix and audit tests on purpose (items 1, 4) | BLOCKED |  | 1 routes file, permissions, 2 test files | Needs B3c, B5b and CCIS 6.4. Re-read chunk against 6.4 first. Never narrative or identity. |
+| D8b-2 | chunk-D8b-emr-cohort-exporter.md | Page: small export dialog with purpose and preview of included fields (item 2) | BLOCKED |  | page + 1 test file | Needs D8b-1. |
+| D8b-3 | chunk-D8b-emr-cohort-exporter.md | Contract test: real export accepted by the CCIS import path; export without narrative or identity (item 3) | BLOCKED |  | 1 test file + fixture | Needs D8b-1 and CCIS 6.4. |
 
 Suggested order: numeric within each track; Track A, then B. The EMR side then waits for the CCIS repo: B5 needs CCIS row 0.3 (import contract), D8b needs CCIS row 6.4. Exceptions that are safe: 8e and 8f can be done any time after 6a; 6e and 7d can share one session.
 
