@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccis.invalid/schemas/run-record.schema.json",
+  "title": "CCIS run record",
+  "description": "What one run of one package left behind (CCIS-REQ-075 to 078). Created once and never altered; a correction is a new record that names the earlier one. The snapshot reuses the envelope definitions, so identity and narrative cannot appear. No checksum or content address: gap G-05.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "id",
+    "status",
+    "package",
+    "standard",
+    "engine",
+    "operatorSet",
+    "context",
+    "snapshot",
+    "parameters",
+    "evaluationTime",
+    "outputContractVersion",
+    "validationMessages",
+    "importReport",
+    "results",
+    "warnings",
+    "limitations"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/token"
+    },
+    "corrects": {
+      "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/token"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed"
+      ]
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "rule",
+        "message"
+      ],
+      "properties": {
+        "rule": {
+          "enum": [
+            "steps",
+            "depth",
+            "output-bytes",
+            "validation",
+            "dependency",
+            "other"
+          ]
+        },
+        "message": {
+          "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+        }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactId"
+        },
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        }
+      }
+    },
+    "standard": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        }
+      }
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        }
+      }
+    },
+    "operatorSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "elements",
+        "pathways"
+      ],
+      "properties": {
+        "elements": {
+          "type": "array",
+          "items": {
+            "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/appliedRef"
+          }
+        },
+        "pathways": {
+          "type": "array",
+          "items": {
+            "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/appliedRef"
+          }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "case",
+        "observations",
+        "events"
+      ],
+      "properties": {
+        "case": {
+          "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/properties/case"
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/observation"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/event"
+          }
+        }
+      }
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": {
+          "^x-": {}
+        },
+        "required": [
+          "id",
+          "enabled"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "https://ccis.invalid/schemas/analytics.schema.json#/$defs/key"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "units": {
+            "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/token"
+          },
+          "suppliedBy": {
+            "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "const": true
+                }
+              },
+              "required": [
+                "enabled"
+              ]
+            },
+            "then": {
+              "type": "object",
+              "required": [
+                "value",
+                "suppliedBy"
+              ]
+            },
+            "else": {
+              "type": "object",
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "value"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "units"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "suppliedBy"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "evaluationTime": {
+      "allOf": [
+        {
+          "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/time"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "zone": {
+              "const": "stated"
+            }
+          }
+        }
+      ]
+    },
+    "outputContractVersion": {
+      "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+    },
+    "validationMessages": {
+      "type": "array",
+      "items": {
+        "$ref": "https://ccis.invalid/schemas/validation-record.schema.json#/$defs/diagnostic"
+      }
+    },
+    "importReport": {
+      "$ref": "https://ccis.invalid/schemas/import-report.schema.json"
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "$ref": "https://ccis.invalid/schemas/run-result.schema.json"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "required": [
+          "failure"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "maxItems": 0
+          }
+        }
+      },
+      "else": {
+        "type": "object",
+        "not": {
+          "required": [
+            "failure"
+          ]
+        }
+      }
+    }
+  ]
+}

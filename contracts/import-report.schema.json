@@ -1,0 +1,374 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccis.invalid/schemas/import-report.schema.json",
+  "title": "CCIS import report",
+  "description": "What an import accepted, rejected, left unmapped or found ambiguous (IMP-100 to IMP-108; CCIS-REQ-044, 084). Reasons name a category, never the content. Counts adding up to the record count is checked by the importer, not here.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "outcome",
+    "envelope",
+    "inclusions",
+    "importer",
+    "standard",
+    "appliedVersions",
+    "records",
+    "counts",
+    "ignored"
+  ],
+  "properties": {
+    "outcome": {
+      "enum": [
+        "read",
+        "refused"
+      ]
+    },
+    "refusalReason": {
+      "type": "string",
+      "pattern": "^\\S.*$"
+    },
+    "envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "version",
+        "exportedAt",
+        "producer"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        },
+        "exportedAt": {
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "producer": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          },
+          "required": [
+            "system",
+            "version"
+          ],
+          "properties": {
+            "system": {
+              "type": "string",
+              "pattern": "^\\S.*$"
+            },
+            "version": {
+              "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+            }
+          }
+        }
+      }
+    },
+    "inclusions": {
+      "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/inclusions"
+    },
+    "importer": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        }
+      }
+    },
+    "standard": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        }
+      }
+    },
+    "appliedVersions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": {
+          "^x-": {}
+        },
+        "required": [
+          "id",
+          "type",
+          "version",
+          "held"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactId"
+          },
+          "type": {
+            "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactType"
+          },
+          "version": {
+            "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+          },
+          "held": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": {
+          "^x-": {}
+        },
+        "required": [
+          "ref",
+          "recordKind",
+          "category"
+        ],
+        "properties": {
+          "ref": {
+            "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/localId"
+          },
+          "recordKind": {
+            "enum": [
+              "observation",
+              "event",
+              "reference"
+            ]
+          },
+          "category": {
+            "enum": [
+              "accepted",
+              "rejected",
+              "unmapped",
+              "ambiguous"
+            ]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "patternProperties": {
+                "^x-": {}
+              },
+              "required": [
+                "code"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]*$"
+                },
+                "category": {
+                  "enum": [
+                    "identity",
+                    "narrative",
+                    "entered-in-error"
+                  ]
+                }
+              }
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^\\S.*$"
+            }
+          },
+          "decision": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+              "^x-": {}
+            },
+            "required": [
+              "choice",
+              "decidedBy"
+            ],
+            "properties": {
+              "choice": {
+                "type": "string",
+                "pattern": "^\\S.*$"
+              },
+              "decidedBy": {
+                "type": "string",
+                "pattern": "^\\S.*$"
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "enum": [
+                    "rejected",
+                    "unmapped",
+                    "ambiguous"
+                  ]
+                }
+              },
+              "required": [
+                "category"
+              ]
+            },
+            "then": {
+              "type": "object",
+              "required": [
+                "reasons"
+              ],
+              "properties": {
+                "reasons": {
+                  "type": "array",
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "const": "ambiguous"
+                }
+              },
+              "required": [
+                "category"
+              ]
+            },
+            "else": {
+              "type": "object",
+              "not": {
+                "required": [
+                  "decision"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "accepted",
+        "rejected",
+        "unmapped",
+        "ambiguous",
+        "total"
+      ],
+      "properties": {
+        "accepted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unmapped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ambiguous": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ignored": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": {
+          "^x-": {}
+        },
+        "required": [
+          "path",
+          "reason"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^\\S+$"
+          },
+          "reason": {
+            "type": "string",
+            "pattern": "^\\S.*$"
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "const": "refused"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "required": [
+          "refusalReason"
+        ],
+        "properties": {
+          "records": {
+            "type": "array",
+            "maxItems": 0
+          }
+        }
+      },
+      "else": {
+        "type": "object",
+        "not": {
+          "required": [
+            "refusalReason"
+          ]
+        }
+      }
+    }
+  ]
+}

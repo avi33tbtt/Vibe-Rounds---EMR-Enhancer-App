@@ -1,0 +1,463 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccis.invalid/schemas/validation-record.schema.json",
+  "title": "CCIS validation record",
+  "description": "The validator report and the assurance record for one artefact at one exact version (CCIS-REQ-047 to 053, 088 to 090). Assurance members are separate so no single badge can stand in for them. Roles only, never personal names. No integrity field: gap G-05.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "subject",
+    "standard",
+    "validator",
+    "outcome",
+    "layers",
+    "assurance"
+  ],
+  "properties": {
+    "subject": {
+      "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/appliedRef"
+    },
+    "standard": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        }
+      }
+    },
+    "validator": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        }
+      }
+    },
+    "outcome": {
+      "enum": [
+        "passed",
+        "failed"
+      ]
+    },
+    "layers": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "syntax",
+        "structural",
+        "reference-integrity",
+        "semantic",
+        "graph-and-compatibility",
+        "executable-safety",
+        "test-verification",
+        "governance"
+      ],
+      "properties": {
+        "syntax": {
+          "$ref": "#/$defs/layer"
+        },
+        "structural": {
+          "$ref": "#/$defs/layer"
+        },
+        "reference-integrity": {
+          "$ref": "#/$defs/layer"
+        },
+        "semantic": {
+          "$ref": "#/$defs/layer"
+        },
+        "graph-and-compatibility": {
+          "$ref": "#/$defs/layer"
+        },
+        "executable-safety": {
+          "$ref": "#/$defs/layer"
+        },
+        "test-verification": {
+          "$ref": "#/$defs/layer"
+        },
+        "governance": {
+          "$ref": "#/$defs/layer"
+        }
+      }
+    },
+    "assurance": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "structural",
+        "semantic",
+        "clinical",
+        "execution",
+        "security-privacy"
+      ],
+      "properties": {
+        "structural": {
+          "$ref": "#/$defs/assuranceMember"
+        },
+        "semantic": {
+          "$ref": "#/$defs/assuranceMember"
+        },
+        "clinical": {
+          "$ref": "#/$defs/assuranceMember"
+        },
+        "execution": {
+          "$ref": "#/$defs/assuranceMember"
+        },
+        "security-privacy": {
+          "$ref": "#/$defs/assuranceMember"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "const": "passed"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "layers": {
+            "type": "object",
+            "properties": {
+              "syntax": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "const": "passed"
+                  }
+                }
+              },
+              "structural": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "const": "passed"
+                  }
+                }
+              },
+              "reference-integrity": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "const": "passed"
+                  }
+                }
+              },
+              "semantic": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "const": "passed"
+                  }
+                }
+              },
+              "graph-and-compatibility": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "const": "passed"
+                  }
+                }
+              },
+              "executable-safety": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "const": "passed"
+                  }
+                }
+              },
+              "test-verification": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "const": "passed"
+                  }
+                }
+              },
+              "governance": {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "const": "passed"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "severity",
+        "ruleId",
+        "path",
+        "message",
+        "hint"
+      ],
+      "properties": {
+        "severity": {
+          "enum": [
+            "error",
+            "warning",
+            "info"
+          ]
+        },
+        "ruleId": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9][a-z0-9-]*)*$"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(?:/[^/]*)*$"
+        },
+        "message": {
+          "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+        },
+        "hint": {
+          "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+        }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "outcome",
+        "diagnostics"
+      ],
+      "properties": {
+        "outcome": {
+          "enum": [
+            "passed",
+            "failed",
+            "not-run"
+          ]
+        },
+        "reason": {
+          "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/diagnostic"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "diagnostics": {
+                "type": "array",
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "severity": {
+                      "const": "error"
+                    }
+                  },
+                  "required": [
+                    "severity"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "const": "not-run"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "required": [
+              "reason"
+            ]
+          }
+        }
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "version",
+        "population",
+        "setting",
+        "intendedUse"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        },
+        "population": {
+          "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+        },
+        "setting": {
+          "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+        },
+        "intendedUse": {
+          "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+        }
+      }
+    },
+    "assuranceMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "result"
+      ],
+      "properties": {
+        "result": {
+          "enum": [
+            "met",
+            "not-met",
+            "not-assessed"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "assessedBy": {
+          "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+          }
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "result": {
+                "enum": [
+                  "met",
+                  "not-met"
+                ]
+              }
+            },
+            "required": [
+              "result"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "required": [
+              "assessedBy",
+              "evidence"
+            ],
+            "properties": {
+              "evidence": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "result": {
+                "const": "met"
+              }
+            },
+            "required": [
+              "result"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "required": [
+              "scope"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

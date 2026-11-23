@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccis.invalid/schemas/analytics.schema.json",
+  "title": "CCIS analytics package",
+  "description": "Descriptive analytics as declarative data (CCIS-REQ-028, 029, 033, 042, 043, 066, 069, 070). Parameters carry no value. The expression tree has no numeric literal and no executable code.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": { "^x-": {} },
+  "required": ["manifest", "question", "intendedUsers", "population", "limitations", "context", "inputs", "parameters", "operatorSet", "computation", "outputs", "interpretation", "executionProfile", "evidence", "provenance"],
+  "properties": {
+    "manifest": {
+      "allOf": [
+        { "$ref": "https://ccis.invalid/schemas/manifest.schema.json" },
+        { "type": "object", "properties": { "type": { "const": "analytics-package" } } }
+      ]
+    },
+    "question": { "$ref": "#/$defs/text" },
+    "intendedUsers": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } },
+    "population": { "$ref": "#/$defs/text" },
+    "limitations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "items"],
+      "properties": {
+        "statement": { "$ref": "#/$defs/text" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/text" } }
+      }
+    },
+    "context": {
+      "description": "Elements the analytics needs, by version range, and the field keys required from each.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": { "^x-": {} },
+        "required": ["ref", "fields"],
+        "properties": {
+          "ref": {
+            "allOf": [
+              { "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/reference" },
+              { "type": "object", "properties": { "type": { "const": "contextual-element" } }, "required": ["range"] }
+            ]
+          },
+          "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/key" } }
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": { "^x-": {} },
+        "required": ["key", "element", "field", "type", "onMissing"],
+        "properties": {
+          "key": { "$ref": "#/$defs/key" },
+          "element": { "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactId" },
+          "field": { "$ref": "#/$defs/key" },
+          "type": { "enum": ["quantity", "integer", "boolean", "code", "string", "date", "datetime"] },
+          "units": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^\\S+$" } },
+          "onMissing": { "$ref": "#/$defs/nonValueState" }
+        },
+        "allOf": [
+          { "if": { "type": "object", "properties": { "type": { "enum": ["quantity", "integer"] } }, "required": ["type"] }, "then": { "required": ["units"] } }
+        ]
+      }
+    },
+    "parameters": {
+      "description": "Declared, never valued. No default, value or suggestion; the local clinician supplies a value at run time (CCIS-REQ-029).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": { "^x-": {} },
+        "required": ["id", "label", "kind", "enabledByDefault", "suppliedBy"],
+        "properties": {
+          "id": { "$ref": "#/$defs/key" },
+          "label": { "$ref": "#/$defs/text" },
+          "kind": { "enum": ["duration", "choice", "set", "criteria"] },
+          "units": { "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^\\S+$" } },
+          "allowedRange": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["min", "max"],
+            "properties": { "min": { "type": "number" }, "max": { "type": "number" } }
+          },
+          "allowedChoices": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/text" } },
+          "allowedMembers": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/key" } },
+          "enabledByDefault": { "const": false },
+          "suppliedBy": { "$ref": "#/$defs/text" },
+          "note": { "$ref": "#/$defs/text" }
+        },
+        "allOf": [
+          { "if": { "type": "object", "properties": { "kind": { "const": "duration" } }, "required": ["kind"] }, "then": { "required": ["units", "allowedRange"] } },
+          { "if": { "type": "object", "properties": { "kind": { "const": "choice" } }, "required": ["kind"] }, "then": { "required": ["allowedChoices"] } },
+          { "if": { "type": "object", "properties": { "kind": { "const": "set" } }, "required": ["kind"] }, "then": { "required": ["allowedMembers"] } }
+        ]
+      }
+    },
+    "conversions": {
+      "description": "The only place a conversion factor may appear. Named, versioned, reviewable (CCIS-REQ-043).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": { "^x-": {} },
+        "required": ["id", "version", "from", "to", "kind"],
+        "properties": {
+          "id": { "$ref": "#/$defs/key" },
+          "version": { "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver" },
+          "from": { "type": "string", "pattern": "^\\S+$" },
+          "to": { "type": "string", "pattern": "^\\S+$" },
+          "kind": { "enum": ["linear", "time-zone"] },
+          "factor": { "type": "number" },
+          "offset": { "type": "number" }
+        },
+        "allOf": [
+          { "if": { "type": "object", "properties": { "kind": { "const": "linear" } }, "required": ["kind"] }, "then": { "required": ["factor"] } }
+        ]
+      }
+    },
+    "operatorSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "version": { "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver" }
+      }
+    },
+    "computation": {
+      "description": "One closed expression tree per output.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["output", "expr"],
+        "properties": {
+          "output": { "$ref": "#/$defs/key" },
+          "expr": { "$ref": "#/$defs/expr" }
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/output" }
+    },
+    "interpretation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["meaning", "prohibited"],
+      "properties": {
+        "meaning": { "$ref": "#/$defs/text" },
+        "prohibited": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } }
+      }
+    },
+    "executionProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["maxSteps", "maxDepth", "maxOutputBytes"],
+      "properties": {
+        "maxSteps": { "type": "integer", "minimum": 1 },
+        "maxDepth": { "type": "integer", "minimum": 1 },
+        "maxOutputBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "sources"],
+      "properties": {
+        "statement": { "$ref": "#/$defs/text" },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "citation"],
+            "properties": {
+              "kind": { "enum": ["guideline", "publication", "local-protocol", "expert-opinion"] },
+              "citation": { "$ref": "#/$defs/text" }
+            }
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "basis"],
+      "properties": { "origin": { "$ref": "#/$defs/text" }, "basis": { "$ref": "#/$defs/text" } }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "pattern": "^\\S.*$" },
+    "key": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
+    "nonValueState": { "enum": ["needs-data", "indeterminate", "not-applicable", "conflict", "parameter-not-enabled"] },
+    "expr": {
+      "oneOf": [
+        {
+          "description": "Operator node. The operator must be on the whitelist (D-006).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["op", "args"],
+          "properties": {
+            "op": { "enum": ["and", "or", "not", "is-present", "state-of", "eq", "ne", "lt", "le", "gt", "ge", "add", "sub", "time-diff", "convert", "if", "count", "select"] },
+            "args": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/expr" } }
+          }
+        },
+        {
+          "description": "Reference leaf: an input, a parameter or a declared conversion.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ref", "id"],
+          "properties": {
+            "ref": { "enum": ["input", "parameter", "conversion"] },
+            "id": { "$ref": "#/$defs/key" }
+          }
+        },
+        {
+          "description": "Literal: a boolean or a string (an epistemic state or a label). Never a number.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["literal"],
+          "properties": {
+            "literal": { "oneOf": [{ "type": "boolean" }, { "type": "string" }] }
+          }
+        }
+      ]
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "required": ["id", "kind", "states", "carries"],
+      "properties": {
+        "id": { "$ref": "#/$defs/key" },
+        "kind": { "enum": ["value", "classification", "table"] },
+        "valueType": { "enum": ["quantity", "time", "integer"] },
+        "unit": { "type": "string", "pattern": "^\\S+$" },
+        "labels": { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/text" } },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "label"],
+            "properties": { "key": { "$ref": "#/$defs/key" }, "label": { "$ref": "#/$defs/text" } }
+          }
+        },
+        "states": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/nonValueState" } },
+        "carries": {
+          "type": "array",
+          "items": { "enum": ["warnings", "limitations", "missingDataNotes", "certainty"] },
+          "allOf": [
+            { "contains": { "const": "warnings" } },
+            { "contains": { "const": "limitations" } },
+            { "contains": { "const": "missingDataNotes" } }
+          ]
+        }
+      },
+      "allOf": [
+        { "if": { "type": "object", "properties": { "kind": { "const": "value" } }, "required": ["kind"] }, "then": { "required": ["valueType", "unit"] } },
+        { "if": { "type": "object", "properties": { "kind": { "const": "classification" } }, "required": ["kind"] }, "then": { "required": ["labels"] } },
+        { "if": { "type": "object", "properties": { "kind": { "const": "table" } }, "required": ["kind"] }, "then": { "required": ["columns"] } }
+      ]
+    }
+  }
+}

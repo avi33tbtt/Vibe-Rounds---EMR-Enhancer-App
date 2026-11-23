@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccis.invalid/schemas/run-result.schema.json",
+  "title": "CCIS run result",
+  "description": "The outcome of one output of one run (CCIS-REQ-066, 070, 072, 073). A value or a declared non-value state, never both. Unknown never becomes false or normal.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "outputId",
+    "kind",
+    "warnings",
+    "limitations",
+    "missingDataNotes"
+  ],
+  "properties": {
+    "outputId": {
+      "$ref": "https://ccis.invalid/schemas/analytics.schema.json#/$defs/key"
+    },
+    "kind": {
+      "enum": [
+        "value",
+        "classification",
+        "table"
+      ]
+    },
+    "value": {},
+    "state": {
+      "$ref": "https://ccis.invalid/schemas/analytics.schema.json#/$defs/nonValueState"
+    },
+    "dependsOnParameters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "https://ccis.invalid/schemas/analytics.schema.json#/$defs/key"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+      }
+    },
+    "missingDataNotes": {
+      "type": "array",
+      "items": {
+        "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "value"
+          ],
+          "not": {
+            "required": [
+              "state"
+            ]
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "state"
+          ],
+          "not": {
+            "required": [
+              "value"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "value"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "patternProperties": {
+                  "^x-": {}
+                },
+                "required": [
+                  "amount",
+                  "unit"
+                ],
+                "properties": {
+                  "amount": {
+                    "type": "number"
+                  },
+                  "unit": {
+                    "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/token"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "patternProperties": {
+                  "^x-": {}
+                },
+                "required": [
+                  "time"
+                ],
+                "properties": {
+                  "time": {
+                    "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/time"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "classification"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+              "^x-": {}
+            },
+            "required": [
+              "label"
+            ],
+            "properties": {
+              "label": {
+                "$ref": "https://ccis.invalid/schemas/context-envelope.schema.json#/$defs/text"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "table"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+              "^x-": {}
+            },
+            "required": [
+              "columns",
+              "rows"
+            ],
+            "properties": {
+              "columns": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "https://ccis.invalid/schemas/analytics.schema.json#/$defs/key"
+                }
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "const": "parameter-not-enabled"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "required": [
+          "dependsOnParameters"
+        ]
+      },
+      "else": {
+        "type": "object",
+        "not": {
+          "required": [
+            "dependsOnParameters"
+          ]
+        }
+      }
+    }
+  ]
+}

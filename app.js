@@ -15,6 +15,7 @@ const { mountObservations } = require('./observations');
 const { mountNotes } = require('./notes');
 const { mountPathways } = require('./pathways');
 const { mountContext } = require('./context');
+const { mountCcisRuns, isRunImportPath } = require('./ccis-runs');
 const { createLimiter } = require('./ratelimit');
 
 const PATIENT_SELECT = `
@@ -80,7 +81,8 @@ function createApp(pool, opts = {}) {
   app.disable('x-powered-by');
   app.set('trust proxy', opts.trustProxy ?? proxyHops(process.env.TRUST_PROXY));
   const txConnect = txOrigin(opts.txHost ?? process.env.TX_HOST);
-  app.use(express.json({ limit: '50kb' }));
+  const json50 = express.json({ limit: '50kb' });
+  app.use((req, res, next) => (req.method === 'POST' && isRunImportPath(req.path) ? next() : json50(req, res, next)));   // run-record import has its own, larger limit (ccis-runs.js)
   app.use((req, res, next) => {
     res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
     res.set('Content-Security-Policy', cspHeader(res.locals.cspNonce, txConnect));
@@ -302,6 +304,9 @@ function createApp(pool, opts = {}) {
   /* ---------- context envelope for CCIS (task B5) ---------- */
   mountContext(app, pool, opts);
 
+  /* ---------- CCIS run records: import and acknowledge (task DM2a) ---------- */
+  mountCcisRuns(app, pool, opts);
+
   /* ---------- audit (read-only) ---------- */
   app.get('/api/audit', A.requirePerm(pool, 'audit:read'), async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
@@ -315,6 +320,7 @@ function createApp(pool, opts = {}) {
   app.use('/api', (_req, res) => res.status(404).json({ error: 'not_found' }));
   app.use((err, _req, res, _next) => {
     if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'bad_json' });
+    if (err.type === 'entity.too.large') return res.status(413).json({ error: 'too_large' });
     if (!opts.quiet) console.error(err);
     res.status(500).json({ error: 'server_error' });
   });

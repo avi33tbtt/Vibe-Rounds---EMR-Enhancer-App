@@ -10,6 +10,7 @@ const http = require('node:http');
 const { setup, client, PW } = require('./helpers');
 const { PERMS } = require('../permissions');
 const { ROLES, listRoutes, isWrite, fill } = require('./safety-helpers');
+const { SECRET, caseWithExport, runRecord } = require('./ccis-helpers');
 
 // ---------- the matrix (written by hand on purpose: it is the spec, permissions.js is the implementation) ----------
 // guard: 'public' (no sign-in), 'login' (any signed-in user) or a permission name.
@@ -42,6 +43,9 @@ const MATRIX = {
   'POST /api/cases/:id/observations': { guard: 'cases:write' },
   'GET /api/cases/:id/timeline':    { guard: 'cases:read' },
   'GET /api/cases/:id/context':     { guard: 'context:read' },
+  'GET /api/cases/:id/ccis-runs':   { guard: 'ccis:read' },
+  'POST /api/cases/:id/ccis-runs':  { guard: 'ccis:import' },
+  'POST /api/ccis-runs/:id/ack':    { guard: 'ccis:ack' },
   'POST /api/observations/:id/correct': { guard: 'cases:write' },
   'POST /api/observations/:id/entered-in-error': { guard: 'cases:write' },
   'GET /api/cases/:id/notes':       { guard: 'cases:read' },
@@ -89,6 +93,9 @@ const EXPECTED_ROLES = {
   'sets:publish':      ['admin'],
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],
+  'ccis:import':       ['admin', 'doctor'],
+  'ccis:read':         ['admin', 'doctor', 'nurse', 'viewer'],
+  'ccis:ack':          ['admin', 'doctor'],
   'ai:use':            ['admin', 'doctor'],
   'ai:admin':          ['admin'],
 };
@@ -212,7 +219,7 @@ function startProvider() {
 test('audit coverage: every write route leaves an audit row, written from the session, never from the body', async () => {
   prov = await startProvider();
   provUrl = `http://127.0.0.1:${prov.address().port}`;
-  const aenv = await setup({ ai: { provider: 'openrouter', key: 'k-test', model: 'test/m', baseUrl: provUrl, timeoutMs: 5000 } });
+  const aenv = await setup({ contextSecret: SECRET, ai: { provider: 'openrouter', key: 'k-test', model: 'test/m', baseUrl: provUrl, timeoutMs: 5000 } });
   try {
     const aroutes = listRoutes(aenv.pool);
     const writeRoutes = aroutes.filter(isWrite);
@@ -328,6 +335,15 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal(k.status, 201, JSON.stringify(k.body));
         const r = await nurse.c.post(`/api/cases/${k.body.case.id}/applied-pathways`, { pathwayId: S.pwId, version: 1 });
         assert.equal(r.status, 201, JSON.stringify(r.body)); return ['case.pathway_apply'];
+      }],
+      ['POST /api/cases/:id/ccis-runs', doctor, async () => {       // DM2a: needs a real export of the same case; the body is a CCIS record, so unknown keys are refused (no `...fake`)
+        const k = await caseWithExport(doctor.c, aenv.pool);
+        const r = await doctor.c.post(`/api/cases/${k.caseId}/ccis-runs`, runRecord(k));
+        assert.equal(r.status, 201, JSON.stringify(r.body)); S.runId = r.body.run.id; return ['ccis.import'];
+      }],
+      ['POST /api/ccis-runs/:id/ack', doctor, async () => {
+        const r = await doctor.c.post(`/api/ccis-runs/${S.runId}/ack`, { note: 'Audit acknowledgement' });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); return ['ccis.ack'];
       }],
       ['POST /api/cases/:id/observations', nurse, async () => {
         const r = await nurse.c.post(`/api/cases/${S.cid}/observations`, { observations: [{ appliedSetId: S.asid, fieldKey: 'hr', value: 72, effectiveAt: '2020-01-01T10:00:00Z', sourceType: 'clinician' }] });

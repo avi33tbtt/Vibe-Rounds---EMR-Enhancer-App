@@ -103,9 +103,9 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | | | **TRACK DEMO: end-to-end demo slice with CCIS** (see `emr-plan-chunks/04-demo-and-roadmap.md`) | | | | |
 | DM0 | chunk-DM0-demo-script.md | Demo script and scope contract (docs only) | DONE | 2026-11-23 | docs/DEMO-SCRIPT.md | Draft delivered with this plan; owner reviews. |
 | DM1 | chunk-DM1-seed-demo.md | One-command demo seed and reset (`demo:seed`, `demo:reset`) | DONE | 2026-11-23 | 1 script, 1 test | scripts/seed-demo.js, test/demo-seed.test.js, package.json, DECISIONS.md. Via real routes; idempotent; reset archives. 8 values, 1 Unknown, 1 missing. |
-| DM2a | chunk-DM2a-run-results-server.md | Import and acknowledge CCIS run records: `ccis_runs`, `ccis_run_acks`, 3 routes, permissions | TODO |  | 1 migration, 3 routes, tests | Needs B5b. Append-only; CCIS never writes clinical tables. |
+| DM2a | chunk-DM2a-run-results-server.md | Import and acknowledge CCIS run records: `ccis_runs`, `ccis_run_acks`, 3 routes, permissions | DONE | 2026-11-23 | 1 migration, 3 routes, tests | ccis-runs.js, 015 migration, 5 schemas, ajv to deps, 5 test files, DECISIONS. Record needs x-envelopeSha256 (DM3 adds it). 337 tests, 3 skipped (no Chrome). |
 | DM2b | chunk-DM2b-insights-panel.md | CCIS insights panel in the case screen (import file, view, acknowledge, demo-parameter banner) | TODO |  | page edit + 1 test file | Needs DM2a. |
-| DM3 | chunk-DM3-bridge.md | `scripts/demo-bridge.js`: envelope -> CCIS CLI child process -> import | TODO |  | 1 script, 1 test | Needs DM2a and CCIS DS4. |
+| DM3 | chunk-DM3-bridge.md | `scripts/demo-bridge.js`: envelope -> CCIS CLI child process -> import | TODO |  | 1 script, 1 test | Needs DM2a and CCIS DS4. Must add `x-envelopeSha256` (hash of the exported file) to the record: see DECISIONS DM2a. |
 | DM4 | chunk-DM4-demo-polish.md | Demo runbook, banners, end-to-end test | TODO |  | docs + 1 test + banner | Needs DM1, DM2b, DM3, CCIS DS7. |
 | | | **TRACK R: full advanced-EMR roadmap (LOCKED until DM4 DONE and "start roadmap")** | | | | |
 | R0 | (written when reached) | Split `emr-enhancer.html` into modules, no behaviour change | LOCKED |  |  | Do before R1. |

@@ -1,0 +1,321 @@
+{
+  "id": "run-synthetic-0001",
+  "status": "completed",
+  "package": {
+    "id": "synthetic.demo-analytics",
+    "version": "0.1.0"
+  },
+  "standard": {
+    "version": "0.1.0"
+  },
+  "engine": {
+    "version": "^0.1.0"
+  },
+  "operatorSet": {
+    "name": "ccis-core-ops",
+    "version": "0.1.0"
+  },
+  "context": {
+    "elements": [
+      {
+        "id": "synthetic.demo-element",
+        "type": "contextual-element",
+        "version": "0.1.0"
+      }
+    ],
+    "pathways": [
+      {
+        "id": "synthetic.demo-pathway",
+        "type": "pathway",
+        "version": "0.2.0"
+      }
+    ]
+  },
+  "snapshot": {
+    "case": {
+      "ref": "case-synthetic-0001"
+    },
+    "observations": [
+      {
+        "id": "o1",
+        "concept": {
+          "id": "synthetic.demo-concept",
+          "codes": []
+        },
+        "kind": "quantity",
+        "effective": {
+          "value": "2026-01-01T08:00:00Z",
+          "zone": "stated"
+        },
+        "recorded": {
+          "value": "2026-01-01T08:05:00Z",
+          "zone": "stated"
+        },
+        "status": "final",
+        "sourceClass": "clinician-entered",
+        "provenance": {
+          "roleClass": "synthetic-clinical-system",
+          "origin": "synthetic-source",
+          "verified": false,
+          "corrected": false
+        },
+        "value": 1.5,
+        "unit": "1"
+      },
+      {
+        "id": "o2",
+        "concept": {
+          "id": "synthetic.demo-concept",
+          "codes": []
+        },
+        "kind": "integer",
+        "effective": {
+          "value": "2026-01-01T08:00:00Z",
+          "zone": "stated"
+        },
+        "recorded": {
+          "state": "unknown"
+        },
+        "status": "final",
+        "sourceClass": "clinician-entered",
+        "provenance": {
+          "roleClass": "synthetic-clinical-system",
+          "origin": "synthetic-source",
+          "verified": false,
+          "corrected": false
+        },
+        "value": 3,
+        "unit": "1"
+      },
+      {
+        "id": "o3",
+        "concept": {
+          "id": "synthetic.demo-concept",
+          "codes": []
+        },
+        "kind": "boolean",
+        "effective": {
+          "value": "2026-01-01T08:00:00",
+          "zone": "unknown"
+        },
+        "recorded": {
+          "value": "2026-01-01T08:05:00Z",
+          "zone": "stated"
+        },
+        "status": "final",
+        "sourceClass": "clinician-entered",
+        "provenance": {
+          "roleClass": "synthetic-clinical-system",
+          "origin": "synthetic-source",
+          "verified": false,
+          "corrected": false
+        },
+        "value": true
+      }
+    ],
+    "events": [
+      {
+        "id": "e1",
+        "type": "unclassified",
+        "time": {
+          "value": "2026-01-01T09:00:00Z",
+          "zone": "stated"
+        },
+        "status": "final",
+        "sourceClass": "imported",
+        "provenance": {
+          "roleClass": "synthetic-clinical-system",
+          "origin": "synthetic-source",
+          "verified": false,
+          "corrected": false
+        }
+      },
+      {
+        "id": "e2",
+        "type": "synthetic.demo-event",
+        "period": {
+          "start": {
+            "value": "2026-01-01T09:00:00Z",
+            "zone": "stated"
+          },
+          "end": {
+            "value": "2026-01-01T09:30:00Z",
+            "zone": "stated"
+          }
+        },
+        "status": "final",
+        "sourceClass": "device",
+        "provenance": {
+          "roleClass": "synthetic-clinical-system",
+          "origin": "synthetic-source",
+          "verified": false,
+          "corrected": false
+        }
+      }
+    ]
+  },
+  "parameters": [
+    {
+      "id": "syntheticTarget",
+      "enabled": false
+    },
+    {
+      "id": "syntheticChoice",
+      "enabled": true,
+      "value": "synthetic-label",
+      "suppliedBy": "synthetic-clinician-role"
+    },
+    {
+      "id": "syntheticWindow",
+      "enabled": true,
+      "value": 2,
+      "units": "h",
+      "suppliedBy": "synthetic-clinician-role"
+    }
+  ],
+  "evaluationTime": {
+    "value": "2026-01-02T09:00:00Z",
+    "zone": "stated"
+  },
+  "outputContractVersion": "0.1.0",
+  "validationMessages": [
+    {
+      "severity": "info",
+      "ruleId": "synthetic.rule-one",
+      "path": "/computation",
+      "message": "Synthetic message",
+      "hint": "Synthetic hint"
+    }
+  ],
+  "importReport": {
+    "outcome": "read",
+    "envelope": {
+      "version": "0.1.0",
+      "exportedAt": "2026-01-01T10:00:00+00:00",
+      "producer": {
+        "system": "synthetic-emr",
+        "version": "0.1.0"
+      }
+    },
+    "inclusions": {
+      "identity": false,
+      "narrative": false,
+      "enteredInError": false
+    },
+    "importer": {
+      "version": "0.1.0"
+    },
+    "standard": {
+      "version": "0.1.0"
+    },
+    "appliedVersions": [
+      {
+        "id": "synthetic.demo-element",
+        "type": "contextual-element",
+        "version": "0.1.0",
+        "held": true
+      },
+      {
+        "id": "synthetic.demo-pathway",
+        "type": "pathway",
+        "version": "0.2.0",
+        "held": false
+      }
+    ],
+    "records": [
+      {
+        "ref": "o1",
+        "recordKind": "observation",
+        "category": "accepted",
+        "notes": [
+          "recorded time unknown"
+        ]
+      },
+      {
+        "ref": "o2",
+        "recordKind": "observation",
+        "category": "rejected",
+        "reasons": [
+          {
+            "code": "excluded-category",
+            "category": "narrative"
+          }
+        ]
+      },
+      {
+        "ref": "o3",
+        "recordKind": "observation",
+        "category": "unmapped",
+        "reasons": [
+          {
+            "code": "no-verified-mapping"
+          }
+        ]
+      },
+      {
+        "ref": "o4",
+        "recordKind": "observation",
+        "category": "ambiguous",
+        "reasons": [
+          {
+            "code": "two-meanings"
+          }
+        ],
+        "decision": {
+          "choice": "first-meaning",
+          "decidedBy": "synthetic-reviewer-role"
+        }
+      },
+      {
+        "ref": "r1",
+        "recordKind": "reference",
+        "category": "accepted"
+      }
+    ],
+    "counts": {
+      "accepted": 2,
+      "rejected": 1,
+      "unmapped": 1,
+      "ambiguous": 1,
+      "total": 5
+    },
+    "ignored": [
+      {
+        "path": "/x-added",
+        "reason": "unrecognised optional addition"
+      }
+    ]
+  },
+  "results": [
+    {
+      "outputId": "syntheticOutput",
+      "kind": "value",
+      "value": {
+        "amount": 1.5,
+        "unit": "h"
+      },
+      "warnings": [],
+      "limitations": [
+        "Synthetic limitation"
+      ],
+      "missingDataNotes": []
+    },
+    {
+      "outputId": "syntheticOutput",
+      "kind": "value",
+      "state": "parameter-not-enabled",
+      "dependsOnParameters": [
+        "syntheticTarget"
+      ],
+      "warnings": [],
+      "limitations": [
+        "Synthetic limitation"
+      ],
+      "missingDataNotes": []
+    }
+  ],
+  "warnings": [],
+  "limitations": [
+    "Synthetic limitation"
+  ]
+}

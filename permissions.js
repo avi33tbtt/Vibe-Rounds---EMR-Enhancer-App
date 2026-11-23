@@ -14,6 +14,9 @@ const PERMS = {
   'sets:publish':      ['admin'],                                // publish an APPROVED version and retire a version; reviewers (informatician) cannot publish (8c-2 decision)
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],   // the de-identified context envelope for CCIS (B5); no nurse, viewer or informatician
+  'ccis:import':       ['admin', 'doctor'],   // import a CCIS run record made from an envelope exported for the same case (DM2a)
+  'ccis:read':         ['admin', 'doctor', 'nurse', 'viewer'],   // see imported run records and who acknowledged them
+  'ccis:ack':          ['admin', 'doctor'],   // acknowledge that a run was seen; not an approval of its result
   'ai:use':            ['admin', 'doctor'],   // draft / rank element sets with the server-side AI
   'ai:admin':          ['admin'],             // the AI on/off switch, model and request limits
 };
