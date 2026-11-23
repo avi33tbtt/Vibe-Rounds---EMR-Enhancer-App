@@ -111,18 +111,21 @@ test('a newer published version is only offered; the pin keeps its own fields fr
   await a.close();
 });
 
-test('a pathway pins each member that is in the server library; the others are skipped and said so; nothing is applied twice', async () => {
-  await publishedSet('basic_emr', def('Basic EMR', ['pwa']));
+test('a pathway is applied with one server call: its exact set versions are pinned together, linked to it; what the case already has is left alone', async () => {   // B4b: replaces the member-by-member loop
+  const s1 = await publishedSet('pwa-a', def('PWA A', ['pwa'])), s2 = await publishedSet('pwa-b', def('PWA B', ['pwb'])), s3 = await publishedSet('pwa-c', def('PWA C', ['pwc']));
+  const mk = await R.doctor.post('/api/pathways', { slug: 'pw_basic', title: 'Basic admission', description: 'Minimal chart', steps: [{ setId: s1, version: 1 }, { setId: s2, version: 1 }, { setId: s3, version: 1 }] });
+  assert.equal(mk.status, 201, JSON.stringify(mk.body));
+  assert.equal((await admin.post(`/api/pathways/${mk.body.pathway.id}/versions/1/publish`, {})).status, 200);
   const p = await patient(), a = await openPage(); await a.login('nurse1'); await a.open(p);
-  a.w.applySet('pw_basic'); await until(() => /skipped/.test(a.toast()), 'toast');
-  assert.match(a.toast(), /Pathway applied: Basic admission.*1 set\(s\) are not in the server library/);
-  assert.equal(a.posts(/\/applied-sets$/).length, 1);
-  assert.deepEqual((await pins(a)).map(r => r.slug), ['basic_emr']);
+  a.w.applySet('pwa-b'); await until(() => a.ev('CASE.applied.length') === 1, 'plain pin');
+  a.w.applySet('pw_basic'); await until(() => /Pathway applied/.test(a.toast()), 'toast');
+  assert.match(a.toast(), /Pathway applied: Basic admission v1.*1 set\(s\) already on the case/);
+  assert.equal(a.posts(/\/applied-pathways$/).length, 1); assert.equal(a.posts(/\/applied-sets$/).length, 1, 'only the plain pin used the single-set route');
+  assert.deepEqual((await pins(a)).map(r => [r.slug, r.from_pathway_slug]), [['pwa-b', null], ['pwa-a', 'pw_basic'], ['pwa-c', 'pw_basic']], 'the plain pin has no source; the others name the pathway');
   assert.match(a.$('pbanner').textContent, /Basic admission/);
-  await publishedSet('vitals', def('Vitals', ['pwv'])); await a.w.libLoad();
-  a.w.applySet('pw_basic'); await until(() => a.ev('CASE.applied.length') === 2, 'second member pinned');
-  assert.equal(a.posts(/\/applied-sets$/).length, 2, 'basic_emr was not sent again');
-  assert.deepEqual((await pins(a)).map(r => r.slug).sort(), ['basic_emr', 'vitals']);
+  a.w.applySet('pw_basic'); await until(() => /Not applied/.test(a.toast()), 'second apply refused');
+  assert.match(a.toast(), /already applied/);
+  assert.equal(a.ev('CASE.applied.length'), 3);
   await a.close();
 });
 

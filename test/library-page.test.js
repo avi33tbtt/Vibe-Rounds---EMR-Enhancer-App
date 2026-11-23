@@ -46,6 +46,7 @@ async function openPage(store = {}) {
   await until(() => w.eval('typeof Srv') === 'object', 'page ready'); await wait(100);
   return ui;
 }
+const pwBtn = ui => ui.d.querySelector('#libSrv button[data-act="libPwImport"]');
 const importBtn = ui => ui.d.querySelector('#libSrv button[data-act="libImport"]');
 const setIds = ui => ui.evj('REGISTRY.filter(s=>s.srv).map(s=>s.id).sort()');
 
@@ -151,19 +152,31 @@ test('server sets are read-only in the page and never copied into the browser', 
   await ui.close();
 });
 
-test('a pathway applies only the members that are in the library and says how many were skipped', async () => {
+test('the admin imports the demo pathways once, only those whose sets are published; applying one pins its exact versions', async () => {   // B4b: replaces the client-side member list
   await reset();
   const ui = await openPage(); await ui.login('admin1');
   importBtn(ui).click(); await until(() => ui.ev('LIB.busy') === false && importBtn(ui) === null, 'import');
-  assert.deepEqual(setIds(ui), [], 'nothing is in the library until it is reviewed and published');
+  assert.equal(pwBtn(ui), null, 'no pathway is ready while no set is published');
+  assert.match(ui.$('libSrv').textContent, /Waiting for their sets to be published/);
   await reviewAndPublishAll(); await ui.w.libLoad();
   assert.equal(setIds(ui).length, DEMO.length);
+  assert.ok(pwBtn(ui), 'the import is offered once the sets are published');
+  pwBtn(ui).click(); await until(() => ui.ev('LIB.busy') === false && pwBtn(ui) === null, 'pathway import');
+  // pw_dm and pw_dm_ckd_foot name sets the demo import never sends (dm_ctx, hba1c_mon...): they wait; the others are published as v1
+  assert.deepEqual(ui.evj('PATHWAYS.map(p=>p.id)'), ['pw_basic', 'pw_dka', 'pw_ipd', 'pw_ipd_discharge', 'pw_opd', 'pw_snake']);
+  assert.match(ui.$('libSrv').textContent, /Waiting for their sets/);
+  const list = (await admin.get('/api/pathways')).body.pathways;
+  assert.ok(list.every(p => p.published_version === 1));
+  assert.equal(ui.ev('PATHWAYS.every(p=>p.srvPw&&p.srvPw.steps.length===p.members.length)'), true);
+  assert.match(ui.$('libList').textContent, /basic_emr v1, vitals v1/);
+  const calls = ui.fetched.length; await ui.w.libPwImport();
+  assert.equal(ui.fetched.length, calls, 'a second import does nothing');
   const pid = (await admin.post('/api/patients', { name: 'Pathway Patient', mrn: 'PW-1', dob: '1980-01-01', sex: 'F' })).body.patient.id;
   await ui.w.ptOpenCase(pid); await until(() => ui.ev('!!CASE.serverId && CASE.pinsOk === true'), 'case open');
-  ui.w.applySet('pw_dm');   // basic_emr, vitals, dm_ctx, glucose_ss, hba1c_mon: dm_ctx and hba1c_mon are not in the library
-  await until(() => ui.ev('CASE.applied.length') === 3, 'members pinned');
-  assert.deepEqual(ui.evj('CASE.applied.map(a=>a.setId)'), ['basic_emr', 'vitals', 'glucose_ss']);
-  assert.match(ui.$('toast').textContent, /2 set\(s\) are not in the server library/);
+  ui.w.applySet('pw_basic');
+  await until(() => ui.ev('CASE.applied.length') === 2, 'members pinned');
+  assert.deepEqual(ui.evj('CASE.applied.map(a=>[a.setId,a.version,a.fromPathway])'), [['basic_emr', 1, 'pw_basic'], ['vitals', 1, 'pw_basic']]);
+  assert.match(ui.$('toast').textContent, /Pathway applied: Basic admission v1/);
   await ui.close();
 });
 
