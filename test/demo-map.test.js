@@ -25,11 +25,11 @@ const build = rows => buildEnvelope({ caseRow: { id: 7 }, pins: { sets: [SET], p
 const t = '2026-11-23T08:00:00Z';
 const byField = (env, f) => env.observations.find(o => o.concept.id.endsWith('.' + f));
 
-test('names: element, pathway and the 9 concept ids use the CCIS spelling; versions untouched', () => {
+test('names: element, pathway and the 9 concept ids use the CCIS spelling; versions become 0.1.0', () => {
   const env = build(FIELDS.map(([f, ty]) => ty === 'datetime' ? row(f, 'datetime', t) : row(f, 'select', f === 'clotting_result' ? 'Clotted' : f === 'bite_time_certainty' ? 'Exact' : f === 'clotting_test_status' ? 'Performed' : 'Given')));
   const m = mapEnvelope(env);
-  assert.deepEqual(m.applied.elements, [{ id: 'snake.envenomation-timing', type: 'contextual-element', version: '1.0.0' }]);
-  assert.deepEqual(m.applied.pathways, [{ id: 'snake.documentation-path', type: 'pathway', version: '1.0.0' }]);
+  assert.deepEqual(m.applied.elements, [{ id: 'snake.envenomation-timing', type: 'contextual-element', version: '0.1.0' }]);
+  assert.deepEqual(m.applied.pathways, [{ id: 'snake.documentation-path', type: 'pathway', version: '0.1.0' }]);
   assert.equal(m.observations.length, 9);
   for (const o of m.observations) assert.match(o.concept.id, /^snake\.envenomation-timing\.[a-z-]+$/);
   assert.equal(validate(m), true, JSON.stringify(validate.errors));
@@ -72,6 +72,10 @@ test('anything unknown throws: select word, field, set, pathway', () => {
   assert.throws(() => mapEnvelope(set), /Cannot map element "other-set"/);
   const pw = build([row('bite_time', 'datetime', t)]); pw.applied.pathways[0].id = 'other-path';
   assert.throws(() => mapEnvelope(pw), /Cannot map pathway "other-path"/);
+  const v2 = build([row('bite_time', 'datetime', t)]); v2.applied.elements[0].version = '2.0.0';
+  assert.throws(() => mapEnvelope(v2), /Cannot map version "2.0.0"/);
+  const pv = build([row('bite_time', 'datetime', t)]); pv.applied.pathways[0].version = '3.0.0';
+  assert.throws(() => mapEnvelope(pv), /Cannot map version "3.0.0"/);
   const foreign = build([row('bite_time', 'datetime', t)]); foreign.observations[0].concept.id = 'glucose.value';
   assert.throws(() => mapEnvelope(foreign), /Cannot map concept/);
 });
