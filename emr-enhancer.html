@@ -16,7 +16,8 @@
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,sans-serif;height:100vh;display:flex;flex-direction:column}
-.ban{background:#fff3cd;color:#664d03;padding:6px 16px;font-size:12px;text-align:center}
+.ban{background:#fff3cd;color:#664d03;padding:6px 16px;font-size:12px;text-align:center;position:sticky;top:0;z-index:50}
+.planned{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;padding:1px 6px;margin-left:6px;border:1px solid var(--a);color:var(--a);border-radius:8px;vertical-align:middle}
 @media(prefers-color-scheme:dark){.ban{background:#422006;color:#fcd34d}}
 header{padding:10px 16px;border-bottom:1px solid var(--bd);display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--cd)}
 header b{font-size:16px}.mu{color:var(--mu);font-size:12px}
@@ -90,7 +91,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 </style>
 </head>
 <body>
-<div class="ban">Prototype / synthetic data only — not for clinical use. LLM fields and codes are drafts until verified. Internal model is the system of record; FHIR is export-only and omits unverified codes.</div>
+<div class="ban"><b>Synthetic data, prototype.</b> Not for clinical use. LLM fields and codes are drafts until verified. Internal model is the system of record; FHIR is export-only and omits unverified codes.</div>
 <header>
   <b>EMR Enhancer</b>
   <span class="mu">context-aware · pathways · codes · FHIR</span>
@@ -105,7 +106,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <button data-t="review" id="navReview" style="display:none">Review</button>
     <button data-t="create">Create / Generate</button>
     <button data-t="notes">Notes</button>
-    <button data-t="codes">Codes &amp; FHIR</button>
+    <button data-t="codes">Codes &amp; FHIR<span class="planned" title="Server-side terminology verification is planned. Verification here calls a public test server.">verify: planned</span></button>
   </nav>
 </header>
 <div id="pbanner" class="pb"></div>
@@ -267,7 +268,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
           </div>
           <div id="genSummary" class="mu" style="margin:6px 0"></div>
           <div id="genBind"></div>
-          <button class="b sec sm" id="genVerify" data-act="verifyGenerated">Verify bindings (tx.fhir.org)</button>
+          <button class="b sec sm" id="genVerify" data-act="verifyGenerated">Verify bindings (tx.fhir.org)</button><span class="planned">server verification: planned</span>
           <details><summary class="mu">Raw JSON</summary><pre class="raw" id="genRaw"></pre></details>
         </div>
       </div>
@@ -372,7 +373,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <div id="codeSum" class="mu">Apply sets and fill values first.</div>
         <div id="codeTab"></div>
         <div class="flex" style="margin-top:10px">
-          <button class="b" data-act="liveCheck">Verify live (tx.fhir.org)</button>
+          <button class="b" data-act="liveCheck">Verify live (tx.fhir.org)</button><span class="planned" title="Demo only: a public test server, not the planned hospital terminology service.">server verification: planned</span>
           <button class="b sec" data-act="codesUI">Refresh</button>
         </div>
         <div class="mu" style="margin-top:8px">Manually add a code you verified in a browser:</div>
