@@ -159,7 +159,7 @@ test('route: audited with counts only; the audit row holds no value, name or ref
   assert.equal(rows[0].detail.envelopeVersion, '0.1.0');
   const s = JSON.stringify(rows[0]);
   for (const x of [NAME, MRN, NARR, FREE, r.body.case.ref]) assert.ok(!s.includes(x), `audit row must not hold ${x}`);
-  assert.deepEqual(Object.keys(rows[0].detail).sort(), ['envelopeVersion', 'observations', 'withheld']);
+  assert.deepEqual(Object.keys(rows[0].detail).sort(), ['envelopeVersion', 'observations', 'sha256', 'withheld']);
 });
 
 test('route: only admin and doctor may read it; others get 403 and no export is audited', async () => {
@@ -197,4 +197,66 @@ test('route: two applied sets whose slugs map to the same id give 422 and export
   const r = await ctx(d, caseId);
   assert.equal(r.status, 422); assert.equal(r.body.error, 'envelope_unmappable');
   assert.equal(await withheldCount(env.pool), before);
+});
+
+// ---------- B5b: the export log and the downloadable file ----------
+async function rawGet(user, path) {
+  const login = await fetch(env.base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-emr': '1' }, body: JSON.stringify({ username: user, password: 'test-password-1' }) });
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const res = await fetch(env.base + path, { headers: { 'x-emr': '1', cookie } });
+  return { status: res.status, headers: res.headers, text: await res.text() };
+}
+const exportsOf = caseId => env.pool.query('SELECT * FROM context_exports WHERE case_id = $1 ORDER BY id', [caseId]).then(r => r.rows);
+
+test('route: a doctor downloads a file; one export row holds the hash of those exact bytes, the session user, no content', async () => {
+  const f = await fixture();
+  assert.equal((await exportsOf(f.caseId)).length, 0);
+  const r = await rawGet('doctor1', `/api/cases/${f.caseId}/context`);
+  assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /^application\/json/);
+  const e = JSON.parse(r.text); ok(e);
+  assert.equal(r.headers.get('content-disposition'), `attachment; filename="context-envelope-${e.case.ref}.json"`);
+  assert.equal(r.headers.get('cache-control'), 'no-store');
+  const rows = await exportsOf(f.caseId); assert.equal(rows.length, 1);
+  const x = rows[0];
+  assert.equal(x.envelope_sha256, require('node:crypto').createHash('sha256').update(r.text).digest('hex'));
+  assert.deepEqual([x.envelope_version, x.observations], ['0.1.0', e.observations.length]);
+  const doc = (await env.pool.query(`SELECT id FROM users WHERE username = 'doctor1'`)).rows[0].id;
+  assert.equal(x.exported_by, doc, 'the exporter is the session user');
+  const s = JSON.stringify(x); for (const v of [NAME, MRN, NARR, FREE, e.case.ref]) assert.ok(!s.includes(v), `export row must not hold ${v}`);
+  const a = (await env.pool.query(`SELECT detail FROM audit_log WHERE action = 'context.export' AND entity_id = $1`, [String(f.caseId)])).rows;
+  assert.equal(a.length, 1); assert.equal(a[0].detail.sha256, x.envelope_sha256, 'audit and export row agree');
+  await rawGet('admin1', `/api/cases/${f.caseId}/context`);
+  assert.equal((await exportsOf(f.caseId)).length, 2, 'each export is its own row');
+});
+
+test('route: a nurse is refused and nothing is logged; unknown case and bad parameters log nothing', async () => {
+  const f = await fixture();
+  assert.equal((await rawGet('nurse1', `/api/cases/${f.caseId}/context`)).status, 403);
+  assert.equal((await rawGet('doctor1', `/api/cases/${f.caseId}/context?purpose=audit`)).status, 400);
+  assert.equal((await rawGet('doctor1', `/api/cases/99999999/context`)).status, 404);
+  assert.equal((await exportsOf(f.caseId)).length, 0);
+  assert.equal((await env.pool.query('SELECT count(*)::int n FROM context_exports WHERE case_id = 99999999')).rows[0].n, 0);
+});
+
+test('database: the export log cannot be changed, deleted or truncated, even by the owner; the app role has insert and select only', async () => {
+  const f = await fixture(); await rawGet('doctor1', `/api/cases/${f.caseId}/context`);
+  const id = (await exportsOf(f.caseId))[0].id;
+  for (const sql of [`UPDATE context_exports SET observations = 0 WHERE id = ${id}`, `DELETE FROM context_exports WHERE id = ${id}`, 'TRUNCATE context_exports'])
+    await assert.rejects(env.pool.query(sql), /immutable|append|not allowed|forbid|cannot/i, sql);
+  for (const sql of [`UPDATE context_exports SET observations = 0 WHERE id = ${id}`, `DELETE FROM context_exports WHERE id = ${id}`, 'TRUNCATE context_exports'])
+    await assert.rejects(env.appPool.query(sql), /permission denied/i, 'app role: ' + sql);
+  assert.equal((await exportsOf(f.caseId)).length, 1);
+});
+
+test('route: if the export row cannot be written, nothing is sent and nothing is audited', async () => {
+  const f = await fixture();
+  await env.pool.query('ALTER TABLE context_exports ADD CONSTRAINT ctx_test_block CHECK (observations < 0) NOT VALID');
+  try {
+    const before = await withheldCount(env.pool);
+    const r = await rawGet('doctor1', `/api/cases/${f.caseId}/context`);
+    assert.equal(r.status, 500); assert.equal(r.text.includes('"envelope"'), false, 'no envelope bytes leave');
+    assert.equal(await withheldCount(env.pool), before, 'the audit row rolled back with the export row');
+  } finally {
+    await env.pool.query('ALTER TABLE context_exports DROP CONSTRAINT ctx_test_block');
+  }
 });

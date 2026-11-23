@@ -1,7 +1,9 @@
 'use strict';
 // Task B5a-2: the context route. One read route that turns ONE case into the CCIS context envelope (contracts/context-envelope.schema.json).
 // The envelope is built by the pure `envelope.js`; this file only reads one consistent snapshot of the case, calls it, and audits the export.
+// Each export is logged (context_exports, append-only) with the SHA-256 of the exact bytes sent and returned as a downloadable file.
 // No parameters are accepted: identity and narrative can never be included, and entered-in-error rows are never exported (the schema fixes it).
+const crypto = require('crypto');
 const { audit } = require('./audit');
 const A = require('./auth');
 const PKG = require('./package.json');
@@ -51,8 +53,21 @@ function mountContext(app, pool, opts = {}) {
       if (e instanceof EnvelopeError) return res.status(422).json({ error: 'envelope_unmappable', message: e.message });   // set or field ids only, never patient data
       throw e;
     }
-    await audit(pool, req, 'context.export', 'case', caseId, { envelopeVersion: envelope.envelope.version, observations: envelope.observations.length, withheld: envelope['x-emr'].withheld });   // counts only, never values
-    res.set('Cache-Control', 'no-store').json(envelope);
+    // The bytes sent are hashed; the export row and the audit row are written in one transaction, before anything is sent.
+    const body = JSON.stringify(envelope);
+    const sha256 = crypto.createHash('sha256').update(body).digest('hex');
+    const w = await pool.connect();
+    try {
+      await w.query('BEGIN');
+      await w.query('INSERT INTO context_exports(case_id, envelope_sha256, envelope_version, observations, exported_by) VALUES ($1,$2,$3,$4,$5)',
+        [caseId, sha256, envelope.envelope.version, envelope.observations.length, req.user.id]);
+      await audit(w, req, 'context.export', 'case', caseId, { envelopeVersion: envelope.envelope.version, observations: envelope.observations.length, sha256, withheld: envelope['x-emr'].withheld });   // counts and the hash only, never values
+      await w.query('COMMIT');
+    } catch (e) {
+      try { await w.query('ROLLBACK'); } catch (_) { /* ignore */ }
+      throw e;
+    } finally { w.release(); }
+    res.set({ 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="context-envelope-${envelope.case.ref}.json"` }).send(body);
   });
 }
 

@@ -11,12 +11,12 @@ const { JSDOM, VirtualConsole } = require('jsdom');
 const { setup, client } = require('./helpers');
 
 let env;
-test.before(async () => { env = await setup(); });
+test.before(async () => { env = await setup({ contextSecret: 'test-secret-test-secret-test-secret-1234' }); });
 test.after(async () => { await env.close(); });
 
 // ---------- database ----------
 // Every table must be listed here. A new table fails this test until someone decides which kind it is.
-const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events', 'case_notes', 'case_note_amendments', 'pathways', 'pathway_versions', 'pathway_version_steps', 'case_applied_pathways'];        // never deleted: rows are archived, closed, appended or retired
+const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events', 'case_notes', 'case_note_amendments', 'pathways', 'pathway_versions', 'pathway_version_steps', 'case_applied_pathways', 'context_exports'];        // never deleted: rows are archived, closed, appended or retired
 const NOT_CLINICAL = ['users', 'sessions', 'schema_migrations', 'ai_settings'];   // accounts, logins, bookkeeping, settings
 
 test('every table is classified, and every clinical table refuses DELETE', async () => {
@@ -60,6 +60,9 @@ test('every table is classified, and every clinical table refuses DELETE', async
   assert.equal(nt.status, 201, JSON.stringify(nt.body));
   assert.equal((await a.post(`/api/notes/${nt.body.note.id}/sign`, { rowVersion: 1 })).status, 200);
   assert.equal((await a.post(`/api/notes/${nt.body.note.id}/amend`, { body: 'Keep note, amended', reason: 'Keep reason', amendmentCount: 0 })).status, 201);
+
+  // one context export: the export log has a row to protect too (task B5b)
+  assert.equal((await d.get(`/api/cases/${kc.body.case.id}/context`)).status, 200);
 
   for (const t of CLINICAL) {
     const n = Number((await env.pool.query(`SELECT count(*) n FROM ${t}`)).rows[0].n);

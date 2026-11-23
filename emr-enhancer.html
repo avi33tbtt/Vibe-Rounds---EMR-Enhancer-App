@@ -185,6 +185,10 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
           <button class="b sm" id="sc_save" data-act="caseSaveMeta">Save</button>
         </div>
         <div class="mu" id="sc_info"></div>
+        <div class="flex" id="ctxBox" style="margin-top:6px;display:none">
+          <button class="b sm sec" id="ctx_dl" data-act="ctxDownload">Download context envelope</button>
+          <span class="mu" id="ctx_info"></span>
+        </div>
       </div>
       <div class="cd">
         <label>Case narrative</label>
@@ -1012,9 +1016,20 @@ function renderSrvCase(){
   if(document.activeElement!==$('sc_title'))$('sc_title').value=CASE.title||'';
   $('sc_status').value=EDITABLE_STATUS.includes(CASE.srvStatus)?CASE.srvStatus:'active';
   [$('sc_title'),$('sc_status'),$('sc_save')].forEach(e=>{e.disabled=!w});
+  $('ctxBox').style.display=srvCan('context:read')?'':'none';
   $('sc_info').textContent=arch?'Archived. Restore it from the Cases tab (show archived) to change it.':!srvCan('cases:write')?'Your role can read this case but not change it.':'';
 }
 const EDITABLE_STATUS=['active','resolved','closed'];
+// B5b: download the CCIS context envelope of the open case. The server logs each export; the file holds no name, record number or narrative.
+async function ctxDownload(){
+  const c=CASE;if(!c.serverId||!srvCan('context:read'))return;
+  const info=$('ctx_info');info.textContent='';
+  let r,t;try{r=await fetch('/api/cases/'+c.serverId+'/context',{credentials:'same-origin',headers:{'X-EMR':'1'}});t=await r.text()}catch(e){info.textContent='Cannot reach the server.';return}
+  if(r.status!==200){let j={};try{j=JSON.parse(t)}catch(e){}info.textContent=apiMsg({status:r.status,body:j});return}
+  const m=/filename="([^"]+)"/.exec(r.headers.get('Content-Disposition')||'');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download=m?m[1]:'context-envelope.json';a.click();
+  info.textContent='Downloaded. The file holds no name, record number or narrative, and this export is logged.';
+}
 function conflictShow(c,op){
   Store.conflict={id:c.id,op};
   const mine=op.op==='meta'?`title “${escA(op.title)}”, status ${escA(op.status)}`:(op.archived?'archive this case':'restore this case');
@@ -2413,6 +2428,7 @@ const ACT={
   encOpen:()=>encOpen(),
   casesReload:()=>casesShow(),
   caseSaveMeta:()=>caseSaveMeta(),
+  ctxDownload:()=>ctxDownload(),
   conflictReload:()=>conflictReload(),
   conflictKeep:()=>conflictKeep(),
   importOpen:()=>importOpen(),
