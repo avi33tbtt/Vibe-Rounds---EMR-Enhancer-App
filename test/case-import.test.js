@@ -124,21 +124,22 @@ test('page: preview shows exactly what is sent; one click imports once; vr_traj 
   assert.equal(a.ls('vr_traj'), DEMO, 'vr_traj is only read, never written');
   const im = JSON.parse(a.ls('vr_interim'));
   assert.equal(im.imported.c_d1, row.id);
-  assert.equal('applied' in im.cases[row.id], false); assert.equal('values' in im.cases[row.id], false, 'values are not copied (B3b-2)'); assert.equal(im.cases[row.id].notes[0].title, 'Demo note');
-  assert.doesNotMatch(a.ls('vr_interim'), /Typed Demo Name|TYPED-77|Import Patient/);
+  assert.equal('cases' in im, false, 'notes, applied sets and values are not copied (B3b-2, B3c-2)');
+  assert.doesNotMatch(a.ls('vr_interim'), /Typed Demo Name|TYPED-77|Import Patient|Demo note/);
+  assert.equal((await env.pool.query('SELECT count(*)::int n FROM case_notes WHERE case_id = $1', [row.id])).rows[0].n, 0, 'the demo notes did not reach the server either');
   assert.match(a.$('importBox').textContent, new RegExp(`Imported as server case #${row.id}`));
   assert.equal(a.$('imp_t_c_d1'), null, 'no second import from this browser');
   await a.w.importSend('c_d1'); assert.equal(posts().length, 1);
   assert.match(a.$('caseList').textContent, /Chest pain \(imported\)/);
   const keep = a.ls('vr_interim'); await a.close();
 
-  // a later session remembers the import, and the case opens with its notes (applied sets and values are not copied)
+  // a later session remembers the import, and the case opens without the demo notes (notes, applied sets and values are not copied)
   const b = await openPage({ vr_traj: DEMO, vr_interim: keep }); await b.login('nurse1'); await b.openImport();
   assert.match(b.$('importBox').textContent, new RegExp(`Imported as server case #${row.id}`));
   await until(() => b.ev(`CASES.some(c => c.id === 's${row.id}')`), 'case list loaded');   // the list loads after the patients; opening before it arrives does nothing
   await b.w.openCase('s' + row.id);
   assert.equal(b.ev('CASE.narrative'), 'Demo narrative with chest pain');
-  assert.equal(b.ev('CASE.applied.length'), 0); assert.equal(b.ev('Object.keys(CASE.values).length'), 0); assert.equal(b.ev('CASE.notes.length'), 1);
+  assert.equal(b.ev('CASE.applied.length'), 0); assert.equal(b.ev('Object.keys(CASE.values).length'), 0); assert.equal(b.ev('CASE.notes.length'), 0); assert.equal(b.ev('CASE.notesOk'), true);
   assert.equal(b.ls('vr_traj'), DEMO);
   await b.close();
 });

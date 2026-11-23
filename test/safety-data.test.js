@@ -158,70 +158,43 @@ function draft(p, who, body) {
   return p.notes()[0].id;
 }
 
-test('a signed note cannot be edited, re-signed or discarded; only amended, with a reason', () => {
+test('local drafts: a signed-out page keeps editable drafts and refuses to sign or amend; a legacy signed note cannot be edited, discarded or re-signed', () => {
   const p = page();
   assert.deepEqual(p.errors, []);
-  const id = draft(p, 'Dr Real', 'Plan A');
+  const id = draft(p, null, 'Plan A');
   assert.equal(p.note(id).status, 'draft');
-
-  p.w.editNote(id, 'Plan A, edited while a draft');                    // drafts may change
+  p.w.editNote(id, 'Plan A, edited while a draft');                    // local drafts may change
   assert.equal(p.note(id).body, 'Plan A, edited while a draft');
+  p.w.signNote(id);                                                     // signing exists only on the server (B3c-2): nobody is signed in here
+  assert.equal(p.note(id).status, 'draft'); assert.equal(p.note(id).signedBy, undefined);
 
-  p.w.signNote(id);
-  const signed = p.note(id);
-  assert.equal(signed.status, 'signed'); assert.equal(signed.signedBy, 'Dr Real'); assert.ok(signed.signedAt);
-
-  p.w.editNote(id, 'TAMPERED');                                          // no longer editable
-  assert.equal(p.note(id).body, 'Plan A, edited while a draft');
-
-  p.w.discardNote(id);                                                   // cannot be discarded either (confirm() says yes)
-  assert.equal(p.note(id).status, 'signed');
-
-  signIn(p, 'Someone Else'); p.w.signNote(id);                // cannot be re-signed by another name or time
-  assert.equal(p.note(id).signedBy, 'Dr Real'); assert.equal(p.note(id).signedAt, signed.signedAt);
-
-  // the text area of a signed note is not editable in the page at all
-  assert.doesNotMatch(p.$('noteList').innerHTML, /<textarea onchange="editNote/);
-
-  // amendments: need a reason, need a name, need a change
-  p.w.toggleAmend(id);
-  const setForm = (reason, text) => { p.$('am_r_' + id).value = reason; p.$('am_b_' + id).value = text; };
-  setForm('', 'Plan B'); p.w.submitAmend(id);
-  assert.equal(p.note(id).amendments.length, 0, 'no reason, no amendment');
-  setForm('Dose corrected', 'Plan A, edited while a draft'); p.w.submitAmend(id);
-  assert.equal(p.note(id).amendments.length, 0, 'unchanged text is not an amendment');
-  signIn(p, null); setForm('Dose corrected', 'Plan B'); p.w.submitAmend(id);
-  assert.equal(p.note(id).amendments.length, 0, 'not signed in, no amendment');
-
-  signIn(p, 'Dr Amend'); setForm('Dose corrected', 'Plan B'); p.w.submitAmend(id);
-  let n = p.note(id);
-  assert.equal(n.amendments.length, 1);
-  assert.equal(n.amendments[0].reason, 'Dose corrected'); assert.equal(n.amendments[0].by, 'Dr Amend');
-  assert.equal(n.body, 'Plan A, edited while a draft', 'the text as signed is kept');
-  assert.equal(p.w.eval(`noteCurrent(CASE.notes.find(n=>n.id==='${id}'))`), 'Plan B');
-  assert.match(p.$('noteList').textContent, /Original \(as signed\)/);
-
-  p.w.toggleAmend(id); setForm('Second fix', 'Plan C'); p.w.submitAmend(id);
-  n = p.note(id);
-  assert.equal(n.amendments.length, 2); assert.equal(n.amendments[0].body, 'Plan B', 'earlier amendments are kept');
-  assert.equal(n.body, 'Plan A, edited while a draft');
-  assert.equal(n.signedBy, 'Dr Real');
+  // a signed note from older demo data in the browser: the page cannot change it
+  p.w.eval(`CASE.notes.unshift({id:'n_old',kind:'free',title:'Old',body:'Signed long ago',status:'signed',signedBy:'old user',signedAt:'2026-01-01T00:00:00.000Z',createdAt:'2026-01-01T00:00:00.000Z',amendments:[]})`);
+  p.w.renderNotes();
+  assert.doesNotMatch(p.$('noteList').innerHTML, /<textarea[^>]*>Signed long ago/, 'the text of a signed note is not editable in the page');
+  p.w.editNote('n_old', 'TAMPERED'); p.w.discardNote('n_old'); p.w.signNote('n_old');
+  assert.deepEqual(p.note('n_old'), { id: 'n_old', kind: 'free', title: 'Old', body: 'Signed long ago', status: 'signed', signedBy: 'old user', signedAt: '2026-01-01T00:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z', amendments: [] });
+  p.w.toggleAmend('n_old');
+  p.$('am_r_n_old').value = 'Reason'; p.$('am_b_n_old').value = 'New text'; p.w.submitAmend('n_old');
+  assert.equal(p.note('n_old').amendments.length, 0, 'no amendment without a sign-in');
+  // a drafted note signed in with a made-up session and no server case is not signed either: only the server signs
+  signIn(p, 'doctor1'); p.w.signNote(id); p.w.submitAmend('n_old');
+  assert.equal(p.note(id).status, 'draft'); assert.equal(p.note('n_old').amendments.length, 0);
 });
 
-test('notes are never removed: discarded drafts stay in the list, marked discarded', async () => {
+test('notes are never removed: discarded local drafts stay in the list, marked discarded', async () => {
   const p = page();
   const ids = [];
   // note ids are built from the clock (to the millisecond), so create them a few ms apart
-  for (const t of ['one', 'two', 'three']) { ids.push(draft(p, 'Dr Real', 'Body ' + t)); await new Promise(r => setTimeout(r, 5)); }
+  for (const t of ['one', 'two', 'three']) { ids.push(draft(p, null, 'Body ' + t)); await new Promise(r => setTimeout(r, 5)); }
   assert.equal(new Set(ids).size, 3);
-  p.w.signNote(ids[0]);
   p.w.discardNote(ids[1]);
   const notes = p.notes();
   assert.equal(notes.length, 3, 'no note disappeared');
-  assert.deepEqual(notes.map(n => n.status).sort(), ['discarded', 'draft', 'signed']);
+  assert.deepEqual(notes.map(n => n.status).sort(), ['discarded', 'draft', 'draft']);
   assert.ok(notes.find(n => n.status === 'discarded').discardedAt);
-  // survives a reload (localStorage round trip). Since B1b-1 a signed-in page never writes vr_traj, so go back to demo mode first.
-  signIn(p, null); p.w.save();
+  // survives a reload (localStorage round trip). Since B1b-1 a signed-in page never writes vr_traj; this page is signed out.
+  p.w.save();
   const saved = JSON.parse(p.w.localStorage.getItem('vr_traj'));
   assert.equal(saved.cases.reduce((n, c) => n + c.notes.length, 0), 3);
 });
@@ -259,14 +232,8 @@ test('no typed field or stored name can become the signer; without a sign-in, si
   signIn(p, 'doctor1');
   p.w.renderNotes();
   assert.match(p.$('n_who').textContent, /doctor1/);
-  p.w.signNote(id);
-  assert.equal(p.note(id).signedBy, 'doctor1', 'the signer is the session user, not the typed or stored name');
-  assert.doesNotMatch(JSON.stringify(p.note(id)), /Evil/);
-
-  p.w.toggleAmend(id);
-  p.$('am_r_' + id).value = 'Fix'; p.$('am_b_' + id).value = 'Plan B'; p.w.submitAmend(id);
-  assert.equal(p.note(id).amendments[0].by, 'doctor1', 'the amender is the session user');
-  // the FHIR export author is also the session user
+  assert.doesNotMatch(HTML, /signedBy\s*=\s*(user\(\)|Srv)|\.by\s*=\s*user\(\)|by:\s*user\(\)/, 'the page never writes a signer or amender into a note itself: the server sets both (B3c-2)');
+  assert.doesNotMatch(JSON.stringify(p.note(id)), /Evil|doctor1/);
   assert.match(p.w.eval('String(user)'), /Srv\.user/);
   signIn(p, null);
   assert.equal(p.w.eval('user()'), '', 'no session, no name');

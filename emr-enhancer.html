@@ -339,11 +339,11 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
       <h3>Notes</h3>
       <div class="cd">
         <label>Signing as</label><div id="n_who" class="mu"></div>
-        <label>Title</label><input id="n_title" placeholder="e.g. Progress note">
+        <div id="n_titleRow"><label>Title</label><input id="n_title" placeholder="e.g. Progress note"></div>
         <label>Free text</label><textarea id="n_body"></textarea>
         <div class="flex" style="margin-top:8px"><button class="b" data-act="addNote" data-arg="free">Save as draft</button>
           <button class="b sec" data-act="addNote" data-arg="structured">Draft from current values</button></div>
-        <div class="mu" style="margin-top:6px">Signed notes cannot be edited; change them by amendment with a reason. Nothing is deleted.</div>
+        <div class="mu" style="margin-top:6px">Signed notes cannot be edited; change them by amendment with a reason. Nothing is deleted. Signed in, notes are saved on the server and have no title; only the author edits, signs or discards a draft.</div>
       </div>
       <div id="noteList"></div>
     </div>
@@ -864,7 +864,7 @@ function renderCases(){
     const dx=c.applied.map(a=>resolve(a)).filter(s=>s&&s.kind==='disease').map(s=>`<span class="kind disease">${escA(s.title)}</span>`).join(' ');
     const dr=c.notes.filter(n=>n.status==='draft').length;
     return`<div class="item" data-act="openCase" data-arg="${escA(c.id)}"><div><b>${escA(caseName(c))}</b> <span class="mu">MRN ${escA(caseMrn(c))}</span>${c.title?` · ${escA(c.title)}`:''}${c.srvStatus&&c.srvStatus!=='active'?` <span class="kind">${escA(c.srvStatus)}</span>`:''} ${dx}
-      <div class="meta">${c.serverId&&c.pinsOk!==true?'':c.applied.length+' sets · '}${c.notes.length} notes${dr?` (${dr} draft)`:''} · updated ${c.updatedAt.slice(0,16).replace('T',' ')}${c.id===CASE.id?' · open':''}</div></div>
+      <div class="meta">${c.serverId&&c.pinsOk!==true?'':c.applied.length+' sets · '}${c.serverId&&c.notesOk!==true?'':c.notes.length+' notes'+(dr?` (${dr} draft)`:'')+' · '}updated ${c.updatedAt.slice(0,16).replace('T',' ')}${c.id===CASE.id?' · open':''}</div></div>
       ${c.status==='archived'&&(!srvMode()||srvCan('cases:write'))?`<button class="b sec sm" data-act="restoreCase" data-arg="${escA(c.id)}">Restore</button>`:''}</div>`;
   }).join('')||'<div class="empty">No cases.</div>';
 }
@@ -872,28 +872,25 @@ function renderCases(){
 /* ---------- Storage adapter (B1b-1) ----------
    local  = file:// demo or signed out: everything in localStorage 'vr_traj' (unchanged).
    server = signed in: cases, title, status and narrative live on the server; 'vr_traj' is never written.
-   TEMPORARY exception (decision 2026-11-22, option B): until B3c the notes of a server case, and custom element sets, sit in localStorage under 'vr_interim'
-   (synthetic data only). Applied sets are server pins (B3b-1) and values are server observations (B3b-2): neither is kept in the browser. */
+   TEMPORARY exception (decision 2026-11-22, option B): until custom sets are stored on the server, they and the import record sit in localStorage under 'vr_interim'
+   (synthetic data only). Applied sets are server pins (B3b-1), values are server observations (B3b-2) and notes are server notes (B3c-2): none is kept in the browser. */
 const srvMode=()=>!!Srv.user;
 const Store={q:Promise.resolve(),nt:null,dirty:null,busy:{},conflict:null};
 const CASE_PATIENT_CAP=50;
 const blankCase=()=>{const c=newCaseObj();c.unsaved=true;return c};
 function interimRead(){
-  try{const d=JSON.parse(localStorage.getItem('vr_interim')||'{}');return{cases:d.cases&&typeof d.cases==='object'?d.cases:{},customs:Array.isArray(d.customs)?d.customs:null,imported:d.imported&&typeof d.imported==='object'?d.imported:{}}}
-  catch(e){return{cases:{},customs:null,imported:{}}}
+  try{const d=JSON.parse(localStorage.getItem('vr_interim')||'{}');return{customs:Array.isArray(d.customs)?d.customs:null,imported:d.imported&&typeof d.imported==='object'?d.imported:{}}}
+  catch(e){return{customs:null,imported:{}}}
 }
 function interimWrite(mark){
-  const im=interimRead(),cases=im.cases,imported={...im.imported,...(mark||{})};
-  [CASE,...CASES].forEach(c=>{if(c&&c.serverId)cases[c.serverId]={notes:c.notes}});
-  Object.values(cases).forEach(x=>{if(x){delete x.applied;delete x.values}});   // applied sets are server pins (B3b-1) and values server observations (B3b-2); older copies are dropped
+  const im=interimRead(),imported={...im.imported,...(mark||{})};   // older copies of notes, applied sets and values (the old 'cases' key) are dropped here
   const customs=REGISTRY.filter(s=>!s.srv&&!BUILTIN.find(b=>b.id===s.id));
-  try{localStorage.setItem('vr_interim',JSON.stringify({_temporary:'notes of server cases; synthetic data only; removed in B3c',cases,customs,imported}))}catch(e){toast('Storage full')}
+  try{localStorage.setItem('vr_interim',JSON.stringify({_temporary:'custom sets and the import record; synthetic data only',customs,imported}))}catch(e){toast('Storage full')}
 }
 function fromRow(r,old){
-  const im=interimRead().cases[r.id]||{};
   return{id:'s'+r.id,serverId:r.id,rowVersion:r.row_version,title:r.title,srvStatus:r.status,patientId:r.patient_id,patient:{},
     narrative:old?old.narrative:'',narrativeSent:old?old.narrativeSent:'',
-    applied:old?old.applied:[],values:old?old.values:{},notes:old?old.notes:(im.notes||[]),
+    applied:old?old.applied:[],values:old?old.values:{},notes:old?old.notes:[],
     status:r.status==='archived'?'archived':'open',createdAt:r.created_at,updatedAt:r.updated_at}
 }
 function storeEnter(){   // after sign-in: server cases replace the demo cases on screen; the demo data stays in localStorage untouched
@@ -943,7 +940,7 @@ async function openCaseSrv(id){
   if(r.status!==200){toast(apiMsg(r));return}
   Object.assign(c,fromRow(r.body.case,c));
   c.narrative=r.body.narrative?r.body.narrative.body:'';c.narrativeSent=c.narrative.trim();
-  c.pinsOk=await pinsLoad(c);
+  [c.pinsOk,c.notesOk]=await Promise.all([pinsLoad(c),notesLoad(c)]);
   CASE=c;conflictHide();
   fillPatient();$('narrative').value=c.narrative;$('narSt').textContent='';$('bj').textContent='';$('bchk').textContent='';
   renderAll();document.querySelector('[data-t=case]').click();
@@ -1042,7 +1039,7 @@ async function conflictKeep(){
 
 /* ---------- Import local demo cases (B1b-2) ----------
    One explicit action per case. Only the title and the narrative text are sent; the typed demo patient fields are not.
-   Notes are copied into the temporary 'vr_interim' key of this browser; applied sets and values are not copied (server pins and server observations now). 'vr_traj' is only read. */
+   Notes, applied sets and values are not copied (server notes, pins and observations now); the only thing kept in 'vr_interim' is the record that the case was imported. 'vr_traj' is only read. */
 const LOCAL_ID=/^[A-Za-z0-9_-]{1,64}$/;
 function localDemoCases(){
   try{const d=JSON.parse(localStorage.getItem('vr_traj')||'{}');return(Array.isArray(d.cases)?d.cases:[]).filter(c=>c&&typeof c.id==='string'&&LOCAL_ID.test(c.id))}
@@ -1058,12 +1055,12 @@ function importRender(){
   const done=interimRead().imported,list=localDemoCases();
   const pts=Object.values(Srv.pts).sort((a,b)=>String(a.name).localeCompare(String(b.name)));
   $('importBox').innerHTML='<b>Import local demo cases</b>'+
-    '<div class="mu" style="margin:4px 0 8px">These cases are saved in this browser (synthetic data only). Pick one, choose the registered patient it belongs to and check what will be sent. Only the title and the narrative go to the server, once; the import is recorded in the audit log. Notes stay in this browser until they get server storage; applied sets and values are not copied (apply the sets again from the server library and record the values there). The typed demo name, MRN, age and sex are not sent.</div>'+
+    '<div class="mu" style="margin:4px 0 8px">These cases are saved in this browser (synthetic data only). Pick one, choose the registered patient it belongs to and check what will be sent. Only the title and the narrative go to the server, once; the import is recorded in the audit log. Notes, applied sets and values are not copied (write the notes again in the server case, apply the sets again from the server library and record the values there). The typed demo name, MRN, age and sex are not sent.</div>'+
     (list.map(c=>{
       const id=escA(c.id),imp=done[c.id],p=c.patient||{},all=(c.applied||[]).length;
       const sel=`<select id="imp_p_${id}" aria-label="Registered patient" data-act="importPreview" data-arg="${id}" data-ev="change"${imp?' disabled':''}><option value="">Choose a registered patient…</option>`+
         pts.map(q=>`<option value="${Number(q.id)}"${c.patientId===q.id?' selected':''}>${escA(q.name)} · MRN ${escA(q.mrn)}</option>`).join('')+'</select>';
-      return`<div class="cd"><div><b>${escA(p.name||'Unnamed demo patient')}</b> <span class="mu">demo MRN ${escA(p.mrn||'—')} · ${String(c.narrative||'').length} characters of narrative · ${all} sets · ${(c.notes||[]).length} notes</span></div>`+
+      return`<div class="cd"><div><b>${escA(p.name||'Unnamed demo patient')}</b> <span class="mu">demo MRN ${escA(p.mrn||'—')} · ${String(c.narrative||'').length} characters of narrative · ${all} sets · ${(c.notes||[]).length} notes (not copied)</span></div>`+
         (imp?`<div class="mu">Imported as server case #${Number(imp)}. It cannot be imported again from this browser.</div>`
           :`<label>Title on the server</label><input id="imp_t_${id}" maxlength="200" value="${escA('Imported demo case, '+String(c.createdAt||'').slice(0,10))}" data-act="importPreview" data-arg="${id}" data-ev="input">`+
            `<label>Registered patient</label>${sel}`+
@@ -1085,8 +1082,8 @@ async function importSend(id){
   try{
     const r=await api('POST','/api/patients/'+pid+'/cases/import',body);
     if(r.status!==201)return toast(apiMsg(r));
-    const n=fromRow(r.body.case),cp=v=>JSON.parse(JSON.stringify(v));
-    n.values={};n.notes=cp(c.notes||[]);n.narrative=body.narrative;n.narrativeSent=body.narrative.trim();
+    const n=fromRow(r.body.case);
+    n.values={};n.notes=[];n.narrative=body.narrative;n.narrativeSent=body.narrative.trim();
     CASES.push(n);interimWrite({[id]:n.serverId});
     importRender();renderCases();toast('Imported as a server case');
   }finally{Store.busy['imp'+id]=0}
@@ -1101,35 +1098,73 @@ function snapshotText(){
       return v!==''&&v!=null?`- ${f.label}: ${v}${f.unit&&!f.repeat?' '+f.unit:''}`:''}).filter(Boolean);
     return l.length?s.title+'\n'+l.join('\n'):''}).filter(Boolean).join('\n\n');
 }
+/* Notes on the server (B3c-2). Signed in, a note lives on the server (case_notes): nothing about it is kept in the browser.
+   Edit, sign, discard and amend go through one queue, so a sign right after an edit uses the version the edit returned. A refused save (someone else
+   saved first) reloads the notes and keeps the text you typed on screen, marked as not saved. Author, signer and amender are the session, set by the server. */
+const NQ={p:Promise.resolve()};
+const noteQ=fn=>{const r=NQ.p.then(fn);NQ.p=r.catch(()=>{});return r};
+function noteFromRow(r,lost){return{id:'s'+r.id,srvId:r.id,kind:'note',title:'Note',body:r.body,status:r.status,createdAt:r.created_at,rowVersion:r.row_version,author:r.author,
+  signedBy:r.signed_by,signedAt:r.signed_at,discardedBy:r.discarded_by,lost:lost||'',amendments:(r.amendments||[]).map(m=>({at:m.amended_at,by:m.amended_by,reason:m.reason,body:m.body}))}}
+async function notesLoad(c,lost){   // lost: {server note id: the text that was refused}
+  const r=await api('GET','/api/cases/'+c.serverId+'/notes');
+  if(r.status!==200){c.notes=[];toast('Notes could not be loaded: '+apiMsg(r));return false}
+  c.notes=r.body.notes.slice().reverse().map(x=>noteFromRow(x,lost&&lost[x.id]));return true;
+}
+const noteMine=n=>!!n.srvId&&n.author===user();
+async function noteCall(n,method,path,bodyFn,ok,quiet){   // runs inside the queue; the body is built when it runs, so it carries the newest version
+  const c=CASE,body=bodyFn(),r=await api(method,path,body);
+  if(r.status===200||r.status===201){Object.assign(n,noteFromRow(r.body.note));if(ok)toast(ok)}
+  else{toast(apiMsg(r));await notesLoad(c,r.status===409&&body&&typeof body.body==='string'?{[n.srvId]:body.body}:null)}
+  if(c===CASE&&(!quiet||r.status>=300))renderNotes();
+}
+async function srvNoteAdd(kind){
+  const c=CASE;if(!c.serverId)return toast('Open a patient on the Patients tab first: notes belong to a saved case.');
+  if(c.notesOk!==true)return toast('The notes of this case are not loaded. Open the case again.');
+  if(!srvCan('cases:write'))return toast('Your role cannot add notes.');
+  const body=kind==='structured'?(snapshotText()||'(no values entered)'):$('n_body').value.trim();
+  if(!body)return toast('Write something first');
+  const r=await noteQ(()=>api('POST','/api/cases/'+c.serverId+'/notes',{body}));
+  if(r.status!==201)return toast(apiMsg(r));
+  c.notes.unshift(noteFromRow(r.body.note));$('n_body').value='';if(c===CASE)renderNotes();
+}
+function srvNoteEdit(id,v){const n=nid(id);if(!n||!n.srvId||n.status!=='draft'||v===n.body)return;
+  return noteQ(()=>n.status==='draft'?noteCall(n,'PATCH','/api/notes/'+n.srvId,()=>({body:v,rowVersion:n.rowVersion}),'',true):0)}
+function srvNoteSign(id){const n=nid(id);if(n&&n.srvId)return noteQ(()=>n.status==='draft'?noteCall(n,'POST','/api/notes/'+n.srvId+'/sign',()=>({rowVersion:n.rowVersion}),'Signed'):0)}
+function srvNoteDiscard(id){const n=nid(id);if(n&&n.srvId)return noteQ(()=>n.status==='draft'?noteCall(n,'POST','/api/notes/'+n.srvId+'/discard',()=>({rowVersion:n.rowVersion}),'Discarded'):0)}
+function srvNoteAmend(id,r,b){const n=nid(id);if(n&&n.srvId)return noteQ(async()=>{await noteCall(n,'POST','/api/notes/'+n.srvId+'/amend',()=>({body:b,reason:r,amendmentCount:n.amendments.length}),'Amended');AMEND[id]=false;renderNotes()})}
+const lostBox=n=>n.lost?`<div class="note">Not saved (someone else saved first). Your text was:<pre class="body">${escA(n.lost)}</pre></div>`:'';
 function addNote(kind){
+  if(srvMode())return srvNoteAdd(kind);
   const body=kind==='structured'?(snapshotText()||'(no values entered)'):$('n_body').value.trim();
   if(!body)return toast('Write something first');
   CASE.notes.unshift({id:'n_'+Date.now().toString(36),kind,title:$('n_title').value.trim()||(kind==='structured'?'Structured snapshot':'Note'),body,status:'draft',createdAt:nowISO(),amendments:[]});
   $('n_body').value='';$('n_title').value='';save();renderNotes();
 }
 const nid=id=>CASE.notes.find(n=>n.id===id);
-function editNote(id,v){const n=nid(id);if(n&&n.status==='draft'){n.body=v;save()}}
-function signNote(id){const n=nid(id);if(!n||n.status!=='draft')return;if(!user())return toast('Sign in to sign notes');
-  n.status='signed';n.signedBy=user();n.signedAt=nowISO();save();renderNotes();toast('Signed')}
-function discardNote(id){const n=nid(id);if(n&&n.status==='draft'&&confirm('Discard this draft? It is kept, marked discarded.')){n.status='discarded';n.discardedAt=nowISO();save();renderNotes()}}
+function editNote(id,v){if(srvMode())return srvNoteEdit(id,v);const n=nid(id);if(n&&n.status==='draft'){n.body=v;save()}}
+function signNote(id){const n=nid(id);if(!n||n.status!=='draft')return;if(!user())return toast('Sign in to sign notes');if(!n.srvId)return toast('Only a note saved on the server can be signed. Open a patient case first.');return srvNoteSign(id)}   // signing exists only on the server: there is no browser-only signature
+function discardNote(id){const n=nid(id);if(n&&n.status==='draft'&&confirm('Discard this draft? It is kept, marked discarded.')){if(n.srvId)return srvNoteDiscard(id);n.status='discarded';n.discardedAt=nowISO();save();renderNotes()}}
 function toggleAmend(id){AMEND[id]=!AMEND[id];renderNotes()}
 function submitAmend(id){const n=nid(id),r=$('am_r_'+id).value.trim(),b=$('am_b_'+id).value.trim();
   if(!user())return toast('Sign in to amend notes');if(!r)return toast('A reason is required');if(!b||b===noteCurrent(n))return toast('Change the text');
-  n.amendments.push({at:nowISO(),by:user(),reason:r,body:b});AMEND[id]=false;save();renderNotes();toast('Amended')}
+  if(!n.srvId)return toast('Only a note saved on the server can be amended.');return srvNoteAmend(id,r,b)}
 function renderNotes(){
   $('n_who').textContent=user()?`${Srv.user.username} (${Srv.user.role}), from your sign-in`:'Not signed in: you can write drafts, but signing and amending are disabled. Sign in on the Patients tab.';
+  $('n_titleRow').style.display=srvMode()?'none':'';
+  const srvM=srvMode(),canW=!srvM||srvCan('cases:write');
   $('noteList').innerHTML=CASE.notes.map(n=>{
-    const head=`<b>${escA(n.title)}</b> <span class="kind">${escA(n.kind)}</span> <span class="mu">${escA(n.status)} · ${escA(n.createdAt.slice(0,16).replace('T',' '))}</span>`;
-    if(n.status==='draft')return`<div class="cd nt draft">${head}<textarea data-act="editNote" data-arg="${escA(n.id)}" data-ev="change">${escA(n.body)}</textarea>
+    const head=`<b>${escA(n.title)}</b> <span class="kind">${escA(n.kind)}</span> <span class="mu">${escA(n.status)}${n.srvId?' · '+escA(n.author):''} · ${escA(n.createdAt.slice(0,16).replace('T',' '))}</span>`;
+    if(n.status==='draft'&&n.srvId&&(!noteMine(n)||!canW))return`<div class="cd nt draft">${head}<pre class="body">${escA(n.body)}</pre><div class="mu">Draft by ${escA(n.author)}: only the author can edit, sign or discard it.</div></div>`;
+    if(n.status==='draft')return`<div class="cd nt draft">${head}<textarea data-act="editNote" data-arg="${escA(n.id)}" data-ev="change">${escA(n.body)}</textarea>${lostBox(n)}
       <button class="b sm" data-act="signNote" data-arg="${escA(n.id)}"${user()?'':' disabled title="Sign in to sign notes"'}>Sign</button><button class="b sec sm" data-act="discardNote" data-arg="${escA(n.id)}">Discard</button></div>`;
-    if(n.status==='discarded')return`<div class="cd nt discarded">${head}</div>`;
+    if(n.status==='discarded')return`<div class="cd nt discarded">${head}${n.discardedBy?`<div class="mu">Discarded by ${escA(n.discardedBy)}. Kept, not deleted.</div>`:''}</div>`;
     const am=n.amendments.map((x,i)=>`<div class="mu">Amendment ${i+1} · ${escA(x.by)} · ${x.at.slice(0,16).replace('T',' ')} · reason: ${escA(x.reason)}</div>`).join('');
     const form=AMEND[n.id]?`<label>Reason for amendment</label><input id="am_r_${escA(n.id)}"><label>Amended text</label><textarea id="am_b_${escA(n.id)}">${escA(noteCurrent(n))}</textarea>
       <button class="b sm" data-act="submitAmend" data-arg="${escA(n.id)}"${user()?'':' disabled title="Sign in to amend notes"'}>Submit amendment</button><button class="b sec sm" data-act="toggleAmend" data-arg="${escA(n.id)}">Cancel</button>`
-      :`<button class="b sec sm" data-act="toggleAmend" data-arg="${escA(n.id)}">Amend…</button>`;
-    return`<div class="cd nt signed">${head}<pre class="body">${escA(noteCurrent(n))}</pre><div class="mu">Signed by ${escA(n.signedBy)} · ${n.signedAt.slice(0,16).replace('T',' ')}</div>${am}
+      :`<button class="b sec sm" data-act="toggleAmend" data-arg="${escA(n.id)}"${canW||!n.srvId?'':' disabled title="Your role cannot change cases"'}>Amend…</button>`;
+    return`<div class="cd nt signed">${head}<pre class="body">${escA(noteCurrent(n))}</pre>${lostBox(n)}<div class="mu">Signed by ${escA(n.signedBy)} · ${n.signedAt.slice(0,16).replace('T',' ')}</div>${am}
       ${n.amendments.length?`<details><summary class="mu">Original (as signed)</summary><pre class="body">${escA(n.body)}</pre></details>`:''}${form}</div>`;
-  }).join('')||'<div class="empty">No notes yet.</div>';
+  }).join('')||`<div class="empty">${srvM&&CASE.notesOk!==true?'Open a patient case on the Patients tab to see and write its notes.':'No notes yet.'}</div>`;
 }
 
 

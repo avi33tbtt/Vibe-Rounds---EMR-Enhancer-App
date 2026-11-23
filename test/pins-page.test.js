@@ -73,8 +73,7 @@ test('apply pins the exact published version on the server; the browser keeps no
   assert.ok(a.$('f_pa'), 'the pinned set shows its form');
 
   a.w.interimWrite();
-  const im = JSON.parse(a.ls('vr_interim')); assert.ok(Object.keys(im.cases).length);
-  Object.values(im.cases).forEach(c => assert.equal('applied' in c, false, 'no applied sets in vr_interim'));
+  const im = JSON.parse(a.ls('vr_interim')); assert.equal('cases' in im, false, 'no per-case data of any kind in vr_interim (notes left it in B3c-2)');
   assert.doesNotMatch(a.ls('vr_interim'), /pin-a|Pin A/);
   assert.equal(a.ls('vr_traj'), null);
 
