@@ -16,7 +16,7 @@ test.after(async () => { await env.close(); });
 
 // ---------- database ----------
 // Every table must be listed here. A new table fails this test until someone decides which kind it is.
-const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events', 'case_notes', 'case_note_amendments'];        // never deleted: rows are archived, closed, appended or retired
+const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events', 'case_notes', 'case_note_amendments', 'pathways', 'pathway_versions', 'pathway_version_steps', 'case_applied_pathways'];        // never deleted: rows are archived, closed, appended or retired
 const NOT_CLINICAL = ['users', 'sessions', 'schema_migrations', 'ai_settings'];   // accounts, logins, bookkeeping, settings
 
 test('every table is classified, and every clinical table refuses DELETE', async () => {
@@ -46,6 +46,14 @@ test('every table is classified, and every clinical table refuses DELETE', async
   const as = await a.post(`/api/cases/${kc.body.case.id}/applied-sets`, { setId: ks, version: 1 });
   assert.equal(as.status, 201, JSON.stringify(as.body));
   assert.equal((await a.post(`/api/cases/${kc.body.case.id}/observations`, { observations: [{ appliedSetId: as.body.appliedSet.id, fieldKey: 'k', value: 'Keep value', effectiveAt: '2020-01-01T10:00:00Z', sourceType: 'clinician' }] })).status, 201);
+
+  // a published pathway, applied to a second case: the pathway tables have rows to protect too (task B4a; a set already on the first case would leave nothing to apply)
+  const pw = await d.post('/api/pathways', { slug: 'keep-pathway', title: 'Keep pathway', steps: [{ setId: ks, version: 1 }] });
+  assert.equal(pw.status, 201, JSON.stringify(pw.body));
+  assert.equal((await adm.post(`/api/pathways/${pw.body.pathway.id}/versions/1/publish`, {})).status, 200);
+  const kc2 = await a.post(`/api/patients/${p.body.patient.id}/cases`, { title: 'Keep pathway case' });
+  assert.equal(kc2.status, 201);
+  assert.equal((await a.post(`/api/cases/${kc2.body.case.id}/applied-pathways`, { pathwayId: pw.body.pathway.id, version: 1 })).status, 201);
 
   // a signed and amended note: the note tables have rows to protect too (task B3c-1)
   const nt = await a.post(`/api/cases/${kc.body.case.id}/notes`, { body: 'Keep note' });

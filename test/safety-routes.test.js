@@ -38,6 +38,7 @@ const MATRIX = {
   'POST /api/cases/:id/narrative':  { guard: 'cases:write' },
   'POST /api/cases/:id/applied-sets': { guard: 'cases:write' },
   'POST /api/cases/:id/applied-sets/:asid/withdraw': { guard: 'cases:write' },
+  'POST /api/cases/:id/applied-pathways': { guard: 'cases:write' },
   'POST /api/cases/:id/observations': { guard: 'cases:write' },
   'GET /api/cases/:id/timeline':    { guard: 'cases:read' },
   'POST /api/observations/:id/correct': { guard: 'cases:write' },
@@ -60,6 +61,12 @@ const MATRIX = {
   'POST /api/element-sets/:id/versions/:version/reject': { guard: 'sets:review' },
   'POST /api/element-sets/:id/versions/:version/publish': { guard: 'sets:publish' },
   'POST /api/element-sets/:id/versions/:version/retire': { guard: 'sets:publish' },
+  'GET /api/pathways':              { guard: 'sets:read' },
+  'POST /api/pathways':             { guard: 'sets:write' },
+  'GET /api/pathways/:id':          { guard: 'sets:read' },
+  'GET /api/pathways/:id/versions/:version': { guard: 'sets:read' },
+  'POST /api/pathways/:id/versions': { guard: 'sets:write' },
+  'POST /api/pathways/:id/versions/:version/publish': { guard: 'sets:publish' },
   'GET /api/audit':                 { guard: 'audit:read' },
   'PUT /api/ai/settings':           { guard: 'ai:admin' },
   'POST /api/ai/preview':           { guard: 'ai:use' },
@@ -299,6 +306,26 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal((await admin.c.post(`/api/element-sets/${S.obsSet}/versions/1/publish`, {})).status, 200);
         const r = await nurse.c.post(`/api/cases/${S.cid}/applied-sets`, { setId: S.obsSet, version: 1 });
         assert.equal(r.status, 201, JSON.stringify(r.body)); S.asid = r.body.appliedSet.id; return ['case.set_apply'];
+      }],
+      ['POST /api/pathways', doctor, async () => {                  // B4a: pathway steps name published set versions (S.obsSet is published above)
+        const r = await doctor.c.post('/api/pathways', { slug: 'audit-pathway', title: 'Audit pathway', steps: [{ setId: S.obsSet, version: 1 }] });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); S.pwId = r.body.pathway.id; return ['pathway.create'];
+      }],
+      ['POST /api/pathways/:id/versions', doctor, async () => {
+        const r = await doctor.c.post(`/api/pathways/${S.pwId}/versions`, { title: 'Audit pathway v2', steps: [{ setId: S.obsSet, version: 1 }] });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); return ['pathway.version_create'];
+      }],
+      ['POST /api/pathways/:id/versions/:version/publish', admin, async () => {
+        const r = await admin.c.post(`/api/pathways/${S.pwId}/versions/1/publish`, {});
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['pathway.publish'];
+      }],
+      ['POST /api/cases/:id/applied-pathways', nurse, async () => {   // a second case, so the set pinned above is not already on it
+        const p = await nurse.c.post('/api/patients', { name: 'Audit Pathway Patient', mrn: 'AUD-PW-1', dob: '1980-01-01', sex: 'F' });
+        assert.equal(p.status, 201, JSON.stringify(p.body));
+        const k = await nurse.c.post(`/api/patients/${p.body.patient.id}/cases`, { title: 'Audit pathway case' });
+        assert.equal(k.status, 201, JSON.stringify(k.body));
+        const r = await nurse.c.post(`/api/cases/${k.body.case.id}/applied-pathways`, { pathwayId: S.pwId, version: 1 });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); return ['case.pathway_apply'];
       }],
       ['POST /api/cases/:id/observations', nurse, async () => {
         const r = await nurse.c.post(`/api/cases/${S.cid}/observations`, { observations: [{ appliedSetId: S.asid, fieldKey: 'hr', value: 72, effectiveAt: '2020-01-01T10:00:00Z', sourceType: 'clinician' }] });

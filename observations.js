@@ -75,6 +75,15 @@ function shapeValue(field, item) {
   return { type: t, json, unit: NUMERIC.includes(t) ? fieldUnit : null };
 }
 
+// One applied-set row as the API shows it. A pin made by a pathway names that application (B4a): from_pathway_* are NULL for a plain pin.
+const APPLIED = `a.id, a.element_set_id, s.slug, s.title AS set_title, v.version, v.checksum, a.state, a.supersedes_id, a.applied_at,
+                 au.username AS applied_by, a.state_at, su.username AS state_by,
+                 a.from_applied_pathway_id, pw.id AS from_pathway_id, pw.slug AS from_pathway_slug, pv.title AS from_pathway_title, pv.version AS from_pathway_version`;
+const APPLIED_FROM = `FROM case_applied_sets a JOIN element_set_versions v ON v.id = a.element_set_version_id JOIN element_sets s ON s.id = a.element_set_id
+                      JOIN users au ON au.id = a.applied_by LEFT JOIN users su ON su.id = a.state_by
+                      LEFT JOIN case_applied_pathways ap ON ap.id = a.from_applied_pathway_id LEFT JOIN pathway_versions pv ON pv.id = ap.pathway_version_id
+                      LEFT JOIN pathways pw ON pw.id = ap.pathway_id`;
+
 function mountObservations(app, pool) {
   const lockCase = async (c, id) => (await c.query('SELECT id, patient_id, status FROM clinical_cases WHERE id = $1 FOR UPDATE', [id])).rows[0];
   const notFound = { status: 404, body: { error: 'not_found' } };
@@ -91,10 +100,6 @@ function mountObservations(app, pool) {
       [caseId, enc ? enc.encounter_id : null, type, userId, JSON.stringify(detail)]);
   };
   const touch = (c, caseId) => c.query('UPDATE clinical_cases SET updated_at = now() WHERE id = $1', [caseId]);
-  const APPLIED = `a.id, a.element_set_id, s.slug, s.title AS set_title, v.version, v.checksum, a.state, a.supersedes_id, a.applied_at,
-                   au.username AS applied_by, a.state_at, su.username AS state_by`;
-  const APPLIED_FROM = `FROM case_applied_sets a JOIN element_set_versions v ON v.id = a.element_set_version_id JOIN element_sets s ON s.id = a.element_set_id
-                        JOIN users au ON au.id = a.applied_by LEFT JOIN users su ON su.id = a.state_by`;
   const appliedRow = async (c, id) => (await c.query(`SELECT ${APPLIED} ${APPLIED_FROM} WHERE a.id = $1`, [id])).rows[0];
   const OBS = `o.id, o.case_id, o.applied_set_id, a.element_set_id, s.slug AS set_slug, v.version AS set_version, o.field_key, o.value_type, o.value_json AS value,
                o.unit_display, o.effective_at, o.recorded_at, o.source_type, o.source_ref, o.status, ru.username AS recorded_by, o.corrects_id, o.change_reason,
@@ -289,4 +294,4 @@ function mountObservations(app, pool) {
   });
 }
 
-module.exports = { mountObservations };
+module.exports = { mountObservations, APPLIED, APPLIED_FROM };

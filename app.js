@@ -13,6 +13,7 @@ const { mountSets } = require('./sets');
 const { mountReview } = require('./review');
 const { mountObservations } = require('./observations');
 const { mountNotes } = require('./notes');
+const { mountPathways } = require('./pathways');
 const { createLimiter } = require('./ratelimit');
 
 const PATIENT_SELECT = `
@@ -293,6 +294,9 @@ function createApp(pool, opts = {}) {
 
   /* ---------- notes and signing (task B3c-1) ---------- */
   mountNotes(app, pool);
+
+  /* ---------- pathways and applying them (task B4a) ---------- */
+  mountPathways(app, pool);
 
   /* ---------- audit (read-only) ---------- */
   app.get('/api/audit', A.requirePerm(pool, 'audit:read'), async (req, res) => {
