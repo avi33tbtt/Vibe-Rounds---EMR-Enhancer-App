@@ -1,0 +1,775 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccis.invalid/schemas/context-envelope.schema.json",
+  "title": "CCIS context envelope",
+  "description": "One case exported for the importer, IMP-010 to IMP-081. No field exists for identity or narrative, so such content is rejected by the closed objects (IMP-091). No integrity field: IMP-014 is open until gap G-05.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "envelope",
+    "inclusions",
+    "case",
+    "applied",
+    "observations",
+    "events"
+  ],
+  "properties": {
+    "envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "version",
+        "exportedAt",
+        "producer"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        },
+        "exportedAt": {
+          "description": "Explicit offset required.",
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?(?:Z|[+-]\\d{2}:\\d{2})$"
+        },
+        "producer": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          },
+          "required": [
+            "system",
+            "version"
+          ],
+          "properties": {
+            "system": {
+              "type": "string",
+              "pattern": "^\\S.*$"
+            },
+            "version": {
+              "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+            }
+          }
+        }
+      }
+    },
+    "inclusions": {
+      "$ref": "#/$defs/inclusions"
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "ref"
+      ],
+      "properties": {
+        "ref": {
+          "description": "Opaque pseudonymous token (IMP-020). Derivation checks are not expressible here.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{15,63}$"
+        }
+      }
+    },
+    "applied": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "elements",
+        "pathways"
+      ],
+      "properties": {
+        "elements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/appliedRef"
+          }
+        },
+        "pathways": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/appliedRef"
+          }
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "pattern": "^\\S.*$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^\\S+$"
+    },
+    "localId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "time": {
+      "description": "A date-time that states its zone or says it is unknown (IMP-046). Never a bare date-time without the zone state.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          },
+          "required": [
+            "value",
+            "zone"
+          ],
+          "properties": {
+            "value": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?(?:Z|[+-]\\d{2}:\\d{2})$"
+            },
+            "zone": {
+              "const": "stated"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          },
+          "required": [
+            "value",
+            "zone"
+          ],
+          "properties": {
+            "value": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?$"
+            },
+            "zone": {
+              "const": "unknown"
+            }
+          }
+        }
+      ]
+    },
+    "recordedTime": {
+      "description": "A time, or the explicit state unknown. Never copied from the effective time (IMP-044).",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/time"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          },
+          "required": [
+            "state"
+          ],
+          "properties": {
+            "state": {
+              "const": "unknown"
+            }
+          }
+        }
+      ]
+    },
+    "sourceClass": {
+      "enum": [
+        "patient-reported",
+        "informant-reported",
+        "clinician-entered",
+        "clinician-verified",
+        "imported",
+        "device",
+        "derived",
+        "ai-proposed"
+      ]
+    },
+    "status": {
+      "enum": [
+        "preliminary",
+        "final",
+        "corrected",
+        "entered-in-error"
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "roleClass",
+        "origin",
+        "verified",
+        "corrected"
+      ],
+      "properties": {
+        "roleClass": {
+          "type": "string",
+          "pattern": "^\\S.*$"
+        },
+        "origin": {
+          "type": "string",
+          "pattern": "^\\S.*$"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "corrected": {
+          "type": "boolean"
+        }
+      }
+    },
+    "inclusions": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "identity",
+        "narrative",
+        "enteredInError"
+      ],
+      "properties": {
+        "identity": {
+          "const": false
+        },
+        "narrative": {
+          "const": false
+        },
+        "enteredInError": {
+          "const": false
+        }
+      }
+    },
+    "code": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "system",
+        "code",
+        "verification"
+      ],
+      "properties": {
+        "system": {
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "systemVersion": {
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "verification": {
+          "enum": [
+            "verified",
+            "unverified"
+          ]
+        }
+      }
+    },
+    "appliedRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "id",
+        "type",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactId"
+        },
+        "type": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactType"
+        },
+        "version": {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "id",
+        "concept",
+        "kind",
+        "effective",
+        "recorded",
+        "status",
+        "sourceClass",
+        "provenance"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/localId"
+        },
+        "concept": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          },
+          "required": [
+            "id",
+            "codes"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactId"
+            },
+            "codes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/code"
+              }
+            }
+          }
+        },
+        "kind": {
+          "enum": [
+            "quantity",
+            "integer",
+            "boolean",
+            "code",
+            "string",
+            "date",
+            "datetime"
+          ]
+        },
+        "value": {},
+        "unit": {
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "state": {
+          "enum": [
+            "absent",
+            "unknown",
+            "not-collected",
+            "not-applicable",
+            "explicitly-negative"
+          ]
+        },
+        "effective": {
+          "$ref": "#/$defs/time"
+        },
+        "recorded": {
+          "$ref": "#/$defs/recordedTime"
+        },
+        "collected": {
+          "$ref": "#/$defs/time"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "sourceClass": {
+          "$ref": "#/$defs/sourceClass"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "derivation": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          },
+          "required": [
+            "formula",
+            "version",
+            "from"
+          ],
+          "properties": {
+            "formula": {
+              "type": "string",
+              "pattern": "^\\S+$"
+            },
+            "version": {
+              "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/semver"
+            },
+            "from": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/localId"
+              }
+            }
+          }
+        },
+        "correctionOf": {
+          "$ref": "#/$defs/localId"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "quantity"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "integer"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "code"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "object",
+                "additionalProperties": false,
+                "patternProperties": {
+                  "^x-": {}
+                },
+                "required": [
+                  "system",
+                  "code"
+                ],
+                "properties": {
+                  "system": {
+                    "type": "string",
+                    "pattern": "^\\S+$"
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^\\S+$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "date"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "datetime"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "$ref": "#/$defs/time"
+              }
+            }
+          }
+        },
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "value"
+              ],
+              "not": {
+                "required": [
+                  "state"
+                ]
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "state"
+              ],
+              "not": {
+                "required": [
+                  "value"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "quantity",
+                  "integer"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "required": [
+              "unit"
+            ]
+          },
+          "else": {
+            "type": "object",
+            "not": {
+              "required": [
+                "unit"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "sourceClass": {
+                "const": "derived"
+              }
+            },
+            "required": [
+              "sourceClass"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "required": [
+              "derivation"
+            ]
+          }
+        }
+      ]
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "id",
+        "type",
+        "status",
+        "sourceClass",
+        "provenance"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/localId"
+        },
+        "type": {
+          "description": "A classified meaning id, or the reserved literal unclassified (IMP-061).",
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactId"
+        },
+        "time": {
+          "$ref": "#/$defs/time"
+        },
+        "period": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          },
+          "required": [
+            "start"
+          ],
+          "properties": {
+            "start": {
+              "$ref": "#/$defs/time"
+            },
+            "end": {
+              "$ref": "#/$defs/time"
+            }
+          }
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "sourceClass": {
+          "$ref": "#/$defs/sourceClass"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "time"
+          ],
+          "not": {
+            "required": [
+              "period"
+            ]
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "period"
+          ],
+          "not": {
+            "required": [
+              "time"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

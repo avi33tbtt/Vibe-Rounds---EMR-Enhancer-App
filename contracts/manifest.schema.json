@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccis.invalid/schemas/manifest.schema.json",
+  "title": "CCIS package manifest",
+  "description": "Identity, type, versions, references and lifecycle status of one CCIS artefact. No integrity fields: gap G-05.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": ["id", "name", "type", "version", "publisher", "standard", "status"],
+  "properties": {
+    "id": { "$ref": "#/$defs/artefactId" },
+    "name": { "type": "string", "pattern": "^\\S.*$" },
+    "type": { "$ref": "#/$defs/artefactType" },
+    "version": { "$ref": "#/$defs/semver" },
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "required": ["name"],
+      "properties": { "name": { "type": "string", "pattern": "^\\S.*$" } }
+    },
+    "standard": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "required": ["version"],
+      "properties": { "version": { "$ref": "#/$defs/semver" } }
+    },
+    "requires": {
+      "description": "Separate slots for engine and FHIR versions, only where they apply (CCIS-REQ-011).",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "properties": {
+        "engine": { "$ref": "#/$defs/versionRange" },
+        "fhir": { "$ref": "#/$defs/versionRange" }
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/reference" }
+    },
+    "status": {
+      "enum": ["draft", "submitted", "in-review", "reviewed", "validated", "conditionally-validated", "deprecated", "withdrawn", "rejected"]
+    },
+    "mandatoryExtensions": {
+      "description": "Extensions a reader must understand, else compatibility fails safely (CCIS-REQ-016).",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^x-[a-z0-9][a-z0-9-]*$" }
+    }
+  },
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "versionRange": {
+      "description": "One comparator, optionally followed by more, separated by single spaces: ^1.2.0, ~1.2.0, >=1.0.0 <2.0.0.",
+      "type": "string",
+      "pattern": "^(?:[~^]|[<>]=?)?(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?: [<>]=?(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*))*$"
+    },
+    "artefactId": {
+      "description": "Canonical id: lower-case dotted segments. Stable when the display name changes (CCIS-REQ-009).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$"
+    },
+    "artefactType": {
+      "enum": ["contextual-element", "element-group", "pathway", "analytics-package", "terminology-package", "test-validation-package"]
+    },
+    "reference": {
+      "description": "A named artefact at an exact version or a range. Never an embedded copy (CCIS-REQ-014).",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "$ref": "#/$defs/artefactId" },
+        "type": { "$ref": "#/$defs/artefactType" },
+        "version": { "$ref": "#/$defs/semver" },
+        "range": { "$ref": "#/$defs/versionRange" }
+      },
+      "oneOf": [
+        { "required": ["version"] },
+        { "required": ["range"] }
+      ]
+    }
+  }
+}
