@@ -2,22 +2,25 @@
 // Row DM3a: demo bridge, step 1. SYNTHETIC DATA ONLY. Prototype, not for clinical use.
 // Logs in over HTTP, asks the EMR for the context envelope of ONE case and writes the response bytes to a file, unchanged.
 // The file's SHA-256 is the same hash the server logged in context_exports, so the file can be matched to its export record later.
-// DM3b added id mapping and DM3c the CCIS CLI child process; DM3d adds the import. The only link to CCIS stays files plus a child process.
+// DM3b added id mapping, DM3c the CCIS CLI child process, DM3d the import and `npm run demo:run`. The only link to CCIS stays files plus a child process.
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { mapEnvelope } = require('./demo-map');
 
-async function exportEnvelope({ base, username, password, caseId, outDir }) {
-  if (!/^\d{1,9}$/.test(String(caseId))) throw new Error('caseId must be a number.');
-  if (!outDir) throw new Error('outDir is required.');
-  const hdr = { 'content-type': 'application/json', 'x-emr': '1' };
-  const login = await fetch(base + '/api/login', { method: 'POST', headers: hdr, body: JSON.stringify({ username, password }) });
+async function login(base, username, password) {
+  const login = await fetch(base + '/api/login', { method: 'POST', headers: { 'content-type': 'application/json', 'x-emr': '1' }, body: JSON.stringify({ username, password }) });
   if (login.status !== 200) throw new Error(`Login as ${username} failed (${login.status}).`);
   const sc = login.headers.get('set-cookie');
   if (!sc) throw new Error('Login gave no session cookie.');
-  const cookie = sc.split(';')[0];
+  return sc.split(';')[0];
+}
+
+async function exportEnvelope({ base, username, password, caseId, outDir }) {
+  if (!/^\d{1,9}$/.test(String(caseId))) throw new Error('caseId must be a number.');
+  if (!outDir) throw new Error('outDir is required.');
+  const cookie = await login(base, username, password);
 
   const res = await fetch(`${base}/api/cases/${caseId}/context`, { headers: { 'x-emr': '1', cookie } });
   const bytes = Buffer.from(await res.arrayBuffer());      // raw bytes: never parsed and written back
@@ -69,4 +72,39 @@ async function runCcis({ envelopeFile, outDir, at, ccisPath = process.env.CCIS_P
   return { recordPath, record, status: record.status, envelopeSha256 };
 }
 
-module.exports = { exportEnvelope, runCcis };
+// Row DM3d: import the final run record through the DM2a route. The file text is sent as it is (never parsed and rewritten),
+// so the server stores and hashes exactly what is on disk. Safe to repeat: the same record gives `alreadyImported`.
+async function importRun({ base, username, password, caseId, recordPath }) {
+  if (!/^\d{1,9}$/.test(String(caseId))) throw new Error('caseId must be a number.');
+  if (!recordPath) throw new Error('recordPath is required.');
+  const cookie = await login(base, username, password);
+  const res = await fetch(`${base}/api/cases/${caseId}/ccis-runs`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-emr': '1', cookie }, body: fs.readFileSync(recordPath) });
+  let body = null; try { body = await res.json(); } catch (_) { /* no body */ }
+  if (res.status !== 200 && res.status !== 201) {
+    const first = body && Array.isArray(body.errors) && body.errors[0] ? ` (${body.errors[0].path}: ${body.errors[0].message})` : '';
+    throw new Error(`Import failed (${res.status}): ${(body && (body.message || body.error)) || 'no message'}${first}`);
+  }
+  return { runId: body.run.id, status: body.run.status, alreadyImported: !!body.alreadyImported, httpStatus: res.status };
+}
+
+// Export, run, import: what `npm run demo:run -- <case id>` does.
+async function runDemo({ base, username = 'doctor1', password, caseId, outDir, at = new Date().toISOString(), ccisPath, demoParameters = false, timeoutMs }) {
+  const exp = await exportEnvelope({ base, username, password, caseId, outDir });
+  const run = await runCcis({ envelopeFile: exp.path, outDir, at, ccisPath, demoParameters, ...(timeoutMs ? { timeoutMs } : {}) });
+  const imp = await importRun({ base, username, password, caseId, recordPath: run.recordPath });
+  return { envelopePath: exp.path, envelopeSha256: exp.sha256, recordPath: run.recordPath, ...imp };
+}
+
+module.exports = { exportEnvelope, runCcis, importRun, runDemo };
+
+if (require.main === module) {
+  (async () => {
+    const caseId = process.argv.slice(2).find(a => !a.startsWith('--'));
+    if (!caseId) throw new Error('Usage: npm run demo:run -- <case id> [--demo-parameters]   (the server must be running)');
+    const password = process.env.SEED_PASSWORD;
+    if (!password) throw new Error('Set SEED_PASSWORD in .env (the password the demo users were created with).');
+    const base = process.env.DEMO_BASE_URL || `http://127.0.0.1:${process.env.PORT || 3000}`;
+    const r = await runDemo({ base, username: process.env.DEMO_USER || 'doctor1', password, caseId, outDir: process.env.DEMO_OUT_DIR || 'demo-out', demoParameters: process.argv.includes('--demo-parameters') });
+    console.log(r.alreadyImported ? `Already imported: run ${r.runId} (${r.status}).` : `Imported run ${r.runId} (${r.status}). Open case ${caseId} in the page to see it.`);
+  })().catch(e => { console.error(e.message); process.exit(1); });
+}
