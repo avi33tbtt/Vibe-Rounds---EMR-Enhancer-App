@@ -13,6 +13,7 @@ const PERMS = {
   'sets:review':       ['informatician'],                        // approve or reject a version in review (8c); not the author or submitter (checked per version)
   'sets:publish':      ['admin'],                                // publish an APPROVED version and retire a version; reviewers (informatician) cannot publish (8c-2 decision)
   'audit:read':        ['admin'],
+  'context:read':      ['admin', 'doctor'],   // the de-identified context envelope for CCIS (B5); no nurse, viewer or informatician
   'ai:use':            ['admin', 'doctor'],   // draft / rank element sets with the server-side AI
   'ai:admin':          ['admin'],             // the AI on/off switch, model and request limits
 };

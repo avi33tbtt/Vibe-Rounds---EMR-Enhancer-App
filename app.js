@@ -14,6 +14,7 @@ const { mountReview } = require('./review');
 const { mountObservations } = require('./observations');
 const { mountNotes } = require('./notes');
 const { mountPathways } = require('./pathways');
+const { mountContext } = require('./context');
 const { createLimiter } = require('./ratelimit');
 
 const PATIENT_SELECT = `
@@ -297,6 +298,9 @@ function createApp(pool, opts = {}) {
 
   /* ---------- pathways and applying them (task B4a) ---------- */
   mountPathways(app, pool);
+
+  /* ---------- context envelope for CCIS (task B5) ---------- */
+  mountContext(app, pool, opts);
 
   /* ---------- audit (read-only) ---------- */
   app.get('/api/audit', A.requirePerm(pool, 'audit:read'), async (req, res) => {

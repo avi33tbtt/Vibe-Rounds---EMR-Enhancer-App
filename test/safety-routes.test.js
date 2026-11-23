@@ -41,6 +41,7 @@ const MATRIX = {
   'POST /api/cases/:id/applied-pathways': { guard: 'cases:write' },
   'POST /api/cases/:id/observations': { guard: 'cases:write' },
   'GET /api/cases/:id/timeline':    { guard: 'cases:read' },
+  'GET /api/cases/:id/context':     { guard: 'context:read' },
   'POST /api/observations/:id/correct': { guard: 'cases:write' },
   'POST /api/observations/:id/entered-in-error': { guard: 'cases:write' },
   'GET /api/cases/:id/notes':       { guard: 'cases:read' },
@@ -87,6 +88,7 @@ const EXPECTED_ROLES = {
   'sets:review':       ['informatician'],
   'sets:publish':      ['admin'],
   'audit:read':        ['admin'],
+  'context:read':      ['admin', 'doctor'],
   'ai:use':            ['admin', 'doctor'],
   'ai:admin':          ['admin'],
 };

@@ -29,6 +29,10 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 
 ---
 
+**Added 2026-11-23 (demo track and roadmap).** Rows B5a to DM4 build one end-to-end demo slice with CCIS; rows R0 to R8 are the full advanced-EMR roadmap and stay `LOCKED` until DM4 is `DONE` and the user says **"start roadmap"**. Read `emr-plan-chunks/04-demo-and-roadmap.md` for the boundary rules, global order across both repos and R-row briefs. B5 is replaced by B5a and B5b because CCIS row 1.4 fixed the envelope schema. Every new route updates the permission matrix and audit tests on purpose.
+
+---
+
 ## STATUS LEGEND
 `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` | `SKIPPED` | `SPLIT` (replaced by sub-tasks) | `MOVED` (now tracked in the CCIS repo)
 
@@ -91,7 +95,26 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | B4 | chunk-B4-pathways.md | Pathway versions and composition | SPLIT | 2026-11-23 | 1 migration, routes, page, tests | Replaced by B4a (server) and B4b (page): migration, routes and matrix fill the guard; page rewrites hard-coded PATHWAYS and applySetSrv (~50 refs). Nothing built. |
 | B4a | chunk-B4-pathways.md | Pathways on the server (items 1, 2, 4): next free migration (`pathways`, `pathway_versions`, ordered members each naming an exact published `element_set_version_id`, `case_applied_pathways`, `from_pathway_version_id` on `case_applied_sets`; immutable versions, grants without DELETE/TRUNCATE), routes to list, create draft, publish (admin-only, as sets), apply to a case (one transaction, traceable pins, each set removable alone); matrix and audit tests updated on purpose | DONE | 2026-11-23 | 1 migration, 1 routes file, app.js, permissions, 3 test files | 013_pathways.sql, pathways.js, app.js, observations.js, 3 test files, DECISIONS.md. 6 routes + apply; DB-immutable versions, pins link to source. 285 tests, 0 todo. Page is B4b. |
 | B4b | chunk-B4-pathways.md | Pathways in the page (item 3): library from the server, one-time demo-pathway import, Apply via the adapter (replaces looped `applySetSrv`), remove a set after applying while the source pathway stays shown | DONE | 2026-11-23 | page + 1 test file | emr-enhancer.html, test/pathways-page.test.js, 2 tests edited, DECISIONS.md. Server pathway library, one-call apply, source kept, admin demo import. 290 tests, 0 todo. |
-| B5 | chunk-B5-context-service.md | Context service: versioned minimal envelope | TODO |  | 1 module, 1 route, tests | Needs: B3a, B4a, B4b. The envelope must conform to `docs/IMPORT-CONTRACT.md` of the CCIS repo (CCIS row 0.3) and pass its fixtures. Until that file exists, wait or write to the draft contract. |
+| B5 | chunk-B5-context-service.md | Context service: versioned minimal envelope | SPLIT | 2026-11-23 | | Replaced by B5a, B5b. Envelope shape now follows CCIS `context-envelope` schema (row 1.4). |
+| B5a | chunk-B5a-envelope-builder.md | Pure envelope builder `context.js`; vendor CCIS schemas into `contracts/`; ajv devDependency | TODO |  | 1 module, contracts/, 1 test file | Needs CCIS 1.5b first in global order. |
+| B5b | chunk-B5b-context-route.md | `GET /api/cases/:id/context`, `context_exports` log (append-only), permission, audit, download button | TODO |  | 1 migration, 1 route, 1 button, tests | |
+| | | **TRACK DEMO: end-to-end demo slice with CCIS** (see `emr-plan-chunks/04-demo-and-roadmap.md`) | | | | |
+| DM0 | chunk-DM0-demo-script.md | Demo script and scope contract (docs only) | DONE | 2026-11-23 | docs/DEMO-SCRIPT.md | Draft delivered with this plan; owner reviews. |
+| DM1 | chunk-DM1-seed-demo.md | One-command demo seed and reset (`demo:seed`, `demo:reset`) | TODO |  | 1 script, 1 test | Needs B5b. |
+| DM2a | chunk-DM2a-run-results-server.md | Import and acknowledge CCIS run records: `ccis_runs`, `ccis_run_acks`, 3 routes, permissions | TODO |  | 1 migration, 3 routes, tests | Needs B5b. Append-only; CCIS never writes clinical tables. |
+| DM2b | chunk-DM2b-insights-panel.md | CCIS insights panel in the case screen (import file, view, acknowledge, demo-parameter banner) | TODO |  | page edit + 1 test file | Needs DM2a. |
+| DM3 | chunk-DM3-bridge.md | `scripts/demo-bridge.js`: envelope -> CCIS CLI child process -> import | TODO |  | 1 script, 1 test | Needs DM2a and CCIS DS4. |
+| DM4 | chunk-DM4-demo-polish.md | Demo runbook, banners, end-to-end test | TODO |  | docs + 1 test + banner | Needs DM1, DM2b, DM3, CCIS DS7. |
+| | | **TRACK R: full advanced-EMR roadmap (LOCKED until DM4 DONE and "start roadmap")** | | | | |
+| R0 | (written when reached) | Split `emr-enhancer.html` into modules, no behaviour change | LOCKED |  |  | Do before R1. |
+| R1 | (written when reached) | A. Advanced OPD: complaints, symptom attributes, adaptive history, examination, assessment and plan | LOCKED |  |  | Context impact must be stated. |
+| R2 | (written when reached) | B. Terminology: server code search and verification, LOINC/ICD bindings, local terms, versions | LOCKED |  |  | Licence check first (you). |
+| R3 | (written when reached) | D. Longitudinal record: problems, allergies, medication history, results, timeline | LOCKED |  |  | Adds envelope sections. |
+| R4 | (written when reached) | C. Orders and results: medications, investigations, results, abnormal acknowledgement, referrals, procedures | LOCKED |  |  | Needs clinician owner and drug-data licence decision. Split per order type. |
+| R5 | (written when reached) | C. IPD: admission, progress, medication administration, discharge | LOCKED |  |  | Needs R4. |
+| R6 | (written when reached) | E. FHIR R4 export, Questionnaire/Bundle import, conformance tests | LOCKED |  |  | Verified codings only. |
+| R7 | (written when reached) | F. Integration hardening: batch envelope (D8b), versioning policy, retention, de-identification review | LOCKED |  |  | Absorbs D8b. |
+| R8 | (written when reached) | Clinical validation: workflow tests, clinician walkthrough, privacy/security review, safety case | LOCKED |  |  | Mostly your tasks. |
 | | | **TRACK C and D: MOVED to the CCIS repo** (https://github.com/avi33tbtt/Vibe-Rounds---CCIS) | | | | |
 | C0 to C9 | (CCIS repo) | CCIS spec, schemas, validator, compiler, runtime, run records, marketplace, viewer, first slice | MOVED | 2026-11-22 |  | Replaced by CCIS phases 0 to 3. Do not build here. |
 | D1a to D7 | (CCIS repo) | Templates, decision graphs, cohorts, FHIR Mode, governance, evaluation | MOVED | 2026-11-22 |  | Replaced by CCIS phases 4 to 6. Do not build here. |
@@ -123,6 +146,9 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - First CCIS slice (in the CCIS repo): snake envenomation process metrics. No doses or bands; parameters from a local clinician, disabled by default. The EMR cohort exporter is the last EMR row.
 
 ## OPEN QUESTIONS
+- 2026-11-23: rehearse and review `docs/DEMO-SCRIPT.md` (row DM0 is a draft). The early "criteria met" example was dropped: CCIS outputs are descriptive process metrics with disabled thresholds.
+- 2026-11-23: hand-off to CCIS is by file and local CLI only (no network). Say if you want a different mechanism.
+- 2026-11-23: R0 (page split) is added because the single 2.4k-line HTML file will strain at R1 to R4.
 - Resolved 2026-11-22 (8d-2): the page only shows and submits server drafts (no draft editor). A draft editor in the page is still not planned: say if you want a row for it.
 - Resolved 2026-11-22: interim data while signed in = option B (`vr_interim`). Values left it in B3b-2; notes left it in B3c-2; custom sets still sit there.
 - Resolved 2026-11-22: re-ordered, review workflow (8b to 8d) now follows B2b and is built on server versions.
