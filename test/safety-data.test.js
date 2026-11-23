@@ -16,7 +16,7 @@ test.after(async () => { await env.close(); });
 
 // ---------- database ----------
 // Every table must be listed here. A new table fails this test until someone decides which kind it is.
-const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events'];        // never deleted: rows are archived, closed, appended or retired
+const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events', 'case_notes', 'case_note_amendments'];        // never deleted: rows are archived, closed, appended or retired
 const NOT_CLINICAL = ['users', 'sessions', 'schema_migrations', 'ai_settings'];   // accounts, logins, bookkeeping, settings
 
 test('every table is classified, and every clinical table refuses DELETE', async () => {
@@ -46,6 +46,12 @@ test('every table is classified, and every clinical table refuses DELETE', async
   const as = await a.post(`/api/cases/${kc.body.case.id}/applied-sets`, { setId: ks, version: 1 });
   assert.equal(as.status, 201, JSON.stringify(as.body));
   assert.equal((await a.post(`/api/cases/${kc.body.case.id}/observations`, { observations: [{ appliedSetId: as.body.appliedSet.id, fieldKey: 'k', value: 'Keep value', effectiveAt: '2020-01-01T10:00:00Z', sourceType: 'clinician' }] })).status, 201);
+
+  // a signed and amended note: the note tables have rows to protect too (task B3c-1)
+  const nt = await a.post(`/api/cases/${kc.body.case.id}/notes`, { body: 'Keep note' });
+  assert.equal(nt.status, 201, JSON.stringify(nt.body));
+  assert.equal((await a.post(`/api/notes/${nt.body.note.id}/sign`, { rowVersion: 1 })).status, 200);
+  assert.equal((await a.post(`/api/notes/${nt.body.note.id}/amend`, { body: 'Keep note, amended', reason: 'Keep reason', amendmentCount: 0 })).status, 201);
 
   for (const t of CLINICAL) {
     const n = Number((await env.pool.query(`SELECT count(*) n FROM ${t}`)).rows[0].n);
@@ -338,4 +344,26 @@ test('a wrong observation row is marked entered in error (who, when) and stays s
   // nothing in the page removes a row any more
   assert.doesNotMatch(HTML, /function delRow|rows\.splice|data-act="delRow"/);
 });
-test.todo('server-side: signed notes are immutable on the server (notes live in the browser until a later chunk stores them there)');
+test('server-side: a signed note cannot be changed by any route or by the app\'s own database role; an amendment keeps the original and the reason (task B3c-1)', async () => {
+  const n = client(env.base); assert.equal((await n.login('nurse1')).status, 200);
+  const d = client(env.base); assert.equal((await d.login('doctor1')).status, 200);
+  const pid = (await n.post('/api/patients', { name: 'Signed Note', mrn: 'SIGNED-1', dob: '1980-01-01', sex: 'F' })).body.patient.id;
+  const cid = (await n.post(`/api/patients/${pid}/cases`, { title: 'Signed case' })).body.case.id;
+  const note = (await n.post(`/api/cases/${cid}/notes`, { body: 'Original signed text' })).body.note;
+  assert.equal((await n.post(`/api/notes/${note.id}/sign`, { rowVersion: 1 })).status, 200);
+  // no route edits, re-signs or discards it, for the author or for anyone else
+  for (const c of [n, d]) {
+    assert.notEqual((await c.patch(`/api/notes/${note.id}`, { body: 'changed', rowVersion: 2 })).status, 200);
+    assert.notEqual((await c.post(`/api/notes/${note.id}/sign`, { rowVersion: 2 })).status, 200);
+    assert.notEqual((await c.post(`/api/notes/${note.id}/discard`, { rowVersion: 2 })).status, 200);
+  }
+  // the database refuses it too, for the owner and for the restricted app role
+  await assert.rejects(env.pool.query(`UPDATE case_notes SET body = 'changed' WHERE id = $1`, [note.id]), /cannot be changed/);
+  await assert.rejects(env.appPool.query(`UPDATE case_notes SET body = 'changed' WHERE id = $1`, [note.id]), /cannot be changed|permission denied/);
+  // an amendment needs a reason, is by the session user, and leaves the original text in place
+  assert.equal((await d.post(`/api/notes/${note.id}/amend`, { body: 'Amended text', amendmentCount: 0 })).status, 400);
+  const am = await d.post(`/api/notes/${note.id}/amend`, { body: 'Amended text', reason: 'Unit corrected', amendmentCount: 0 });
+  assert.equal(am.status, 201);
+  const r = (await env.pool.query('SELECT n.body, n.status, m.body AS amended, m.reason, u.username FROM case_notes n JOIN case_note_amendments m ON m.note_id = n.id JOIN users u ON u.id = m.amended_by WHERE n.id = $1', [note.id])).rows[0];
+  assert.deepEqual(r, { body: 'Original signed text', status: 'signed', amended: 'Amended text', reason: 'Unit corrected', username: 'doctor1' });
+});

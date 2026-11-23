@@ -42,6 +42,12 @@ const MATRIX = {
   'GET /api/cases/:id/timeline':    { guard: 'cases:read' },
   'POST /api/observations/:id/correct': { guard: 'cases:write' },
   'POST /api/observations/:id/entered-in-error': { guard: 'cases:write' },
+  'GET /api/cases/:id/notes':       { guard: 'cases:read' },
+  'POST /api/cases/:id/notes':      { guard: 'cases:write' },
+  'PATCH /api/notes/:id':           { guard: 'cases:write' },
+  'POST /api/notes/:id/discard':    { guard: 'cases:write' },
+  'POST /api/notes/:id/sign':       { guard: 'cases:write' },
+  'POST /api/notes/:id/amend':      { guard: 'cases:write' },
   'GET /api/element-sets':          { guard: 'sets:read' },
   'POST /api/element-sets':         { guard: 'sets:write' },
   'GET /api/element-sets/:id':      { guard: 'sets:read' },
@@ -309,6 +315,28 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/cases/:id/applied-sets/:asid/withdraw', nurse, async () => {
         const r = await nurse.c.post(`/api/cases/${S.cid}/applied-sets/${S.asid}/withdraw`, {});
         assert.equal(r.status, 200, JSON.stringify(r.body)); return ['case.set_withdraw'];
+      }],
+      ['POST /api/cases/:id/notes', nurse, async () => {
+        const r = await nurse.c.post(`/api/cases/${S.cid}/notes`, { body: 'Audit note' });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); S.nid = r.body.note.id; return ['note.create'];
+      }],
+      ['PATCH /api/notes/:id', nurse, async () => {
+        const r = await nurse.c.patch(`/api/notes/${S.nid}`, { body: 'Audit note edited', rowVersion: 1 });
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['note.update'];
+      }],
+      ['POST /api/notes/:id/discard', nurse, async () => {
+        const k = await nurse.c.post(`/api/cases/${S.cid}/notes`, { body: 'Audit discard' });
+        assert.equal(k.status, 201, JSON.stringify(k.body));
+        const r = await nurse.c.post(`/api/notes/${k.body.note.id}/discard`, { rowVersion: 1 });
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['note.create', 'note.discard'];
+      }],
+      ['POST /api/notes/:id/sign', nurse, async () => {
+        const r = await nurse.c.post(`/api/notes/${S.nid}/sign`, { rowVersion: 2 });
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['note.sign'];
+      }],
+      ['POST /api/notes/:id/amend', nurse, async () => {
+        const r = await nurse.c.post(`/api/notes/${S.nid}/amend`, { body: 'Audit note amended', reason: 'Audit amendment', amendmentCount: 0 });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); return ['note.amend'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);

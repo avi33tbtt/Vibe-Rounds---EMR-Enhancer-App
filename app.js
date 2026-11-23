@@ -12,6 +12,7 @@ const { mountCases } = require('./cases');
 const { mountSets } = require('./sets');
 const { mountReview } = require('./review');
 const { mountObservations } = require('./observations');
+const { mountNotes } = require('./notes');
 const { createLimiter } = require('./ratelimit');
 
 const PATIENT_SELECT = `
@@ -289,6 +290,9 @@ function createApp(pool, opts = {}) {
 
   /* ---------- applied sets, observations, clinical timeline (task B3a) ---------- */
   mountObservations(app, pool);
+
+  /* ---------- notes and signing (task B3c-1) ---------- */
+  mountNotes(app, pool);
 
   /* ---------- audit (read-only) ---------- */
   app.get('/api/audit', A.requirePerm(pool, 'audit:read'), async (req, res) => {

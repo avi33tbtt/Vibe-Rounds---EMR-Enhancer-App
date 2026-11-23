@@ -112,7 +112,48 @@ test('AI limit: two quick sends from one user with one request left, exactly one
   }
 });
 
-// A conflict on a stale version (two people editing the same element set, case or note) cannot be tested yet:
-// those records live in the browser until a later chunk stores them on the server. The test is written here so it
-// shows up as TODO in every run until then.
-test.todo('stale version: the second writer of an element set / case / note gets a conflict (needs server-side records)');
+// Stale versions: two people (or two tabs) writing the same note. The case is locked first, so one wins and the other gets a clear 409.
+// Elements sets and cases have their own version checks (sets.test.js, cases.test.js); the note races are here (task B3c-1).
+async function noteCase(c, i) {
+  const p = await c.post('/api/patients', { name: 'Race Note ' + i, mrn: 'RN-' + i + '-' + Date.now(), dob: '1970-01-01', sex: 'U' });
+  assert.equal(p.status, 201);
+  const k = await c.post(`/api/patients/${p.body.patient.id}/cases`, { title: 'Race note case' });
+  assert.equal(k.status, 201);
+  return k.body.case.id;
+}
+test('two tabs edit the same draft at once: one 200, one 409 version_conflict, the saved text is the winner\'s', async () => {
+  const [a, b] = [await as('nurse1'), await as('nurse1')];
+  for (let i = 0; i < ROUNDS; i++) {
+    const caseId = await noteCase(a, i);
+    const note = (await a.post(`/api/cases/${caseId}/notes`, { body: 'start' })).body.note;
+    const rs = await Promise.all([a.patch(`/api/notes/${note.id}`, { body: 'from A', rowVersion: 1 }), b.patch(`/api/notes/${note.id}`, { body: 'from B', rowVersion: 1 })]);
+    assert.deepEqual(statuses(rs), [200, 409], `round ${i}: ${JSON.stringify(rs.map(r => [r.status, r.body && r.body.error]))}`);
+    const win = rs.find(r => r.status === 200).body.note.body;
+    assert.equal(rs.find(r => r.status === 409).body.error, 'version_conflict');
+    assert.equal(await count('SELECT row_version n FROM case_notes WHERE id = $1', [note.id]), 2);
+    assert.equal((await env.pool.query('SELECT body FROM case_notes WHERE id = $1', [note.id])).rows[0].body, win);
+  }
+});
+test('sign and edit at once: either the edit lands and the sign is refused, or the note is signed as loaded and the edit is refused; never a changed signed note', async () => {
+  const [a, b] = [await as('nurse1'), await as('nurse1')];
+  for (let i = 0; i < ROUNDS; i++) {
+    const caseId = await noteCase(a, 100 + i);
+    const note = (await a.post(`/api/cases/${caseId}/notes`, { body: 'as loaded' })).body.note;
+    const rs = await Promise.all([a.post(`/api/notes/${note.id}/sign`, { rowVersion: 1 }), b.patch(`/api/notes/${note.id}`, { body: 'late change', rowVersion: 1 })]);
+    assert.deepEqual(statuses(rs), [200, 409], `round ${i}: ${JSON.stringify(rs.map(r => [r.status, r.body && r.body.error]))}`);
+    const row = (await env.pool.query('SELECT status, body FROM case_notes WHERE id = $1', [note.id])).rows[0];
+    if (rs[0].status === 200) assert.deepEqual(row, { status: 'signed', body: 'as loaded' });
+    else assert.deepEqual(row, { status: 'draft', body: 'late change' });
+  }
+});
+test('two amendments of the same signed note at once: one 201, one 409, exactly one amendment row', async () => {
+  const [a, b] = [await as('nurse1'), await as('doctor1')];
+  for (let i = 0; i < ROUNDS; i++) {
+    const caseId = await noteCase(a, 200 + i);
+    const note = (await a.post(`/api/cases/${caseId}/notes`, { body: 'signed text' })).body.note;
+    assert.equal((await a.post(`/api/notes/${note.id}/sign`, { rowVersion: 1 })).status, 200);
+    const rs = await Promise.all([a.post(`/api/notes/${note.id}/amend`, { body: 'A says', reason: 'r1', amendmentCount: 0 }), b.post(`/api/notes/${note.id}/amend`, { body: 'B says', reason: 'r2', amendmentCount: 0 })]);
+    assert.deepEqual(statuses(rs), [201, 409], `round ${i}: ${JSON.stringify(rs.map(r => [r.status, r.body && r.body.error]))}`);
+    assert.equal(await count('SELECT count(*) n FROM case_note_amendments WHERE note_id = $1', [note.id]), 1);
+  }
+});
