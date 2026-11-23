@@ -102,7 +102,7 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | B5b | chunk-B5b-context-route.md | Export log (`context_exports`, append-only), file download with hash, "Download context envelope" button | DONE | 2026-11-23 | 1 migration, 1 route, 1 button, tests | 014_context_exports.sql, context.js, page, context + context-page + safety-data tests, DECISIONS.md. Row and audit in one transaction. 317 tests, 3 skipped (no Chrome). |
 | | | **TRACK DEMO: end-to-end demo slice with CCIS** (see `emr-plan-chunks/04-demo-and-roadmap.md`) | | | | |
 | DM0 | chunk-DM0-demo-script.md | Demo script and scope contract (docs only) | DONE | 2026-11-23 | docs/DEMO-SCRIPT.md | Draft delivered with this plan; owner reviews. |
-| DM1 | chunk-DM1-seed-demo.md | One-command demo seed and reset (`demo:seed`, `demo:reset`) | TODO |  | 1 script, 1 test | Needs B5b. |
+| DM1 | chunk-DM1-seed-demo.md | One-command demo seed and reset (`demo:seed`, `demo:reset`) | DONE | 2026-11-23 | 1 script, 1 test | scripts/seed-demo.js, test/demo-seed.test.js, package.json, DECISIONS.md. Via real routes; idempotent; reset archives. 8 values, 1 Unknown, 1 missing. |
 | DM2a | chunk-DM2a-run-results-server.md | Import and acknowledge CCIS run records: `ccis_runs`, `ccis_run_acks`, 3 routes, permissions | TODO |  | 1 migration, 3 routes, tests | Needs B5b. Append-only; CCIS never writes clinical tables. |
 | DM2b | chunk-DM2b-insights-panel.md | CCIS insights panel in the case screen (import file, view, acknowledge, demo-parameter banner) | TODO |  | page edit + 1 test file | Needs DM2a. |
 | DM3 | chunk-DM3-bridge.md | `scripts/demo-bridge.js`: envelope -> CCIS CLI child process -> import | TODO |  | 1 script, 1 test | Needs DM2a and CCIS DS4. |
