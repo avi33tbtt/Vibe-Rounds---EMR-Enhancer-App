@@ -403,10 +403,8 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 </div>
 
 <script src="sdc.js"></script>
+<script src="modules/00-boot.js"></script>
 <script>
-const $=i=>document.getElementById(i);
-const toast=m=>{ $('toast').textContent=m; setTimeout(()=>{if($('toast').textContent===m)$('toast').textContent=''},4500)};
-const tg=id=>{const e=$(id);e.style.display=e.style.display==='block'?'none':'block'};
 
 /* Settings */
 /* Only the demo-mode choice is kept in this browser. The AI provider, model and key are server-side (chunk 04b). */

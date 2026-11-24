@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
-const { pageHtml } = require('./html');
+const { pageHtml, pageSource } = require('./html');
 
 const MAX_INLINE = 0;
-const src = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
+const src = pageSource();   // page + modules/ (R0a)
 const inline = s => (s.match(/ on[a-z]+="/g) || []).length;
 
 test('the page has zero inline on*="" handlers', () => {

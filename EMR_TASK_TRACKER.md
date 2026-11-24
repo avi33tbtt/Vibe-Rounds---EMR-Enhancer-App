@@ -37,6 +37,14 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 
 ---
 
+**2026-11-25: "start roadmap" given.** Roadmap rows are now unlocked in order; R0b is next. Rows after it stay `LOCKED` until reached.
+
+---
+
+**Added 2026-11-25 (R9 explorer).** Rows R9a to R9k come from `chunk-R9-contextual-longitudinal-explorer.md` and stay `LOCKED` until R3h is `DONE`. They reuse R3g/R3h instead of repeating them (chunk step R9.3 is folded into R3g/R3h). Every new route updates the permission matrix and audit tests on purpose. Context impact of all R9 rows: none (existing envelope and records only); if R3 adds envelope sections, agree the schema version with CCIS first. R8a (workflow tests) and R8d (safety case) must include the R9 path.
+
+---
+
 ## STATUS LEGEND
 `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` | `SKIPPED` | `SPLIT` (replaced by sub-tasks) | `MOVED` (now tracked in the CCIS repo) | `LOCKED` (not yet started; do not pick)
 
@@ -121,8 +129,8 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | DM4c | chunk-DM4-demo-polish.md | `docs/DEMO-RUNBOOK.md`: clean-machine setup, reset, click path, known limits, staged list; owner checklist for screen backup and two rehearsals (items 1, 5) | DONE | 2026-11-23 | docs only | docs/DEMO-RUNBOOK.md. Not followed on a clean machine; CCIS DS7 not checked. Your checklist in section 7. DM track complete. |
 | | | **TRACK R: full advanced-EMR roadmap (LOCKED until DM4 DONE and "start roadmap")** | | | | |
 | R0 | (written when reached) | Split `emr-enhancer.html` into modules, no behaviour change | SPLIT | 2026-11-23 |  | Replaced by R0a to R0e. Still LOCKED. |
-| R0a | 04-demo-and-roadmap.md (R brief) | Module loading under the CSP (nonce, same origin), test helper that finds code in the new files; no behaviour change | LOCKED |  | 1 build/serve edit + 1 test | Do first. Ratchet tests keep passing. |
-| R0b | 04-demo-and-roadmap.md (R brief) | Move shared core out of the page: escaper, storage adapter, session, ACT table (delegated listener) | LOCKED |  | page + new module + tests edited | No behaviour change. |
+| R0a | chunk-R0a-module-loading.md | Module loading under the CSP (nonce, same origin), test helper that finds code in the new files; no behaviour change | DONE | 2026-11-25 | 1 build/serve edit + 1 test | app.js, modules/00-boot.js, page, test/html.js + new test. Classic scripts, 1 route, `pageSource()`. 367 tests, 3 skipped (no Chrome). Browser not tried. Next: R0b. |
+| R0b | 04-demo-and-roadmap.md (R brief) | Move shared core out of the page: escaper, storage adapter, session, ACT table (delegated listener) | TODO |  | page + new module + tests edited | No behaviour change. |
 | R0c | 04-demo-and-roadmap.md (R brief) | Move screens group 1: patients, encounters, cases list | LOCKED |  | new module + page edit | One screen group per row. |
 | R0d | 04-demo-and-roadmap.md (R brief) | Move screens group 2: library, review, versions, pathways | LOCKED |  | new module + page edit |  |
 | R0e | 04-demo-and-roadmap.md (R brief) | Move case workspace: pins, values, notes, insights panel; page file only wires modules | LOCKED |  | new module + page edit | Check no inline handlers return. |
@@ -147,8 +155,8 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | R3d | 04-demo-and-roadmap.md (R brief) | Allergies in the page | LOCKED |  | page + 1 test file |  |
 | R3e | 04-demo-and-roadmap.md (R brief) | Medication history (recorded list only, no orders): server | LOCKED |  | 1 migration + 1 routes file + tests | Orders stay in R4. |
 | R3f | 04-demo-and-roadmap.md (R brief) | Medication history in the page | LOCKED |  | page + 1 test file |  |
-| R3g | 04-demo-and-roadmap.md (R brief) | Timeline: server read route across cases | LOCKED |  | 1 routes file + tests |  |
-| R3h | 04-demo-and-roadmap.md (R brief) | Timeline in the page | LOCKED |  | page + 1 test file |  |
+| R3g | 04-demo-and-roadmap.md (R brief) | Timeline: server read route across cases | LOCKED |  | 1 routes file + tests |R9e builds on this route; keep it generic (observations, events, notes) so R9 adds nothing parallel. |
+| R3h | 04-demo-and-roadmap.md (R brief) | Timeline in the page | LOCKED |  | page + 1 test file |R9f to R9h extend this view. |
 | R3i | 04-demo-and-roadmap.md (R brief) | Envelope sections problems and allergies (CCIS schema version bump first, in the CCIS repo) | LOCKED |  | envelope.js + contracts + tests | Context impact: new sections; needs CCIS agreement. |
 | R4 | (written when reached) | C. Orders and results: medications, investigations, results, abnormal acknowledgement, referrals, procedures | SPLIT | 2026-11-23 |  | Replaced by R4a to R4j. Still LOCKED. |
 | R4a | 04-demo-and-roadmap.md (R brief) | YOUR task: name clinician owner; decide drug-data licence | LOCKED |  | none | Gate. Nothing in R4b onward starts first. |
@@ -189,6 +197,19 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | R8c | 04-demo-and-roadmap.md (R brief) | Privacy and security review checklist with evidence links (docs) | LOCKED |  | docs only | Review is yours. |
 | R8d | 04-demo-and-roadmap.md (R brief) | Safety case draft (hazards, controls, residual risk) (docs) | LOCKED |  | docs only | Clinical owner signs. |
 | R8e | 04-demo-and-roadmap.md (R brief) | YOUR task: go-live gate sign-off | LOCKED |  | none | Not for clinical use until done. |
+| | | **TRACK R9: contextual longitudinal patient explorer (LOCKED; start after R3h is DONE; needs no R4 or R5)** | | | | |
+| R9 | chunk-R9-contextual-longitudinal-explorer.md | Contextual longitudinal patient explorer (one patient: overall timeline, context views, linked date, event drawer, demo data) | SPLIT | 2026-11-25 |  | Replaced by R9a to R9k. Chunk steps R9.1 to R9.8 map to R9a to R9k. Still LOCKED. Patient-level only; cohort views belong to CCIS. |
+| R9a | chunk-R9-contextual-longitudinal-explorer.md | Inspect the refreshed repo; write the source-to-timeline map (which R3 record types exist, where each context membership comes from); decide the mapping home (code module or table) (docs only) | LOCKED |  | 1 markdown file | Context impact: none. Absent source types are listed, not invented. |
+| R9b | chunk-R9-contextual-longitudinal-explorer.md | Pure `timeline-projection.js`: source rows to display events (kind, source id, patient/case/encounter, effective and recorded time kept apart, status, same-time order); tests | LOCKED |  | 1 module + 1 test file | No new table. Missing timestamps and entered-in-error stay distinct. |
+| R9c | chunk-R9-contextual-longitudinal-explorer.md | Pure context membership: explicit set/pathway/problem to context keys (diabetes, CKD, hypertension), reason kept per membership, unmapped labelled, dedupe by source id; tests | LOCKED |  | 1 module + 1 test file | No NLP, no guessing. |
+| R9d | chunk-R9-contextual-longitudinal-explorer.md | Synthetic longitudinal demo seed and reset (`longitudinal:seed`, `longitudinal:reset`): 1 synthetic patient, 3 to 5 years, back-dated values, 1 Unknown, 1 missing, 1 entered-in-error; archive-only reset; separate from DM1 | LOCKED |  | 1 script + 1 test file | Needs a hypertension set (none exists; new version via review). Split off a row if that fills the guard. |
+| R9e | chunk-R9-contextual-longitudinal-explorer.md | Server: `GET /api/patients/:id/longitudinal` (date window, context filter, paging) built on R3g plus R9b and R9c; audited view; matrix and audit tests on purpose; patient-isolation test | LOCKED |  | 1 routes file + permissions + 2 test files | Reuses R3g, does not add a second timeline. Permission `cases:read`. |
+| R9f | chunk-R9-contextual-longitudinal-explorer.md | Page: Longitudinal area, overall timeline grouped by year and date, date-range control, source links, SYNTHETIC banner kept | LOCKED |  | page module + 1 test file | Needs R0e and R3h. |
+| R9g | chunk-R9-contextual-longitudinal-explorer.md | Page: context views (all, one, combined with condition lanes); same record shown once; unmapped events visible in the overall view | LOCKED |  | page module + 1 test file |  |
+| R9h | chunk-R9-contextual-longitudinal-explorer.md | Page: event detail drawer (value and unit, effective and recorded time, status, author, source link, why it is in this view, previous and next of the same field); one selected date kept across lanes and view switches; no causal wording | LOCKED |  | page module + 1 test file | Split into drawer and linked date if over guard. |
+| R9i | chunk-R9-contextual-longitudinal-explorer.md | Optional: simple trend chart for one repeated numeric field (units explicit; missing, unknown and entered-in-error never plotted as zero) | LOCKED |  | page module + 1 test file | MVP+. Skip if the timeline is already usable. |
+| R9j | chunk-R9-contextual-longitudinal-explorer.md | Optional: "as known then" knowledge-time cutoff on `recorded_at` | LOCKED |  | route param + tests | Only on your request. A record recorded after the cutoff must not appear. |
+| R9k | chunk-R9-contextual-longitudinal-explorer.md | Acceptance: real-browser test (timeline, context switch, click-through, banner), cross-case and cross-patient isolation, full suite once; hook into R8a and R8d | LOCKED |  | 1 test file + docs | Browser needs Chrome. Not DONE until the suite is run. |
 | | | **TRACK C and D: MOVED to the CCIS repo** (https://github.com/avi33tbtt/Vibe-Rounds---CCIS) | | | | |
 | C0 to C9 | (CCIS repo) | CCIS spec, schemas, validator, compiler, runtime, run records, marketplace, viewer, first slice | MOVED | 2026-11-22 |  | Replaced by CCIS phases 0 to 3. Do not build here. |
 | D1a to D7 | (CCIS repo) | Templates, decision graphs, cohorts, FHIR Mode, governance, evaluation | MOVED | 2026-11-22 |  | Replaced by CCIS phases 4 to 6. Do not build here. |
@@ -223,6 +244,7 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - First CCIS slice (in the CCIS repo): snake envenomation process metrics. No doses or bands; parameters from a local clinician, disabled by default. The EMR cohort exporter is the last EMR row.
 
 ## OPEN QUESTIONS
+- 2026-11-25: R9d needs a hypertension element set; none exists in the page today (diabetes and CKD sets do). Confirm it may be added as a demo set through review.
 - 2026-11-23: rehearse and review `docs/DEMO-SCRIPT.md` (row DM0 is a draft). The early "criteria met" example was dropped: CCIS outputs are descriptive process metrics with disabled thresholds.
 - 2026-11-23: hand-off to CCIS is by file and local CLI only (no network). Say if you want a different mechanism.
 - 2026-11-23: R0 (page split) is added because the single 2.4k-line HTML file will strain at R1 to R4.

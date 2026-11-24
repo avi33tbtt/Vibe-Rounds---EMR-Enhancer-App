@@ -22,7 +22,7 @@ function listRoutes(pool) {
 }
 
 const isWrite = key => !['GET', 'HEAD', 'OPTIONS'].includes(key.split(' ')[0]);
-const fill = (path, id = 1) => path.replace(/:id\b/g, String(id)).replace(/:version\b/g, '1');
+const fill = (path, id = 1) => path.replace(/:id\b/g, String(id)).replace(/:version\b/g, '1').replace(/:file\b/g, '00-boot.js');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 

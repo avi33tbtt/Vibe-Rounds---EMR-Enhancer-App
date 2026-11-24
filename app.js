@@ -124,6 +124,13 @@ function createApp(pool, opts = {}) {
   });
   const sdc = path.join(__dirname, 'sdc.js');   // the one shared copy of the SDC code
   app.get('/sdc.js', (_req, res) => res.sendFile(sdc));
+  // R0a: page modules (classic scripts, same origin). Only plain file names in modules/ are served.
+  const modulesDir = path.join(__dirname, 'modules');
+  app.get('/modules/:file', (req, res) => {
+    const notFound = () => { if (!res.headersSent) res.status(404).json({ error: 'not_found' }); };
+    if (!/^[a-z0-9][a-z0-9-]*\.js$/.test(req.params.file)) return notFound();
+    res.sendFile(path.join(modulesDir, req.params.file), err => { if (err) notFound(); });
+  });
 
   /* ---------- session ---------- */
   app.post('/api/login', async (req, res) => {

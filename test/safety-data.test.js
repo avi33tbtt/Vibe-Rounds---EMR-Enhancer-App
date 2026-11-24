@@ -218,7 +218,7 @@ test('notes are never removed: discarded local drafts stay in the list, marked d
 });
 
 test('the page contains no code that removes notes or cases', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
+  const src = require('./html').pageSource();   // page + modules/ (R0a)
   const forbidden = [
     /\.notes\s*\.\s*(splice|pop|shift)\s*\(/, /\.notes\s*=\s*[^;\n]*\.filter\s*\(/, /delete\s+[\w.\[\]'"]*notes/,
     /\bCASES\s*\.\s*(splice|pop|shift)\s*\(/, /\bCASES\s*=\s*CASES\s*\.\s*filter/, /delete\s+CASES\b/,
