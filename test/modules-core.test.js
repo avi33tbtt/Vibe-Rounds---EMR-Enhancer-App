@@ -11,7 +11,7 @@ const raw = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'ut
 const mod = f => fs.readFileSync(path.join(__dirname, '..', 'modules', f), 'utf8');
 
 test('the modules load in order, before the inline script, and the page no longer defines them inline', () => {
-  assert.deepEqual(localScripts().slice(0, 4), ['sdc.js', 'modules/00-boot.js', 'modules/10-escape.js', 'modules/20-session.js']);
+  assert.deepEqual(localScripts().slice(0, 4), ['sdc.js', 'modules/00-boot.js', 'modules/10-escape.js', 'modules/20-session.js']);   // R0b-2 adds 30-store after these (see modules-store.test.js)
   const inline = raw.slice(raw.indexOf('<script>'));
   for (const re of [/function escA\(/, /function jsA\(/, /const Srv=/, /async function api\(/, /const apiMsg=/, /const srvCan=/, /const user=\(\)=>/]) {
     assert.ok(!re.test(inline), 'still inline: ' + re);
