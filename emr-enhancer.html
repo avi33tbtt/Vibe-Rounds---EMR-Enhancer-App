@@ -404,6 +404,8 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 
 <script src="sdc.js"></script>
 <script src="modules/00-boot.js"></script>
+<script src="modules/10-escape.js"></script>
+<script src="modules/20-session.js"></script>
 <script>
 
 /* Settings */
@@ -717,7 +719,6 @@ const PIN={defs:{},busy:false};   // signed in: defs = 'serverSetId:version' -> 
 /* values: fieldId -> scalar | [{ts, value}] for repeat */
 
 const nowISO=()=>new Date().toISOString();
-const user=()=>Srv.user?String(Srv.user.username||''):'';   // signer, author and amender: the signed-in session only, never a typed field
 const canon=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((r,x)=>(r[x]=v[x],r),{}):v);
 function newCaseObj(){return{id:'c_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),patient:{name:'',mrn:'',age:'',sex:''},narrative:'',applied:[],values:{},notes:[],status:'open',createdAt:nowISO(),updatedAt:nowISO()}}
 function load(){
@@ -2113,10 +2114,6 @@ function copyBundle(){const t=$('bj').textContent;if(!t)return toast('Build firs
 function dlBundle(){const t=$('bj').textContent;if(!t)return toast('Build first');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/json'}));a.download='bundle.json';a.click()}
 
 /* Manual create */
-/* Shared escaper for text AND attribute values (both quote kinds, < and >). */
-function escA(x){return String(x??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-/* A value passed to an inline handler: a JSON string literal, then attribute-escaped. Never splice '${x}' into a handler. */
-function jsA(x){return escA(JSON.stringify(String(x??'')))}
 /* Create-screen options: SDC checkbox and the global code-system picker */
 const PICK_ORDER=['snomed','loinc','rxnorm','icd10','icd11','atc','local'];
 let CS_PICK=['snomed','loinc'];
@@ -2313,23 +2310,6 @@ document.querySelectorAll('nav button').forEach(b=>{
   };
 });
 
-/* ---------- Server: sign-in, patients, encounters (chunk 01) ----------
-   Patient identity comes from the server. A case stores only patientId; name/MRN/age are never copied into the case. */
-const Srv={user:null,pts:{},t:null};
-const SEXL={M:'M',F:'F',O:'Other',U:'Unknown'};
-const srvCan=p=>!!Srv.user&&Srv.user.perms.includes(p);
-const caseName=c=>c.patientId?(Srv.pts[c.patientId]?.name||'Registered patient #'+c.patientId):(c.patient.name||'Unnamed patient');
-const caseMrn=c=>c.patientId?(Srv.pts[c.patientId]?.mrn||'—'):(c.patient.mrn||'—');
-async function api(method,path,body){
-  if(location.protocol==='file:')return{status:0,body:{error:'offline',message:'This page was opened as a file. Start the server (npm start) and open it from http://localhost to use patient registration.'}};
-  try{
-    const r=await fetch(path,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-EMR':'1'},body:body===undefined?undefined:JSON.stringify(body)});
-    let j=null;try{j=await r.json()}catch(e){}
-    if(r.status===401&&Srv.user&&path!=='/api/login'&&path!=='/api/me'){Srv.user=null;Srv.pts={};storeLeave();renderWho();toast('Session expired — sign in again')}
-    return{status:r.status,body:j||{}};
-  }catch(e){return{status:0,body:{error:'offline',message:'Cannot reach the server.'}}}
-}
-const apiMsg=r=>r.body.message||(r.status===403?'Your role does not have permission for this action.':r.status===0?r.body.message:'Something went wrong ('+(r.body.error||r.status)+').');
 function renderWho(){
   if(!Srv.user)Object.assign(AI,{on:false,configured:false,canUse:false,admin:null,left:null});
   $('who').innerHTML=Srv.user?`${escA(Srv.user.username)} (${escA(Srv.user.role)}) <a href="#" data-act="srvLogout">Sign out</a>`:'Not signed in';
