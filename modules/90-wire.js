@@ -1,0 +1,110 @@
+// R0b-3: the action table and the one delegated event listener, moved unchanged from the inline script.
+// Every ACT entry is an arrow that looks its page function up when the click happens, so this module can load before the inline script.
+/* Delegated events (chunk 06d-2): data-act names a function in ACT (no eval, no string-built code); data-arg is its text argument.
+   data-ev picks the event: click (default), change, input, or enter (Enter key). An action that returns false cancels the default. */
+const ACT={
+  addFieldRow:()=>addFieldRow(),
+  aiRank:()=>aiRank(),
+  applyGenerated:()=>applyGenerated(),
+  archiveCase:()=>archiveCase(),
+  fillDx:(el)=>fillDx(el),
+  generate:()=>generate(),
+  importQ:()=>importQ(),
+  loadQFile:(el)=>loadQFile(el),
+  loadQUrl:()=>loadQUrl(),
+  optsChanged:()=>optsChanged(),
+  ptDebounce:()=>ptDebounce(),
+  renderLists:()=>renderLists(),
+  resetCreate:()=>resetCreate(),
+  saveCase:()=>saveCase(),
+  saveElement:()=>saveElement(),
+  saveGenerated:()=>saveGenerated(),
+  savePatient:()=>savePatient(),
+  saveSet:()=>saveSet(),
+  srvLogin:()=>srvLogin(),
+  suggest:()=>suggest(),
+  tg:(el,e,a)=>tg(a),
+  ptToggleForm:()=>ptToggleForm(),
+  ptToggleFormOff:()=>ptToggleForm(false),
+  ptRegister:()=>ptRegister(false),
+  editNote:(el,e,a)=>editNote(a,el.value),
+  genSkip:(el,e,a)=>genSkip(a,el.checked),
+  addRowFrom:(el,e,a)=>{const i=el.parentNode.querySelector('input')||$('new_'+a),v=i.value,k=el.getAttribute('data-arg2');
+    if(v!==''){const p=k?addRow(a,v,k):addRow(a,v);if(!(p&&p.then))i.value=''}},   // signed in the box clears when the server answered (renderForms), so a refused value is not lost
+  ptLoad:()=>ptLoad(),
+  renderCases:()=>renderCases(),
+  newCase:()=>newCase(),
+  liveCheck:()=>liveCheck(),
+  codesUI:()=>codesUI(),
+  addCode:()=>addCode(),
+  buildBundle:()=>buildBundle(),
+  copyBundle:()=>copyBundle(),
+  dlBundle:()=>dlBundle(),
+  addNote:(el,e,a)=>addNote(a),
+  upgradeSet:(el,e,a)=>upgradeSet(a),
+  openCase:(el,e,a)=>openCase(a),
+  restoreCase:(el,e,a)=>restoreCase(a),
+  signNote:(el,e,a)=>signNote(a),
+  discardNote:(el,e,a)=>discardNote(a),
+  submitAmend:(el,e,a)=>submitAmend(a),
+  toggleAmend:(el,e,a)=>toggleAmend(a),
+  removeSet:(el,e,a)=>removeSet(a),
+  applySet:(el,e,a)=>applySet(a),
+  libImport:()=>libImport(),
+  libPwImport:()=>libPwImport(),
+  reviewApprove:(el,e,a)=>reviewDecide('approve',a),
+  reviewReject:(el,e,a)=>reviewDecide('reject',a),
+  reviewReload:()=>reviewLoad(),
+  verReload:()=>verLoad(),
+  verSubmit:(el,e,a)=>verSubmit(a),
+  verifyGenerated:()=>verifyGenerated(),
+  markRowError:(el,e,a)=>{const k=el.getAttribute('data-arg3'),i=Number(el.getAttribute('data-arg2'));return k?markRowError(a,i,k):markRowError(a,i)},
+  markValError:(el,e,a)=>markValError(a,el.getAttribute('data-arg2')),
+  toggleShowErr:(el)=>{SHOW_ERR=!!el.checked;renderForms()},
+  setVal:(el,e,a)=>{const k=el.getAttribute('data-arg2');return k?setVal(a,el.value,k):setVal(a,el.value)},
+  markUnknown:(el,e,a)=>obsSave(a,'',el.getAttribute('data-arg2'),true),
+  dlQ:(el,e,a)=>dlQ(a),
+  editCustom:(el,e,a)=>editCustom(a),
+  pickChanged:()=>pickChanged(),
+  pickNone:(el)=>pickNone(el),
+  polSysChange:(el)=>polRefresh(el.closest('.fblock')),
+  polChange:(el)=>polChange(el),
+  verifyRow:(el)=>verifyRow(el),
+  rmBind:(el)=>{const k=el.closest('.fblock');el.closest('.bind').remove();polRefresh(k)},
+  rmField:(el)=>el.closest('.fblock').remove(),
+  addBindRowIn:(el)=>addBindRow(el.closest('.fblock')),
+  srvLogout:()=>{srvLogout();return false},
+  ptOpenCase:(el,e,a)=>ptOpenCase(Number(a)),
+  ptOpenCaseLink:(el,e,a)=>{ptOpenCase(Number(a));return false},
+  ptArchive:(el,e,a)=>ptArchive(Number(a),el.getAttribute('data-arg2')==='true'),
+  ptRegisterAnyway:()=>ptRegister(true),
+  goPatients:()=>{document.querySelector('[data-t=patients]').click();return false},
+  encClose:(el,e,a)=>encClose(Number(a)),
+  encOpen:()=>encOpen(),
+  casesReload:()=>casesShow(),
+  caseSaveMeta:()=>caseSaveMeta(),
+  ctxDownload:()=>ctxDownload(),
+  ccisImportOpen:()=>$('ccis_file').click(),
+  ccisPick:(el)=>ccisPick(el),
+  ccisToggle:(el,e,a)=>{CCIS.open=CCIS.open===Number(a)?null:Number(a);renderCcis()},
+  ccisAck:(el,e,a)=>ccisAck(Number(a)),
+  conflictReload:()=>conflictReload(),
+  conflictKeep:()=>conflictKeep(),
+  importOpen:()=>importOpen(),
+  importPreview:(el,e,a)=>importPreview(a),
+  importSend:(el,e,a)=>importSend(a)
+};
+(()=>{
+  const MAP={click:['click'],change:['change'],input:['input'],keydown:['enter']};
+  for(const type of Object.keys(MAP))document.addEventListener(type,e=>{
+    const want=type==='keydown'?(e.key==='Enter'?'enter':null):type;
+    if(!want)return;
+    for(let el=e.target instanceof Element?e.target:null;el;el=el.parentElement){
+      const name=el.getAttribute('data-act');
+      if(name===null||(el.getAttribute('data-ev')||'click')!==want||!Object.hasOwn(ACT,name))continue;
+      if(el.disabled)return;
+      if(ACT[name](el,e,el.getAttribute('data-arg'))===false)e.preventDefault();
+      return;
+    }
+  });
+})();
