@@ -211,6 +211,12 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
           <span id="narSt" class="mu" role="status"></span>
         </div>
       </div>
+      <div class="cd" id="modeBar">
+        <b>View</b>
+        <span class="mu" style="margin:0 8px">Quick shows the short form of a long set; Detailed shows every question. Recorded answers are always shown.</span>
+        <button class="b sm" id="modeDetailed" data-act="setMode" data-arg="detailed" aria-pressed="true">Detailed</button>
+        <button class="b sm sec" id="modeQuick" data-act="setMode" data-arg="quick" aria-pressed="false">Quick</button>
+      </div>
       <div class="cd" id="ccPick">
         <b>Complaint</b>
         <div class="mu" style="margin:4px 0 8px">Pick what the patient came for; each adds a short set of history questions (no codes, doses or advice).</div>
@@ -429,6 +435,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 <script src="modules/54-adaptive.js"></script>
 <script src="modules/56-exam.js"></script>
 <script src="modules/58-assessment.js"></script>
+<script src="modules/59-mode.js"></script>
 <script src="modules/60-library.js"></script>
 <script src="modules/70-review.js"></script>
 <script src="modules/80-pins.js"></script>
@@ -1124,7 +1131,7 @@ function saveGenerated(){commitGenerated(false)}
 
 
 /* Render */
-function renderAll(){renderBanner();renderEncounter();renderApplied();renderLists();renderComplaints();renderExam();renderAP();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases();renderSrvCase()}
+function renderAll(){renderBanner();renderEncounter();renderApplied();renderLists();renderComplaints();renderExam();renderAP();renderMode();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases();renderSrvCase()}
 function renderApplied(){
   const box=$('appliedChips'),empty=$('appliedEmpty');box.innerHTML='';
   if(!CASE.applied.length){empty.style.display='block';return}
@@ -1212,9 +1219,9 @@ function renderForms(){
       <h3 style="margin:0">${escA(s.title)} <span class="kind ${escA(s.kind)}">${escA(s.kind)}</span>${s.generated?' <span class="mu">generated</span>':''}${sdcBadge(s)}${uncodedBadge(s)}</h3>
       <button class="b sec sm" data-act="removeSet" data-arg="${escA(s.id)}">Remove</button></div>
       <div class="mu" style="margin-bottom:8px">${escA(s.desc||'')}${a.fromPathway?' · via pathway'+(a.fromPathwayTitle?' '+escA(a.fromPathwayTitle):'')+(a.fromPathwayVersion?' v'+Number(a.fromPathwayVersion):''):''}${verNote(a)}</div>`;
-    let hid=0;
-    s.fields.forEach(f=>{if(adaptHidden(s,f,a)){hid++;return}html+=fieldHTML(f,a)});
-    html+=adaptNote(hid)+`</div>`;   // R1c: follow-up questions held back until an earlier answer asks for them
+    let hid=0,qh=0;
+    s.fields.forEach(f=>{if(adaptHidden(s,f,a)){hid++;return}if(modeHidden(s,f,a)){qh++;return}html+=fieldHTML(f,a)});   // R1f: Quick mode leaves recorded and unlisted-set questions alone (modules/59-mode.js)
+    html+=adaptNote(hid)+modeNote(qh)+`</div>`;   // R1c: follow-up questions held back until an earlier answer asks for them
 
   });
   area.innerHTML=html;

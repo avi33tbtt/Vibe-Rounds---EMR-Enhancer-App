@@ -10,6 +10,7 @@ const ACT={
   fillDx:(el)=>fillDx(el),
   ccFilter:(el)=>{CC.q=el.value;renderComplaints()},
   adaptAll:(el)=>{ADAPT_ALL.on=!!el.checked;renderForms()},
+  setMode:(el,e,arg)=>setMode(arg),
   generate:()=>generate(),
   importQ:()=>importQ(),
   loadQFile:(el)=>loadQFile(el),
