@@ -49,12 +49,16 @@ test('registry: required systems, shape, CPT present but off, no verifier => sta
   assert.equal(p.ev('CFG.txHost'), 'https://tx.fhir.org/r4');
 });
 
-test('built-in sets are migrated to bindings[] in memory', () => {
+test('built-in and demo sets ship with no licensed codes (R2f-4c): no coding, no binding in a licensed system', () => {
   const p = page();
   assert.equal(p.ev('BUILTIN.every(s=>s.fields.every(f=>!("coding" in f)))'), true);
-  const hr = p.ev('JSON.parse(JSON.stringify(getSet("vitals").fields.find(f=>f.id==="hr")))');
-  assert.equal(hr.bindings.length, 1);
-  assert.equal(hr.bindings[0].code, '8867-4');
+  const fields = JSON.parse(p.ev('JSON.stringify([...BUILTIN,DEMO_SNAKE,DEMO_DKA].flatMap(s=>s.fields||[]))'));
+  assert.ok(fields.length > 50, 'the shipped sets were found');
+  const LICENSED = ['snomed', 'loinc', 'icd10', 'icd11', 'rxnorm', 'atc', 'cpt'];
+  for (const f of fields) for (const b of (f.bindings || [])) assert.ok(!LICENSED.includes(b.system), `${f.id} carries a ${b.system} code`);
+  const hr = fields.find(f => f.id === 'hr');
+  assert.ok(hr && !hr.bindings, 'vitals heart rate is uncoded in the page');
+  assert.ok(!/coding:\{system:'(?:loinc|snomed)'/.test(HTML), 'no licensed coding literal left in the page source');
 });
 
 test('migration of stored data: single coding becomes a one-item list; nothing is lost; idempotent; original backed up', () => {

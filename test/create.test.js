@@ -117,12 +117,12 @@ test('generated bindings: only ticked systems survive, tagged llm, empty when un
   assert.equal(p.ev('bst(LAST_GENERATED.fields[3].bindings[0])'), 'unverified');   // code 1 not on the server
 });
 
-test('demo generation respects the picker too (and keeps bindings that the old code dropped)', async () => {
+test('demo generation respects the picker too; since R2f-4c the demo set ships uncoded (no licensed bindings)', async () => {
   const p = page({ store: { vr_set: JSON.stringify({ d: true }) } });
   p.w.eval('Object.assign(AI, { on: true, canUse: true, configured: true })');   // as the server would report it for a doctor
   p.$('gen_dx').value = 'Diabetic ketoacidosis'; await p.w.generate();
   const withDefault = p.ev('LAST_GENERATED').fields.reduce((n, f) => n + (f.bindings || []).length, 0);
-  assert.ok(withDefault > 0, 'default picker keeps SNOMED/LOINC demo bindings');
+  assert.equal(withDefault, 0, 'the demo DKA set carries no licensed bindings any more');
   assert.match(p.$('genSummary').textContent, /DKA|ketoacidosis/i);
   none(p); await p.w.generate();
   const set = p.ev('LAST_GENERATED');

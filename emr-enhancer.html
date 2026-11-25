@@ -567,36 +567,36 @@ const BUILTIN=[
    ]},
   {id:'vitals',kind:'care',title:'Vitals',desc:'Core vital signs (repeating)',
    fields:[
-     {id:'hr',label:'Heart rate',type:'integer',unit:'/min',repeat:true,coding:{system:'loinc',code:'8867-4',display:'Heart rate'}},
-     {id:'bp_sys',label:'Systolic BP',type:'integer',unit:'mmHg',repeat:true,coding:{system:'loinc',code:'8480-6',display:'Systolic blood pressure'}},
-     {id:'bp_dia',label:'Diastolic BP',type:'integer',unit:'mmHg',repeat:true,coding:{system:'loinc',code:'8462-4',display:'Diastolic blood pressure'}},
-     {id:'rr',label:'Respiratory rate',type:'integer',unit:'/min',repeat:true,coding:{system:'loinc',code:'9279-1',display:'Respiratory rate'}},
-     {id:'temp',label:'Temperature',type:'number',unit:'°C',repeat:true,coding:{system:'loinc',code:'8310-5',display:'Body temperature'}},
-     {id:'spo2',label:'SpO₂',type:'integer',unit:'%',repeat:true,coding:{system:'loinc',code:'2708-6',display:'Oxygen saturation in Arterial blood'}}
+     {id:'hr',label:'Heart rate',type:'integer',unit:'/min',repeat:true},
+     {id:'bp_sys',label:'Systolic BP',type:'integer',unit:'mmHg',repeat:true},
+     {id:'bp_dia',label:'Diastolic BP',type:'integer',unit:'mmHg',repeat:true},
+     {id:'rr',label:'Respiratory rate',type:'integer',unit:'/min',repeat:true},
+     {id:'temp',label:'Temperature',type:'number',unit:'°C',repeat:true},
+     {id:'spo2',label:'SpO₂',type:'integer',unit:'%',repeat:true}
    ]},
   {id:'urine_io',kind:'care',title:'Urine Input / Output',desc:'Fluid balance',
    fields:[
-     {id:'intake',label:'Total intake (24h)',type:'integer',unit:'mL',coding:{system:'loinc',code:'9257-7',display:'Fluid intake 24 hour'}},
-     {id:'output',label:'Total urine output (24h)',type:'integer',unit:'mL',coding:{system:'loinc',code:'9187-6',display:'Urine output 24 hour'}},
+     {id:'intake',label:'Total intake (24h)',type:'integer',unit:'mL'},
+     {id:'output',label:'Total urine output (24h)',type:'integer',unit:'mL'},
      {id:'balance',label:'Net balance',type:'integer',unit:'mL',derived:true},
      {id:'catheter',label:'Catheter in situ',type:'boolean'},
      {id:'io_notes',label:'Notes',type:'text'}
    ]},
   {id:'glucose_ss',kind:'care',title:'Glucose & Sliding Scale',desc:'POC glucose (repeating) + dose',
    fields:[
-     {id:'glu',label:'Capillary glucose',type:'number',unit:'mg/dL',repeat:true,coding:{system:'loinc',code:'2339-0',display:'Glucose [Mass/volume] in Blood'}},
+     {id:'glu',label:'Capillary glucose',type:'number',unit:'mg/dL',repeat:true},
      {id:'ss_dose',label:'Sliding-scale dose given',type:'integer',unit:'units'},
      {id:'ss_notes',label:'Notes / band used',type:'text'}
    ]},
   {id:'hba1c_mon',kind:'care',title:'HbA1c Monitoring',desc:'Glycaemic control',
    fields:[
-     {id:'hba1c',label:'Latest HbA1c',type:'number',unit:'%',coding:{system:'loinc',code:'4548-4',display:'Hemoglobin A1c/Hemoglobin.total in Blood'}},
+     {id:'hba1c',label:'Latest HbA1c',type:'number',unit:'%'},
      {id:'hba1c_date',label:'Date of result',type:'datetime'},
      {id:'target',label:'Target range',type:'text'}
    ]},
   {id:'dm_ctx',kind:'disease',title:'Diabetes Mellitus context',desc:'DM disease fields',
    fields:[
-     {id:'dm_type',label:'Type',type:'select',options:['T1DM','T2DM','Other'],coding:{system:'snomed',code:'73211009',display:'Diabetes mellitus'}},
+     {id:'dm_type',label:'Type',type:'select',options:['T1DM','T2DM','Other']},
      {id:'dm_duration',label:'Duration (years)',type:'number'},
      {id:'dm_meds',label:'Current anti-diabetic regimen',type:'text'},
      {id:'dm_comp',label:'Known complications',type:'text'},
@@ -604,9 +604,9 @@ const BUILTIN=[
    ]},
   {id:'ckd_ctx',kind:'disease',title:'CKD context',desc:'Chronic kidney disease',
    fields:[
-     {id:'ckd_stage',label:'CKD stage',type:'select',options:['1','2','3a','3b','4','5'],coding:{system:'snomed',code:'709044004',display:'Chronic kidney disease'}},
-     {id:'egfr',label:'eGFR',type:'number',unit:'mL/min/1.73m²',coding:{system:'loinc',code:'33914-3',display:'Glomerular filtration rate/1.73 sq M.predicted'}},
-     {id:'creat',label:'Creatinine',type:'number',unit:'mg/dL',coding:{system:'loinc',code:'2160-0',display:'Creatinine [Mass/volume] in Serum or Plasma'}},
+     {id:'ckd_stage',label:'CKD stage',type:'select',options:['1','2','3a','3b','4','5']},
+     {id:'egfr',label:'eGFR',type:'number',unit:'mL/min/1.73m²'},
+     {id:'creat',label:'Creatinine',type:'number',unit:'mg/dL'},
      {id:'ckd_cause',label:'Aetiology',type:'text'},
      {id:'renal_diet',label:'Renal diet / restrictions',type:'text'}
    ]},
@@ -623,10 +623,10 @@ const BUILTIN=[
    fields:[
      {id:'dka_arr',label:'ED arrival',type:'datetime'},
      {id:'dka_ins',label:'Insulin start',type:'datetime'},
-     {id:'dka_glu',label:'Glucose at presentation',type:'number',unit:'mg/dL',coding:{system:'loinc',code:'2339-0',display:'Glucose [Mass/volume] in Blood'}},
-     {id:'dka_ph',label:'Venous pH',type:'number',coding:{system:'loinc',code:'2744-1',display:'pH of Venous blood'}},
-     {id:'dka_hco3',label:'Bicarbonate',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'1963-8',display:'Bicarbonate [Moles/volume] in Serum or Plasma'}},
-     {id:'dka_k',label:'K⁺ before insulin',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'2823-3',display:'Potassium [Moles/volume] in Serum or Plasma'}}
+     {id:'dka_glu',label:'Glucose at presentation',type:'number',unit:'mg/dL'},
+     {id:'dka_ph',label:'Venous pH',type:'number'},
+     {id:'dka_hco3',label:'Bicarbonate',type:'number',unit:'mmol/L'},
+     {id:'dka_k',label:'K⁺ before insulin',type:'number',unit:'mmol/L'}
    ]},
   {id:'snake_ctx',kind:'disease',title:'Snake Envenomation',desc:'Time-critical + severity',
    fields:[
@@ -742,8 +742,8 @@ const DEMO_SNAKE={id:'gen_snake',kind:'disease',title:'Snake envenomation (hemot
 const DEMO_DKA={id:'gen_dka',kind:'disease',title:'Diabetic ketoacidosis',desc:'Demo schema',
   fields:[
     {id:'arr',label:'ED arrival',type:'datetime'},{id:'ins',label:'Insulin start',type:'datetime'},
-    {id:'glu',label:'Glucose',type:'number',unit:'mg/dL',coding:{system:'loinc',code:'2339-0',display:'Glucose [Mass/volume] in Blood'}},{id:'ph',label:'Venous pH',type:'number',coding:{system:'loinc',code:'2746-6',display:'pH of Venous blood'}},
-    {id:'hco3',label:'Bicarbonate',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'1963-8',display:'Bicarbonate [Moles/volume] in Serum or Plasma'}},{id:'k',label:'K⁺ before insulin',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'2823-3',display:'Potassium [Moles/volume] in Serum or Plasma'}},
+    {id:'glu',label:'Glucose',type:'number',unit:'mg/dL'},{id:'ph',label:'Venous pH',type:'number'},
+    {id:'hco3',label:'Bicarbonate',type:'number',unit:'mmol/L'},{id:'k',label:'K⁺ before insulin',type:'number',unit:'mmol/L'},
     {id:'out',label:'Outcome',type:'select',options:['Recovered','ICU stay','Death']}
   ]};
 BUILTIN.push(...COMPLAINT_SETS);   // R1a: OPD complaint sets (modules/52-complaints.js)
