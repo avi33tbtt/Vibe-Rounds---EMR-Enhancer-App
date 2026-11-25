@@ -78,6 +78,10 @@ test('every table is classified, and every clinical table refuses DELETE', async
   assert.equal((await d.post(`/api/local-terms/${kt.body.term.id}/submit`, {})).status, 200);
   assert.equal((await inf.post(`/api/local-terms/${kt.body.term.id}/approve`, { reason: 'Keep term review' })).status, 200);
 
+  // one problem with its first history row: the problem tables have rows to protect too (task R3a-1)
+  const kp = await a.post(`/api/patients/${p.body.patient.id}/problems`, { label: 'Keep problem' });
+  assert.equal(kp.status, 201, JSON.stringify(kp.body));
+
   for (const t of CLINICAL) {
     const n = Number((await env.pool.query(`SELECT count(*) n FROM ${t}`)).rows[0].n);
     assert.ok(n > 0, `${t} has rows to protect`);
@@ -118,6 +122,7 @@ test('patients and encounters refuse TRUNCATE even for the owner connection (tri
     await c.query('BEGIN');
     await c.query('ALTER TABLE encounters DROP CONSTRAINT encounters_patient_id_fkey');
     await c.query('ALTER TABLE clinical_cases DROP CONSTRAINT clinical_cases_patient_id_fkey');   // cases also reference patients (B1a)
+    await c.query('ALTER TABLE patient_problems DROP CONSTRAINT patient_problems_patient_id_fkey');   // problems also reference patients (R3a-1)
     await assert.rejects(c.query('TRUNCATE patients'), /patients is append-only; TRUNCATE is not allowed/);
   } finally { await c.query('ROLLBACK'); }
   try {   // same proof for encounters: drop the case link's foreign key (a failed statement aborts a transaction, so this is a second one)
