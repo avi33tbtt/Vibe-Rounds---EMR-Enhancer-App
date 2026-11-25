@@ -111,7 +111,7 @@ async function invSend(path,body,key,msg,clear,oid){
   INV.busy=true;renderInvest();
   const r=await api('POST',path,body);
   INV.busy=false;if(!invOk(pid))return;
-  if(r.status===200||r.status===201){clear.forEach(invClear);INV.cor=null;if(oid)INV.open[oid]=true;toast(msg);await invLoad();return}
+  if(r.status===200||r.status===201){clear.forEach(invClear);INV.cor=null;if(oid)INV.open[oid]=true;toast(msg);await invLoad();abnLoad();return}
   INV.err[key]=apiMsg(r);
   if(r.status===409)await invLoad();else renderInvest();
 }

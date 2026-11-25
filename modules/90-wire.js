@@ -105,6 +105,8 @@ const ACT={
   invCorOpen:(el,e,a)=>invCorOpen(a),
   invCorCancel:()=>invCorCancel(),
   invCorSave:(el,e,a)=>invCorSave(a),
+  abnReload:()=>abnLoad(),
+  abnAck:(el,e,a)=>abnAck(a),
   timelineReload:()=>{tlKeep();timelineLoad(false)},
   timelineMore:()=>timelineLoad(true),
   timelineErrors:(el)=>{TL.errs=!!el.checked;tlKeep();timelineLoad(false)},
