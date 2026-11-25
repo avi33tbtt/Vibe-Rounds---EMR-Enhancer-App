@@ -12,9 +12,9 @@ const mod = fs.readFileSync(path.join(__dirname, '..', 'modules', '80-pins.js'),
 const NAMES = ['pinDef', 'pinsLoad', 'pinPost', 'applySetSrv', 'applyPathwaySrv', 'removeSetSrv', 'upgradeSrv'];
 const CONSTS = ['pinEntry'];
 
-test('80-pins.js loads after 78-allergies.js and before the inline script; none of it is inline any more', () => {
+test('80-pins.js loads after 79-medications.js and before the inline script; none of it is inline any more', () => {
   const l = localScripts();
-  assert.equal(l.indexOf('modules/80-pins.js'), l.indexOf('modules/78-allergies.js') + 1, l.join(', '));
+  assert.equal(l.indexOf('modules/80-pins.js'), l.indexOf('modules/79-medications.js') + 1, l.join(', '));
   assert.ok(l.indexOf('modules/80-pins.js') < l.indexOf('modules/90-wire.js'));
   const inline = raw.slice(raw.indexOf('<script>'));
   for (const n of NAMES) {
