@@ -41,6 +41,10 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 
 ---
 
+**2026-11-25 (owner decision: local terms only).** No licensed terminology system (ICD, LOINC, SNOMED CT or similar) is loaded, shipped or demoed for now, so there is no licence to check. Rows R2a to R2e are `SKIPPED`; R2f is split into R2f-1 to R2f-5 and gives a free, in-house vocabulary (system key `local`) with the same review rules as element sets. The earlier code-system registry (chunk 02) stays in the page as it was; nothing in the demo or the new rows depends on it. If a licensed system is wanted later, add a new row then and do the licence check first.
+
+---
+
 **Added 2026-11-25 (R9 explorer).** Rows R9a to R9k come from `chunk-R9-contextual-longitudinal-explorer.md` and stay `LOCKED` until R3h is `DONE`. They reuse R3g/R3h instead of repeating them (chunk step R9.3 is folded into R3g/R3h). Every new route updates the permission matrix and audit tests on purpose. Context impact of all R9 rows: none (existing envelope and records only); if R3 adds envelope sections, agree the schema version with CCIS first. R8a (workflow tests) and R8d (safety case) must include the R9 path.
 
 ---
@@ -152,13 +156,18 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | R1d | chunk-R1d-examination-fields.md | Structured examination fields | DONE | 2026-11-25 | set definitions + page + test | modules/56-exam.js, page, library import, chunk, exam-page test, 3 tests edited. 5 `ex_` sets; text kept out of envelope. 457 tests pass, 0 skipped. Browser not tried. R1e next. |
 | R1e | chunk-R1e-assessment-plan.md | Assessment and plan block (free text and optional verified code) | DONE | 2026-11-25 | page + 1 test file | modules/58-assessment.js, page, library import, chunk, assessment-page test, 3 tests edited. One `ap_block` set; text kept out of envelope; code field waits for R2e. 466 tests pass. R1f next. |
 | R1f | chunk-R1f-quick-detailed-mode.md | Quick and detailed mode switch | DONE | 2026-11-25 | page + 1 test file | modules/59-mode.js, page, wire, chunk, mode-page test, 2 tests edited. Quick mode on opd_visit only (13 of 22); recorded data never hidden. 476 tests pass. Browser not tried. R2a is YOUR task. |
-| R2 | (written when reached) | B. Terminology: server code search and verification, LOINC/ICD bindings, local terms, versions | SPLIT | 2026-11-23 |  | Replaced by R2a to R2f. Still LOCKED. |
-| R2a | 04-demo-and-roadmap.md (R brief) | YOUR task: terminology licence check (ICD, LOINC, local terms) | TODO |  | none | Gate. Nothing in R2b onward starts before you confirm. |
-| R2b | 04-demo-and-roadmap.md (R brief) | Migration: terminology systems, versions, concepts (no DELETE); loader script for a small licensed or open sample | LOCKED |  | 1 migration + 1 script + tests |  |
-| R2c | 04-demo-and-roadmap.md (R brief) | Server routes: search and verify (code exists AND display matches); matrix and audit tests | LOCKED |  | 1 routes file + tests | Context impact: bindings carry version. |
-| R2d | 04-demo-and-roadmap.md (R brief) | Lint accepts server-verified codes; restore codes on demo glucose, DKA, vitals sets via new versions | LOCKED |  | lint + sets + tests | Fixes the "lost codes on import" open item. |
-| R2e | 04-demo-and-roadmap.md (R brief) | Page code picker uses the server; unverified never exported | LOCKED |  | page + 1 test file |  |
-| R2f | 04-demo-and-roadmap.md (R brief) | Local terms: add, review, publish (admin and informatician rules as sets) | LOCKED |  | 1 migration + routes + tests |  |
+| R2 | (written when reached) | B. Terminology: LOCAL TERMS ONLY (free). Licensed systems (ICD, LOINC, SNOMED) are not used | SPLIT | 2026-11-23 |  | Replaced by R2a to R2f. 2026-11-25: R2a to R2e SKIPPED by owner decision; only the local-terms rows R2f-1 to R2f-5 remain. |
+| R2a | 04-demo-and-roadmap.md (R brief) | YOUR task: terminology licence check (ICD, LOINC, local terms) | SKIPPED | 2026-11-25 | none | Owner decision: no ICD, LOINC or SNOMED for now, so no licence check. Local terms are our own and need no licence. |
+| R2b | 04-demo-and-roadmap.md (R brief) | Migration: terminology systems, versions, concepts; loader for a licensed or open sample | SKIPPED | 2026-11-25 | 1 migration + 1 script + tests | Replaced by migration 016 `local_terms` (R2f-1). No loader, no licensed sample. |
+| R2c | 04-demo-and-roadmap.md (R brief) | Server routes: search and verify against licensed systems | SKIPPED | 2026-11-25 | 1 routes file + tests | Local search and verify come in R2f-4. |
+| R2d | 04-demo-and-roadmap.md (R brief) | Lint accepts server-verified codes; restore codes on demo sets | SKIPPED | 2026-11-25 | lint + sets + tests | Replaced by R2f-4 (local codes only, via new set versions). |
+| R2e | 04-demo-and-roadmap.md (R brief) | Page code picker uses the server | SKIPPED | 2026-11-25 | page + 1 test file | Replaced by R2f-5 (local term picker). R1e code field waits for it. |
+| R2f | 04-demo-and-roadmap.md (R brief) | Local terms: add, review, publish (admin and informatician rules as sets) | SPLIT | 2026-11-25 |  | Replaced by R2f-1 to R2f-5: migration, review workflow, examples, verification and page are five separate pieces. |
+| R2f-1 | (this row; no chunk file) | Local terms server, part 1: migration 016 `local_terms` (versioned, no delete), `POST /api/local-terms` (draft), list and get; permissions `terms:read`, `terms:write`; matrix and audit tests | DONE | 2026-11-25 | 1 migration + 1 routes file + 2 test files | local-terms.js, migration 016, permissions, app, 3 test files, DECISIONS. 485 tests, 3 skipped (no Chrome). 3 breakages seen. Browser not tried. R2f-2 next. |
+| R2f-2 | chunk-R2f-2-term-review.md | Local terms review workflow: submit, approve or reject with reason, publish (admin), retire; same rules as sets (author never reviews, one reject ends it); append-only review table; UPDATE grant added now | DONE | 2026-11-25 | 1 migration + routes + 2 test files | migration 017, local-terms.js, permissions, chunk, 3 test files, DECISIONS. 493 tests, 3 skipped (no Chrome). 3 breakages seen. Browser not tried. R2f-3 next. |
+| R2f-3 | (write chunk file first) | Example local terms: small synthetic set (findings, tests, conditions for the demo sets), created through the real routes, published by script; `terms:seed` and `terms:reset` (reset retires) | TODO |  | 1 script + 1 test file | Examples are ours, no external vocabulary copied. Not clinical content: display words only, no thresholds. |
+| R2f-4 | (write chunk file first) | Verify against local terms: system key `local`; a code is verified only if a PUBLISHED version has that code and the same display; server lint uses it; restore codes on demo glucose, DKA and vitals sets via new versions | LOCKED |  | lint + review.js + sets + tests | Needs R2f-3. Bindings carry the term version. Context impact: bindings carry `local` and version; agree with CCIS before the envelope exports any. |
+| R2f-5 | (write chunk file first) | Page: Local terms screen (list, add, submit, review, publish) and a local term picker in the code field; unverified never exported | LOCKED |  | page module + 1 test file | Needs R2f-4. Also unblocks the R1e optional code field. |
 | R3 | (written when reached) | D. Longitudinal record: problems, allergies, medication history, results, timeline | SPLIT | 2026-11-23 |  | Replaced by R3a to R3i. Still LOCKED. |
 | R3a | 04-demo-and-roadmap.md (R brief) | Problems: migration + routes (add, resolve with reason, entered-in-error; no delete) | LOCKED |  | 1 migration + 1 routes file + tests |  |
 | R3b | 04-demo-and-roadmap.md (R brief) | Problems in the page | LOCKED |  | page + 1 test file |  |
@@ -243,7 +252,7 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - For 7c: perform the restore on a clean machine yourself and confirm the result.
 - Review and approve: the B0 mapping (before B1). CCIS approvals (R0, limitations review) are tracked in the CCIS tracker.
 - Name a clinician owner for any clinical rule content (thresholds, bands, medication safety, staging): see the CCIS tracker.
-- Check terminology licences and device-software/health-data rules (go-live gate).
+- Check device-software/health-data rules (go-live gate). Terminology licences are not needed while only local terms are used; check them first if ICD, LOINC or SNOMED is ever added.
 
 ## KNOWN GAPS (0 `test.todo` tests left) and where they are fixed
 (a) signer/author: page now uses the session (8e, done); server enforcement done in B3c-1. (b) observation rows: page no longer deletes them (8f, done); server now refuses rewrites and deletes (B3a, done); page wiring done in B3b-2 and B3b-3. (c) closed by 6c. (d) signed-note immutability and stale-version conflicts only in the page; element sets, cases and notes are not stored on the server -> DECIDED 2026-11-22: full server storage is now planned (B1 to B4); notes in B3c (server B3c-1, page B3c-2, both done); both todos (a) and (d) are now real tests. (e) `GET /api/patients/:id/encounters` not audited -> left as is.
@@ -265,7 +274,7 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - Resolved 2026-11-22: CCIS lives in its own repo (Vibe-Rounds---CCIS). The snake-envenomation parameter owner question is now tracked there.
 - Which clinician owns the snake-envenomation parameters used by the slice?
 - Resolved 2026-11-22 (8c-2): publish and retire stay admin-only; informaticians review only.
-- Demo sets glucose, DKA and vitals lost their codes on import (the server cannot verify codes, review refuses unverified ones). Add codes in a later version once a server verifier exists.
+- Demo sets glucose, DKA and vitals lost their codes on import (the server cannot verify codes, review refuses unverified ones). Will be fixed with LOCAL codes in R2f-4 (no licensed code system is planned).
 - Resolved 2026-11-23 (B3b-2, default used): blank does nothing on the server in a signed-in case; the page offers `Unknown` (explicit unknown). `Entered in error` for values comes in B3b-3.
 - Done in B3b-2: two sets that share a field id (glu, wbct, swell, arr, out) no longer share one value; each set keeps its own, as B0 section 5 says.
 - Adding any API route makes `test/safety-routes.test.js` fail until the permission matrix there is updated on purpose.

@@ -55,6 +55,14 @@ const MATRIX = {
   'POST /api/notes/:id/discard':    { guard: 'cases:write' },
   'POST /api/notes/:id/sign':       { guard: 'cases:write' },
   'POST /api/notes/:id/amend':      { guard: 'cases:write' },
+  'GET /api/local-terms':           { guard: 'terms:read' },
+  'POST /api/local-terms':          { guard: 'terms:write' },
+  'GET /api/local-terms/:id':       { guard: 'terms:read' },
+  'POST /api/local-terms/:id/submit':  { guard: 'terms:submit' },
+  'POST /api/local-terms/:id/approve': { guard: 'terms:review' },
+  'POST /api/local-terms/:id/reject':  { guard: 'terms:review' },
+  'POST /api/local-terms/:id/publish': { guard: 'terms:publish' },
+  'POST /api/local-terms/:id/retire':  { guard: 'terms:publish' },
   'GET /api/element-sets':          { guard: 'sets:read' },
   'POST /api/element-sets':         { guard: 'sets:write' },
   'GET /api/element-sets/:id':      { guard: 'sets:read' },
@@ -92,6 +100,11 @@ const EXPECTED_ROLES = {
   'sets:submit':       ['admin', 'doctor'],
   'sets:review':       ['informatician'],
   'sets:publish':      ['admin'],
+  'terms:read':        ['admin', 'doctor', 'nurse', 'viewer', 'informatician'],
+  'terms:write':       ['admin', 'doctor'],
+  'terms:submit':      ['admin', 'doctor'],
+  'terms:review':      ['informatician'],
+  'terms:publish':     ['admin'],
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],
   'ccis:import':       ['admin', 'doctor'],
@@ -336,6 +349,33 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal(k.status, 201, JSON.stringify(k.body));
         const r = await nurse.c.post(`/api/cases/${k.body.case.id}/applied-pathways`, { pathwayId: S.pwId, version: 1 });
         assert.equal(r.status, 201, JSON.stringify(r.body)); return ['case.pathway_apply'];
+      }],
+      ['POST /api/local-terms', doctor, async () => {              // R2f-1: a draft local term (audited with its code and version)
+        const r = await doctor.c.post('/api/local-terms', { code: 'audit.term', display: 'Audit term' });
+        assert.equal(r.status, 201, JSON.stringify(r.body)); return ['term.create'];
+      }],
+      ['POST /api/local-terms/:id/submit', doctor, async () => {   // R2f-2: the whole local-term path, one scenario per route
+        S.tid = (await doctor.c.post('/api/local-terms', { code: 'audit.flow', display: 'Audit flow' })).body.term.id;
+        const r = await doctor.c.post(`/api/local-terms/${S.tid}/submit`, {});
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['term.create', 'term.submit'];
+      }],
+      ['POST /api/local-terms/:id/approve', reviewer, async () => {
+        const r = await reviewer.c.post(`/api/local-terms/${S.tid}/approve`, { reason: 'Audit approval' });
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['term.approve'];
+      }],
+      ['POST /api/local-terms/:id/reject', reviewer, async () => {
+        const t = (await doctor.c.post('/api/local-terms', { code: 'audit.rej', display: 'Audit reject' })).body.term.id;
+        assert.equal((await doctor.c.post(`/api/local-terms/${t}/submit`, {})).status, 200);
+        const r = await reviewer.c.post(`/api/local-terms/${t}/reject`, { reason: 'Audit rejection' });
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['term.reject'];
+      }],
+      ['POST /api/local-terms/:id/publish', admin, async () => {
+        const r = await admin.c.post(`/api/local-terms/${S.tid}/publish`, {});
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['term.publish'];
+      }],
+      ['POST /api/local-terms/:id/retire', admin, async () => {
+        const r = await admin.c.post(`/api/local-terms/${S.tid}/retire`, {});
+        assert.equal(r.status, 200, JSON.stringify(r.body)); return ['term.retire'];
       }],
       ['POST /api/cases/:id/ccis-runs', doctor, async () => {       // DM2a: needs a real export of the same case; the body is a CCIS record, so unknown keys are refused (no `...fake`)
         const k = await caseWithExport(doctor.c, aenv.pool);

@@ -17,7 +17,7 @@ test.after(async () => { await env.close(); });
 
 // ---------- database ----------
 // Every table must be listed here. A new table fails this test until someone decides which kind it is.
-const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events', 'case_notes', 'case_note_amendments', 'pathways', 'pathway_versions', 'pathway_version_steps', 'case_applied_pathways', 'context_exports', 'ccis_runs', 'ccis_run_acks'];        // never deleted: rows are archived, closed, appended or retired
+const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events', 'case_notes', 'case_note_amendments', 'pathways', 'pathway_versions', 'pathway_version_steps', 'case_applied_pathways', 'context_exports', 'ccis_runs', 'ccis_run_acks', 'local_terms', 'local_term_reviews'];        // never deleted: rows are archived, closed, appended or retired
 const NOT_CLINICAL = ['users', 'sessions', 'schema_migrations', 'ai_settings'];   // accounts, logins, bookkeeping, settings
 
 test('every table is classified, and every clinical table refuses DELETE', async () => {
@@ -70,6 +70,13 @@ test('every table is classified, and every clinical table refuses DELETE', async
   const run = await d.post(`/api/cases/${kc.body.case.id}/ccis-runs`, runRecord(ex));
   assert.equal(run.status, 201, JSON.stringify(run.body));
   assert.equal((await d.post(`/api/ccis-runs/${run.body.run.id}/ack`, {})).status, 201);
+
+  // one local term draft: the vocabulary table has a row to protect too (task R2f-1)
+  const kt = await d.post('/api/local-terms', { code: 'keep.term', display: 'Keep term' });
+  assert.equal(kt.status, 201);
+  // submitted and approved: the term review table has a row to protect too (task R2f-2)
+  assert.equal((await d.post(`/api/local-terms/${kt.body.term.id}/submit`, {})).status, 200);
+  assert.equal((await inf.post(`/api/local-terms/${kt.body.term.id}/approve`, { reason: 'Keep term review' })).status, 200);
 
   for (const t of CLINICAL) {
     const n = Number((await env.pool.query(`SELECT count(*) n FROM ${t}`)).rows[0].n);

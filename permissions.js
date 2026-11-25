@@ -12,6 +12,11 @@ const PERMS = {
   'sets:submit':       ['admin', 'doctor'],                      // submit a draft version for review (8b)
   'sets:review':       ['informatician'],                        // approve or reject a version in review (8c); not the author or submitter (checked per version)
   'sets:publish':      ['admin'],                                // publish an APPROVED version and retire a version; reviewers (informatician) cannot publish (8c-2 decision)
+  'terms:read':        ['admin', 'doctor', 'nurse', 'viewer', 'informatician'],   // local terms (R2f): free in-house vocabulary, read
+  'terms:write':       ['admin', 'doctor'],                      // add a draft local term or a new version of one (R2f-1)
+  'terms:submit':      ['admin', 'doctor'],                      // submit a draft local term for review (R2f-2)
+  'terms:review':      ['informatician'],                        // approve or reject a local term in review; never its author or submitter (R2f-2)
+  'terms:publish':     ['admin'],                                // publish an approved local term and retire one (R2f-2)
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],   // the de-identified context envelope for CCIS (B5); no nurse, viewer or informatician
   'ccis:import':       ['admin', 'doctor'],   // import a CCIS run record made from an envelope exported for the same case (DM2a)
