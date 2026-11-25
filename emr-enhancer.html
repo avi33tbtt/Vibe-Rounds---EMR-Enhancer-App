@@ -282,6 +282,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
       <h3>Medication orders</h3>
       <div id="ordersBox"></div>
       <div id="reconcileBox"></div>
+      <div id="invBox"></div>
     </div>
 
     <!-- MEDICATION HISTORY (R3f) -->
@@ -492,6 +493,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 <script src="modules/86-values.js"></script>
 <script src="modules/87-orders.js"></script>
 <script src="modules/88-reconcile.js"></script>
+<script src="modules/89-investigations.js"></script>
 <script src="modules/90-wire.js"></script>
 <script>
 
@@ -1657,7 +1659,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     if(b.dataset.t==='problems')problemsLoad();
     if(b.dataset.t==='allergies')allergiesLoad();
     if(b.dataset.t==='medications')medicationsLoad();
-    if(b.dataset.t==='orders'){ordersLoad();reconcileLoad()}
+    if(b.dataset.t==='orders'){ordersLoad();reconcileLoad();invLoad()}
     if(b.dataset.t==='timeline')timelineLoad();
     if(b.dataset.t==='create')renderCustomList();
     if(b.dataset.t==='codes')codesUI();

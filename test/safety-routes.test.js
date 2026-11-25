@@ -88,6 +88,8 @@ const MATRIX = {
   'POST /api/investigation-orders/:id/specimens': { guard: 'results:write' },
   'POST /api/investigation-orders/:id/results': { guard: 'results:write' },
   'POST /api/investigation-results/:id/correct': { guard: 'results:write' },
+  'GET /api/patients/:id/abnormal-results': { guard: 'results:read' },
+  'POST /api/investigation-results/:id/acknowledge': { guard: 'results:ack' },
   'GET /api/local-terms':           { guard: 'terms:read' },
   'POST /api/local-terms':          { guard: 'terms:write' },
   'GET /api/local-terms/:id':       { guard: 'terms:read' },
@@ -148,6 +150,7 @@ const EXPECTED_ROLES = {
   'orders:write':      ['admin', 'doctor'],
   'results:read':      ['admin', 'doctor', 'nurse', 'viewer'],
   'results:write':     ['admin', 'doctor', 'nurse'],
+  'results:ack':       ['admin', 'doctor'],
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],
   'ccis:import':       ['admin', 'doctor'],
@@ -574,6 +577,13 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal((await nurse.c.post(`/api/investigation-results/${S.irrid}/correct`, { valueText: 'v2', reason: 'Audit correct', ...fake })).status, 400, 'a body that names a user is refused');
         const ok = await nurse.c.post(`/api/investigation-results/${S.irrid}/correct`, { valueText: 'v2', reason: 'Audit correct' });
         assert.equal(ok.status, 201, JSON.stringify(ok.body)); return ['investigation_result.correct'];
+      }],
+      ['POST /api/investigation-results/:id/acknowledge', doctor, async () => {
+        const r = await doctor.c.post(`/api/investigation-orders/${S.irid}/results`, { valueText: 'Audit abnormal', flag: 'abnormal' });
+        assert.equal(r.status, 201, JSON.stringify(r.body));
+        assert.equal((await doctor.c.post(`/api/investigation-results/${r.body.result.id}/acknowledge`, { note: 'Audit note', ...fake })).status, 400, 'a body that names a user is refused');
+        const ok = await doctor.c.post(`/api/investigation-results/${r.body.result.id}/acknowledge`, { note: 'Audit note' });
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); return ['investigation_result.add', 'investigation_result.acknowledge'];
       }],
       ['POST /api/investigation-orders/:id/entered-in-error', doctor, async () => {
         const ok = await doctor.c.post(`/api/investigation-orders/${S.ioid}/entered-in-error`, { reason: 'Audit error', rowVersion: 2 });

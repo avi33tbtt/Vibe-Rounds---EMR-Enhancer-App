@@ -27,6 +27,7 @@ const PERMS = {
   'orders:write':      ['admin', 'doctor'],                       // order, change with reason, stop, mark entered in error (R4b)
   'results:read':      ['admin', 'doctor', 'nurse', 'viewer'],   // specimens and results of investigation orders (R4f)
   'results:write':     ['admin', 'doctor', 'nurse'],              // record a specimen or a result; correct a result with a reason (R4f)
+  'results:ack':       ['admin', 'doctor'],                       // acknowledge a result flagged abnormal (R4g-1)
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],   // the de-identified context envelope for CCIS (B5); no nurse, viewer or informatician
   'ccis:import':       ['admin', 'doctor'],   // import a CCIS run record made from an envelope exported for the same case (DM2a)

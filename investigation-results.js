@@ -35,7 +35,10 @@ function resultFields(b) {
 function mountInvestigationResults(app, pool) {
   const SPEC = `s.id, s.order_id, s.specimen_type, s.collected_at, u.username AS recorded_by, s.recorded_at`;
   const RES = `r.id, r.order_id, r.specimen_id, r.value_text, r.unit_text, r.reference_text, r.flag, r.replaces_result_id, r.correction_reason, u.username AS recorded_by, r.recorded_at,
-               EXISTS (SELECT 1 FROM investigation_results n WHERE n.replaces_result_id = r.id) AS replaced`;
+               EXISTS (SELECT 1 FROM investigation_results n WHERE n.replaces_result_id = r.id) AS replaced,
+               (SELECT au.username FROM investigation_result_acks a JOIN users au ON au.id = a.acknowledged_by WHERE a.result_id = r.id) AS acknowledged_by,
+               (SELECT a.acknowledged_at FROM investigation_result_acks a WHERE a.result_id = r.id) AS acknowledged_at,
+               (SELECT a.note FROM investigation_result_acks a WHERE a.result_id = r.id) AS ack_note`;
   const specimens = (c, oid) => c.query(`SELECT ${SPEC} FROM investigation_specimens s JOIN users u ON u.id = s.recorded_by WHERE s.order_id = $1 ORDER BY s.id`, [oid]).then(r => r.rows);
   const results = (c, oid) => c.query(`SELECT ${RES} FROM investigation_results r JOIN users u ON u.id = r.recorded_by WHERE r.order_id = $1 ORDER BY r.id`, [oid]).then(r => r.rows);
   const oneResult = (c, id) => c.query(`SELECT ${RES} FROM investigation_results r JOIN users u ON u.id = r.recorded_by WHERE r.id = $1`, [id]).then(r => r.rows[0]);

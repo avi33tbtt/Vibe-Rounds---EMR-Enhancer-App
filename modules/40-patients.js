@@ -3,7 +3,7 @@
 function renderWho(){
   if(!Srv.user)Object.assign(AI,{on:false,configured:false,canUse:false,admin:null,left:null});
   $('who').innerHTML=Srv.user?`${escA(Srv.user.username)} (${escA(Srv.user.role)}) <a href="#" data-act="srvLogout">Sign out</a>`:'Not signed in';
-  renderBanner();renderEncounter();renderCases();renderSrvCase();applyAiState();renderAiPanel();renderNotes();renderReviewNav();renderTermsNav();renderProblemsNav();renderAllergiesNav();renderMedicationsNav();renderOrdersNav();renderReconcile();renderTimelineNav();renderVers();
+  renderBanner();renderEncounter();renderCases();renderSrvCase();applyAiState();renderAiPanel();renderNotes();renderReviewNav();renderTermsNav();renderProblemsNav();renderAllergiesNav();renderMedicationsNav();renderOrdersNav();renderReconcile();renderInvest();renderTimelineNav();renderVers();
 }
 async function srvInit(){
   const r=await api('GET','/api/me');
