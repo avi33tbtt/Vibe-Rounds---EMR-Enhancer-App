@@ -11,6 +11,8 @@
     "seed": "node --env-file=.env seed.js",
     "demo:seed": "node --env-file=.env scripts/seed-demo.js",
     "demo:reset": "node --env-file=.env scripts/seed-demo.js --reset",
+    "terms:seed": "node --env-file=.env scripts/seed-terms.js",
+    "terms:reset": "node --env-file=.env scripts/seed-terms.js --reset",
     "demo:run": "node --env-file=.env scripts/demo-bridge.js",
     "start": "node --env-file=.env server.js",
     "test": "node --env-file=.env --test --test-concurrency=1 test/*.test.js"
