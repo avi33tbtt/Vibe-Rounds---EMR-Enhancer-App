@@ -188,8 +188,8 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | R4 | (written when reached) | C. Orders and results: medications, investigations, results, abnormal acknowledgement, referrals, procedures | SPLIT | 2026-11-23 |  | Replaced by R4a to R4j. Still LOCKED. |
 | R4a | 04-demo-and-roadmap.md (R brief) | YOUR task: name clinician owner; decide drug-data licence | DONE | 2026-11-26 | none | docs/R4A-DECISIONS.md. Owner decided: local drug list only (no licence needed); owner is clinician owner for the DEMO only, a real clinician is a go-live gate. R4b next. |
 | R4b | 04-demo-and-roadmap.md (R brief) | Medication orders: migration + routes (order, change with reason, stop; no delete) | DONE | 2026-11-26 | 1 migration + 1 routes file + tests | 021 migration (drug category + orders), medication-orders.js, orders:read/write, 6 routes, tests. Not run here; run on your machine. R4c next. |
-| R4c | 04-demo-and-roadmap.md (R brief) | Medication orders in the page | LOCKED |  | page + 1 test file |  |
-| R4d | 04-demo-and-roadmap.md (R brief) | Medication reconciliation (compare history and orders, explicit accept) | LOCKED |  | routes + page + tests | Split again if over guard. |
+| R4c | 04-demo-and-roadmap.md (R brief) | Medication orders in the page | DONE | 2026-11-26 | page + 1 test file | modules/87-orders.js, page, wire, patients, orders-page test, wire-list test edited. Orders tab; order, change, stop, error; drug-term picker. Not run here. R4d next. |
+| R4d | 04-demo-and-roadmap.md (R brief) | Medication reconciliation (compare history and orders, explicit accept) | TODO |  | routes + page + tests | Split again if over guard. |
 | R4e | 04-demo-and-roadmap.md (R brief) | Investigation orders: server | LOCKED |  | 1 migration + 1 routes file + tests |  |
 | R4f | 04-demo-and-roadmap.md (R brief) | Specimen and results: server (append-only, correction by new row) | LOCKED |  | 1 migration + 1 routes file + tests |  |
 | R4g | 04-demo-and-roadmap.md (R brief) | Investigations, results and abnormal acknowledgement in the page | LOCKED |  | page + 1 test file |  |
