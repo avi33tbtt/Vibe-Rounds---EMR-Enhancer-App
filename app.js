@@ -19,6 +19,7 @@ const { mountAllergies } = require('./allergies');
 const { mountMedications } = require('./medications');
 const { mountMedicationOrders } = require('./medication-orders');
 const { mountMedicationReconciliation } = require('./medication-reconciliation');
+const { mountInvestigationOrders } = require('./investigation-orders');
 const { mountPatientTimeline } = require('./patient-timeline');
 const { mountPathways } = require('./pathways');
 const { mountContext } = require('./context');
@@ -327,6 +328,9 @@ function createApp(pool, opts = {}) {
 
   /* ---------- medication reconciliation (task R4d-1) ---------- */
   mountMedicationReconciliation(app, pool);
+
+  /* ---------- investigation orders (task R4e) ---------- */
+  mountInvestigationOrders(app, pool);
 
   /* ---------- one timeline across a patient's cases, read only (task R3g) ---------- */
   mountPatientTimeline(app, pool);

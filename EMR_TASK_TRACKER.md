@@ -192,8 +192,8 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | R4d | 04-demo-and-roadmap.md (R brief) | Medication reconciliation (compare history and orders, explicit accept) | SPLIT | 2026-11-26 |  | Replaced by R4d-1 (server) and R4d-2 (page): a migration, routes and tests, plus a whole new screen, pass the guard. Nothing built. |
 | R4d-1 | 04-demo-and-roadmap.md (R brief) | Reconciliation server: migration, compare and record routes | DONE | 2026-11-26 | 1 migration + 1 routes file + tests | 022 migration, medication-reconciliation.js, 2 routes (orders:read/write), tests. Append-only, continue needs active order. Not run here. R4d-2 next. |
 | R4d-2 | 04-demo-and-roadmap.md (R brief) | Reconciliation in the page: side-by-side lists, per-item decision with reason | DONE | 2026-11-26 | page + 1 test file | modules/88-reconcile.js, page, wire, patients, reconcile-page test, wire-list test edited. On the Orders tab. Not run here. R4e next. |
-| R4e | 04-demo-and-roadmap.md (R brief) | Investigation orders: server | TODO |  | 1 migration + 1 routes file + tests |  |
-| R4f | 04-demo-and-roadmap.md (R brief) | Specimen and results: server (append-only, correction by new row) | LOCKED |  | 1 migration + 1 routes file + tests |  |
+| R4e | 04-demo-and-roadmap.md (R brief) | Investigation orders: server | DONE | 2026-11-26 | 1 migration + 1 routes file + tests | 023 migration, investigation-orders.js, 5 routes (orders:read/write), tests. Test name free text or published local test term. Not run here. R4f next. |
+| R4f | 04-demo-and-roadmap.md (R brief) | Specimen and results: server (append-only, correction by new row) | TODO |  | 1 migration + 1 routes file + tests |  |
 | R4g | 04-demo-and-roadmap.md (R brief) | Investigations, results and abnormal acknowledgement in the page | LOCKED |  | page + 1 test file |  |
 | R4h | 04-demo-and-roadmap.md (R brief) | Referrals: server + page (split if large) | LOCKED |  | routes + page + tests |  |
 | R4i | 04-demo-and-roadmap.md (R brief) | Procedures: server + page (split if large) | LOCKED |  | routes + page + tests |  |
