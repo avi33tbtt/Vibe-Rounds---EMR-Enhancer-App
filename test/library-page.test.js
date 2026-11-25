@@ -12,7 +12,7 @@ let env, admin, R;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 async function until(fn, what) { for (let i = 0; i < 150; i++) { if (await fn()) return; await wait(30); } throw new Error('timed out: ' + what); }
 const DEMO = ['basic_emr', 'glucose_ss', 'dka_ctx', 'snake_ctx', 'vitals', 'opd_visit', 'ipd_admission', 'ipd_progress', 'ipd_discharge',
-  'cc_fever', 'cc_cough', 'cc_abdo', 'cc_headache', 'cc_chest', 'cc_joint'];   // R1a: the six OPD complaint sets travel with the demo import
+  'cc_fever', 'cc_cough', 'cc_abdo', 'cc_headache', 'cc_chest', 'cc_joint', 'ex_general', 'ex_cvs', 'ex_resp', 'ex_abdomen', 'ex_neuro'];   // R1a: the six OPD complaint sets travel with the demo import
 
 test.after(async () => { if (env) await env.close(); });
 // The set tables are append-only (the database refuses DELETE and TRUNCATE), so every test starts from a freshly migrated database.
