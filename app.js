@@ -11,6 +11,7 @@ const { mountAi } = require('./ai');
 const { mountCases } = require('./cases');
 const { mountSets } = require('./sets');
 const { mountReview } = require('./review');
+const { mountLocalTerms } = require('./local-terms');
 const { mountObservations } = require('./observations');
 const { mountNotes } = require('./notes');
 const { mountPathways } = require('./pathways');
@@ -298,6 +299,7 @@ function createApp(pool, opts = {}) {
 
   /* ---------- submit for review (task 8b) ---------- */
   mountReview(app, pool);
+  mountLocalTerms(app, pool);
 
   /* ---------- applied sets, observations, clinical timeline (task B3a) ---------- */
   mountObservations(app, pool);
