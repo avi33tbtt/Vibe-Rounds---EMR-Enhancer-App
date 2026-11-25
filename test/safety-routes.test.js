@@ -88,6 +88,11 @@ const MATRIX = {
   'POST /api/investigation-orders/:id/specimens': { guard: 'results:write' },
   'POST /api/investigation-orders/:id/results': { guard: 'results:write' },
   'POST /api/investigation-results/:id/correct': { guard: 'results:write' },
+  'GET /api/patients/:id/referrals': { guard: 'orders:read' },
+  'POST /api/patients/:id/referrals': { guard: 'orders:write' },
+  'GET /api/referrals/:id': { guard: 'orders:read' },
+  'POST /api/referrals/:id/cancel': { guard: 'orders:write' },
+  'POST /api/referrals/:id/entered-in-error': { guard: 'orders:write' },
   'GET /api/patients/:id/abnormal-results': { guard: 'results:read' },
   'POST /api/investigation-results/:id/acknowledge': { guard: 'results:ack' },
   'GET /api/local-terms':           { guard: 'terms:read' },
@@ -588,6 +593,21 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/investigation-orders/:id/entered-in-error', doctor, async () => {
         const ok = await doctor.c.post(`/api/investigation-orders/${S.ioid}/entered-in-error`, { reason: 'Audit error', rowVersion: 2 });
         assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['investigation_order.error'];
+      }],
+      ['POST /api/patients/:id/referrals', doctor, async () => {
+        const r = await doctor.c.post(`/api/patients/${S.pid}/referrals`, { destination: 'Audit clinic', reason: 'Audit reason', ...fake });
+        assert.equal(r.status, 400, 'a body that names a user is refused');
+        const ok = await doctor.c.post(`/api/patients/${S.pid}/referrals`, { destination: 'Audit clinic', reason: 'Audit reason' });
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); S.rfid = ok.body.referral.id; return ['referral.add'];
+      }],
+      ['POST /api/referrals/:id/cancel', doctor, async () => {
+        assert.equal((await doctor.c.post(`/api/referrals/${S.rfid}/cancel`, { reason: 'Audit cancel', rowVersion: 1, ...fake })).status, 400, 'a body that names a user is refused');
+        const ok = await doctor.c.post(`/api/referrals/${S.rfid}/cancel`, { reason: 'Audit cancel', rowVersion: 1 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['referral.cancel'];
+      }],
+      ['POST /api/referrals/:id/entered-in-error', doctor, async () => {
+        const ok = await doctor.c.post(`/api/referrals/${S.rfid}/entered-in-error`, { reason: 'Audit error', rowVersion: 2 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['referral.error'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);

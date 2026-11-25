@@ -21,6 +21,7 @@ const { mountMedicationOrders } = require('./medication-orders');
 const { mountMedicationReconciliation } = require('./medication-reconciliation');
 const { mountInvestigationOrders } = require('./investigation-orders');
 const { mountInvestigationResults } = require('./investigation-results');
+const { mountReferrals } = require('./referrals');
 const { mountResultAcks } = require('./result-acks');
 const { mountPatientTimeline } = require('./patient-timeline');
 const { mountPathways } = require('./pathways');
@@ -336,6 +337,9 @@ function createApp(pool, opts = {}) {
 
   /* ---------- specimens and results (task R4f) ---------- */
   mountInvestigationResults(app, pool);
+
+  /* ---------- referrals (task R4h-1) ---------- */
+  mountReferrals(app, pool);
 
   /* ---------- acknowledgement of abnormal results (task R4g-1) ---------- */
   mountResultAcks(app, pool);
