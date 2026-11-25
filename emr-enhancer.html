@@ -106,6 +106,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <button data-t="review" id="navReview" style="display:none">Review</button>
     <button data-t="terms" id="navTerms" style="display:none">Local terms</button>
     <button data-t="problems" id="navProblems" style="display:none">Problems</button>
+    <button data-t="allergies" id="navAllergies" style="display:none">Allergies</button>
     <button data-t="create">Create / Generate</button>
     <button data-t="notes">Notes</button>
     <button data-t="codes">Codes &amp; FHIR<span class="planned" title="Server-side terminology verification is planned. Verification here calls a public test server.">verify: planned</span></button>
@@ -265,6 +266,12 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <div class="pane" id="problems">
       <h3>Problems</h3>
       <div id="problemsBox"></div>
+    </div>
+
+    <!-- ALLERGIES (R3d) -->
+    <div class="pane" id="allergies">
+      <h3>Allergies</h3>
+      <div id="allergiesBox"></div>
     </div>
 
     <!-- CREATE / GENERATE -->
@@ -454,6 +461,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 <script src="modules/70-review.js"></script>
 <script src="modules/75-terms.js"></script>
 <script src="modules/77-problems.js"></script>
+<script src="modules/78-allergies.js"></script>
 <script src="modules/80-pins.js"></script>
 <script src="modules/82-insights.js"></script>
 <script src="modules/84-notes.js"></script>
@@ -1621,6 +1629,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     if(b.dataset.t==='review')reviewLoad();
     if(b.dataset.t==='terms')termsLoad();
     if(b.dataset.t==='problems')problemsLoad();
+    if(b.dataset.t==='allergies')allergiesLoad();
     if(b.dataset.t==='create')renderCustomList();
     if(b.dataset.t==='codes')codesUI();
     if(b.dataset.t==='cases')casesShow();
