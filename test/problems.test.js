@@ -1,6 +1,6 @@
 'use strict';
 // Task R3a-1: the patient problem list on the server (list, get, add). Matrix and audit scenarios are in safety-routes.test.js;
-// the "never deleted" classification is in safety-data.test.js. Resolve and entered-in-error are R3a-2.
+// the "never deleted" classification is in safety-data.test.js. Resolve and entered-in-error (R3a-2) are at the end of this file.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { setup, client } = require('./helpers');
@@ -98,4 +98,105 @@ test('database: no delete or truncate (even as the owner); label cannot change; 
   await assert.rejects(env.appPool.query('TRUNCATE patient_problems'), /permission denied/);
   await assert.rejects(env.pool.query(`INSERT INTO patient_problems(patient_id, label, recorded_by, status) VALUES ($1,'x',1,'resolved')`, [pid]), /starts as active|check/);
   await assert.rejects(env.pool.query(`UPDATE patient_problems SET status='resolved' WHERE id=$1`, [a.id]), /check|row_version/);
+});
+
+/* ---------- R3a-2: resolve and entered in error ---------- */
+const mk = async (c, pid, label = 'Move me') => (await add(c, pid, { label })).body.problem;
+const resolve = (c, id, body) => c.post(`/api/problems/${id}/resolve`, body);
+const wrong = (c, id, body) => c.post(`/api/problems/${id}/entered-in-error`, body);
+
+test('resolve: nurse and doctor can; the resolver is the session user; history, version and audit are kept; the label is untouched', async () => {
+  const n = await as('nurse1'), d = await as('doctor1'), pid = await newPatient(n);
+  const a = await mk(n, pid, 'Keep this label'), b = await mk(n, pid, 'Second');
+  const r = await resolve(d, a.id, { reason: 'Treated and settled', rowVersion: 1 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const p = r.body.problem;
+  assert.deepEqual([p.status, p.row_version, p.resolved_by, p.resolution_reason, p.label, p.recorded_by], ['resolved', 2, 'doctor1', 'Treated and settled', 'Keep this label', 'nurse1']);
+  assert.ok(p.resolved_at); assert.equal(p.error_by, null);
+  assert.deepEqual(p.events.map(e => [e.seq, e.from_status, e.to_status, e.by_user]), [[1, null, 'active', 'nurse1'], [2, 'active', 'resolved', 'doctor1']]);
+  assert.equal((await resolve(n, b.id, { reason: 'ok', rowVersion: 1 })).body.problem.resolved_by, 'nurse1');
+  assert.equal((await n.get(`/api/problems/${a.id}`)).body.problem.events.length, 2);
+  assert.deepEqual((await n.get(`/api/patients/${pid}/problems`)).body.problems.map(x => x.status), ['resolved', 'resolved']);
+});
+
+test('entered in error: from active or from resolved; the earlier resolution stays; hidden from the default list; final', async () => {
+  const n = await as('nurse1'), v = await as('viewer1'), pid = await newPatient(n);
+  const a = await mk(n, pid, 'A'), b = await mk(n, pid, 'B'), keep = await mk(n, pid, 'C');
+  const ea = await wrong(n, a.id, { reason: 'Wrong patient', rowVersion: 1 });
+  assert.equal(ea.status, 200, JSON.stringify(ea.body));
+  assert.deepEqual([ea.body.problem.status, ea.body.problem.error_by, ea.body.problem.error_reason, ea.body.problem.row_version], ['entered_in_error', 'nurse1', 'Wrong patient', 2]);
+  await resolve(n, b.id, { reason: 'Settled', rowVersion: 1 });
+  const eb = await wrong(n, b.id, { reason: 'Never had it', rowVersion: 2 });
+  assert.equal(eb.status, 200, JSON.stringify(eb.body));
+  assert.deepEqual([eb.body.problem.resolved_by, eb.body.problem.resolution_reason, eb.body.problem.error_reason], ['nurse1', 'Settled', 'Never had it']);
+  assert.deepEqual(eb.body.problem.events.map(e => [e.seq, e.from_status, e.to_status]), [[1, null, 'active'], [2, 'active', 'resolved'], [3, 'resolved', 'entered_in_error']]);
+  assert.deepEqual((await v.get(`/api/patients/${pid}/problems`)).body.problems.map(x => x.label), ['C']);
+  assert.equal((await v.get(`/api/patients/${pid}/problems?include=all`)).body.problems.length, 3);
+  for (const f of [resolve, wrong]) { const r = await f(n, a.id, { reason: 'again', rowVersion: 2 }); assert.equal(r.status, 409); assert.equal(r.body.error, 'problem_final'); }
+  assert.equal((await n.get(`/api/problems/${keep.id}`)).body.problem.status, 'active');
+});
+
+test('refused: viewer, unknown ids, missing or bad reason, missing or bad rowVersion, a body that names a user or status; nothing changes', async () => {
+  const n = await as('nurse1'), v = await as('viewer1'), pid = await newPatient(n), a = await mk(n, pid);
+  for (const f of [resolve, wrong]) {
+    assert.equal((await f(v, a.id, { reason: 'x', rowVersion: 1 })).status, 403);
+    assert.equal((await f(n, 999999, { reason: 'x', rowVersion: 1 })).status, 404);
+    assert.equal((await f(n, 'abc', { reason: 'x', rowVersion: 1 })).status, 404);
+    for (const reason of [undefined, '', '   ', 5, null, 'x'.repeat(1001), 'a\u0000b']) assert.equal((await f(n, a.id, { reason, rowVersion: 1 })).status, 400, String(reason).slice(0, 8));
+    for (const rowVersion of [undefined, '1', 0, -1, 1.5, null]) assert.equal((await f(n, a.id, { reason: 'x', rowVersion })).status, 400, String(rowVersion));
+    for (const extra of [{ resolvedBy: 2 }, { resolved_by: 'doctor1' }, { status: 'active' }, { by: 'admin1' }, { label: 'new' }]) {
+      const r = await f(n, a.id, { reason: 'x', rowVersion: 1, ...extra }); assert.equal(r.status, 400, JSON.stringify(extra)); assert.equal(r.body.error, 'unknown_field');
+    }
+  }
+  const row = (await env.pool.query('SELECT status, row_version FROM patient_problems WHERE id = $1', [a.id])).rows[0];
+  assert.deepEqual([row.status, row.row_version], ['active', 1]);
+  assert.equal((await env.pool.query('SELECT count(*)::int n FROM patient_problem_events WHERE problem_id = $1', [a.id])).rows[0].n, 1);
+});
+
+test('stale rowVersion gives 409 with the current version; a resolved problem cannot be resolved again but can be marked in error', async () => {
+  const n = await as('nurse1'), d = await as('doctor1'), pid = await newPatient(n), a = await mk(n, pid);
+  assert.equal((await resolve(n, a.id, { reason: 'first', rowVersion: 1 })).status, 200);
+  const stale = await resolve(d, a.id, { reason: 'second', rowVersion: 1 });
+  assert.equal(stale.status, 409); assert.equal(stale.body.error, 'version_conflict'); assert.equal(stale.body.currentRowVersion, 2);
+  const again = await resolve(d, a.id, { reason: 'second', rowVersion: 2 });
+  assert.equal(again.status, 409); assert.equal(again.body.error, 'not_active');
+  assert.equal((await wrong(d, a.id, { reason: 'stale', rowVersion: 1 })).status, 409);
+  assert.equal((await wrong(d, a.id, { reason: 'fine', rowVersion: 2 })).status, 200);
+  assert.equal((await env.pool.query('SELECT resolution_reason FROM patient_problems WHERE id = $1', [a.id])).rows[0].resolution_reason, 'first');
+});
+
+test('two moves at once: exactly one wins (row lock), the other gets 409', async () => {
+  const n = await as('nurse1'), d = await as('doctor1'), pid = await newPatient(n), a = await mk(n, pid);
+  const rs = await Promise.all([resolve(n, a.id, { reason: 'one', rowVersion: 1 }), resolve(d, a.id, { reason: 'two', rowVersion: 1 })]);
+  assert.deepEqual(rs.map(r => r.status).sort(), [200, 409]);
+  assert.equal((await env.pool.query('SELECT count(*)::int n FROM patient_problem_events WHERE problem_id = $1', [a.id])).rows[0].n, 2);
+});
+
+test('audit: problem.resolve and problem.error log ids and the reason length, never the reason text', async () => {
+  const n = await as('nurse1'), pid = await newPatient(n), a = await mk(n, pid);
+  await resolve(n, a.id, { reason: 'Secret resolution wording', rowVersion: 1 });
+  await wrong(n, a.id, { reason: 'Secret error wording', rowVersion: 2 });
+  const rows = (await env.pool.query(`SELECT action, detail, username FROM audit_log WHERE action IN ('problem.resolve','problem.error') AND entity_id = $1 ORDER BY id`, [String(pid)])).rows;
+  assert.deepEqual(rows.map(r => r.action), ['problem.resolve', 'problem.error']);
+  assert.ok(rows.every(r => r.username === 'nurse1'));
+  assert.ok(!JSON.stringify(rows).includes('Secret'));
+});
+
+test('database guards: direct UPDATEs that break the rules are refused (owner and emr_app)', async () => {
+  const n = await as('nurse1'), pid = await newPatient(n), a = await mk(n, pid), q = (sql, ...p) => env.pool.query(sql, [a.id, ...p]);
+  const R = "status='resolved', resolved_by=1, resolved_at=now(), resolution_reason='r'";
+  await assert.rejects(q(`UPDATE patient_problems SET ${R} WHERE id=$1`), /row_version/);                                   // version must advance by one
+  await assert.rejects(q(`UPDATE patient_problems SET ${R}, row_version=3 WHERE id=$1`), /row_version/);
+  await assert.rejects(q(`UPDATE patient_problems SET status='resolved', row_version=2 WHERE id=$1`), /check/);               // a move needs who, when and reason
+  await assert.rejects(q(`UPDATE patient_problems SET status='entered_in_error', row_version=2 WHERE id=$1`), /check/);
+  await assert.rejects(q(`UPDATE patient_problems SET status='resolved', row_version=2, resolved_by=1, resolved_at=now(), resolution_reason='  ' WHERE id=$1`), /check/);
+  await assert.rejects(q(`UPDATE patient_problems SET ${R}, row_version=2, label='Other' WHERE id=$1`), /cannot be changed/);
+  await assert.rejects(env.appPool.query(`UPDATE patient_problems SET ${R}, row_version=2, recorded_by=2 WHERE id=$1`, [a.id]), /permission denied/);
+  await assert.rejects(q(`INSERT INTO patient_problem_events(problem_id, seq, from_status, to_status, reason, by_user) VALUES ($1, 5, 'active', 'resolved', 'skip', 1)`), /one after the other/);
+  assert.equal((await env.appPool.query(`UPDATE patient_problems SET ${R}, row_version=2 WHERE id=$1`, [a.id])).rowCount, 1);   // the allowed move, as emr_app
+  await assert.rejects(q(`UPDATE patient_problems SET status='active', row_version=3, resolved_by=NULL, resolved_at=NULL, resolution_reason=NULL WHERE id=$1`), /cannot move/);   // no way back
+  await assert.rejects(q(`UPDATE patient_problems SET status='entered_in_error', row_version=3, error_by=1, error_at=now(), error_reason='e', resolution_reason='changed' WHERE id=$1`), /stays as it was/);
+  assert.equal((await q(`UPDATE patient_problems SET status='entered_in_error', row_version=3, error_by=1, error_at=now(), error_reason='e' WHERE id=$1`)).rowCount, 1);
+  await assert.rejects(q(`UPDATE patient_problems SET row_version=4 WHERE id=$1`), /final/);                                   // entered in error is final
+  await assert.rejects(q(`UPDATE patient_problems SET status='resolved', row_version=4, resolved_by=1, resolved_at=now(), resolution_reason='r' WHERE id=$1`), /final/);
 });

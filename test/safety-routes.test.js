@@ -58,6 +58,8 @@ const MATRIX = {
   'GET /api/patients/:id/problems': { guard: 'problems:read' },
   'POST /api/patients/:id/problems': { guard: 'problems:write' },
   'GET /api/problems/:id':          { guard: 'problems:read' },
+  'POST /api/problems/:id/resolve': { guard: 'problems:write' },
+  'POST /api/problems/:id/entered-in-error': { guard: 'problems:write' },
   'GET /api/local-terms':           { guard: 'terms:read' },
   'POST /api/local-terms':          { guard: 'terms:write' },
   'GET /api/local-terms/:id':       { guard: 'terms:read' },
@@ -434,6 +436,17 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal(r.status, 400, 'a body that names a user is refused');
         const ok = await nurse.c.post(`/api/patients/${S.pid}/problems`, { label: 'Audit problem' });
         assert.equal(ok.status, 201, JSON.stringify(ok.body)); return ['problem.add'];
+      }],
+      ['POST /api/problems/:id/resolve', nurse, async () => {
+        const a = await nurse.c.post(`/api/patients/${S.pid}/problems`, { label: 'Audit resolve' });
+        const r = await nurse.c.post(`/api/problems/${a.body.problem.id}/resolve`, { reason: 'Audit resolution', rowVersion: 1, ...fake });
+        assert.equal(r.status, 400, 'a body that names a user is refused');
+        const ok = await nurse.c.post(`/api/problems/${a.body.problem.id}/resolve`, { reason: 'Audit resolution', rowVersion: 1 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body)); S.prid = a.body.problem.id; return ['problem.add', 'problem.resolve'];
+      }],
+      ['POST /api/problems/:id/entered-in-error', nurse, async () => {
+        const ok = await nurse.c.post(`/api/problems/${S.prid}/entered-in-error`, { reason: 'Audit error', rowVersion: 2 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['problem.error'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);

@@ -1,12 +1,13 @@
 'use strict';
-// Task R3a-1: the patient problem list, on the server (list, get, add). Resolve and entered-in-error come in R3a-2.
+// Tasks R3a-1 and R3a-2: the patient problem list, on the server (list, get, add, resolve, entered in error).
 // A problem belongs to the patient; origin_case_id (optional) must be a case of the same patient (composite foreign key, migration 018).
-// The recorder comes from the session; a body that names one is refused. The label never goes into the audit log: ids and its length only.
+// The recorder, resolver and error-marker come from the session; a body that names one is refused. The label and the reasons never go into the audit log: ids and lengths only.
+// A move needs a reason (1..1000) and the row_version that was loaded (stale gives 409); entered_in_error is final. The database enforces the same rules.
 const { tx } = require('./db');
 const { audit } = require('./audit');
 const A = require('./auth');
 
-const MAX_LABEL = 200;
+const MAX_LABEL = 200, MAX_REASON = 1000;
 const BAD_CHARS = /\u0000|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;   // NUL and lone surrogates
 const bad = (res, message) => res.status(400).json({ error: 'invalid', message });
 function strict(body, allowed) {
@@ -14,6 +15,7 @@ function strict(body, allowed) {
   const extra = Object.keys(b).filter(k => !allowed.includes(k));
   return extra.length ? { error: { error: 'unknown_field', message: 'These fields cannot be set: ' + extra.slice(0, 10).join(', '), fields: extra.slice(0, 10) } } : { body: b };
 }
+const okReason = v => typeof v === 'string' && v.trim().length >= 1 && v.length <= MAX_REASON && !BAD_CHARS.test(v);
 const idParam = v => (/^\d{1,9}$/.test(String(v)) && +v >= 1 ? +v : null);
 const posInt = v => (Number.isInteger(v) && v >= 1 && v <= 2147483646 ? v : null);
 const okLabel = v => typeof v === 'string' && v.trim().length >= 1 && v.length <= MAX_LABEL && !BAD_CHARS.test(v);
@@ -81,5 +83,36 @@ function mountProblems(app, pool) {
     });
     res.status(out.status).json(out.body);
   });
+
+  /* ---------- resolve, or mark entered in error (reason and loaded row_version required; nothing is deleted) ---------- */
+  function move(kind) {
+    const resolve = kind === 'resolve';
+    return async (req, res) => {
+      const s = strict(req.body, ['reason', 'rowVersion']);
+      if (s.error) return res.status(400).json(s.error);
+      const id = idParam(req.params.id), rv = posInt(s.body.rowVersion);
+      if (!okReason(s.body.reason)) return bad(res, `A reason of 1 to ${MAX_REASON} characters is required.`);
+      if (rv === null) return bad(res, 'rowVersion is required (the version you loaded).');
+      if (!id) return res.status(404).json({ error: 'not_found' });
+      const out = await tx(pool, async c => {
+        const p = (await c.query('SELECT id, patient_id, status, row_version FROM patient_problems WHERE id = $1 FOR UPDATE', [id])).rows[0];
+        if (!p) return { status: 404, body: { error: 'not_found' } };
+        if (p.status === 'entered_in_error') return { status: 409, body: { error: 'problem_final', message: 'A problem entered in error is final.', currentRowVersion: p.row_version } };
+        if (p.row_version !== rv) return { status: 409, body: { error: 'version_conflict', message: 'This problem was changed by someone else. Reload it and try again.', currentRowVersion: p.row_version } };
+        if (resolve && p.status !== 'active') return { status: 409, body: { error: 'not_active', message: 'Only an active problem can be resolved.', currentRowVersion: p.row_version } };
+        const reason = s.body.reason.trim(), to = resolve ? 'resolved' : 'entered_in_error';
+        if (resolve) await c.query('UPDATE patient_problems SET status = $2, row_version = row_version + 1, resolved_by = $3, resolved_at = clock_timestamp(), resolution_reason = $4 WHERE id = $1', [id, to, req.user.id, reason]);
+        else await c.query('UPDATE patient_problems SET status = $2, row_version = row_version + 1, error_by = $3, error_at = clock_timestamp(), error_reason = $4 WHERE id = $1', [id, to, req.user.id, reason]);
+        await c.query('INSERT INTO patient_problem_events(problem_id, seq, from_status, to_status, reason, by_user) SELECT $1, coalesce(max(seq), 0) + 1, $2, $3, $4, $5 FROM patient_problem_events WHERE problem_id = $1', [id, p.status, to, reason, req.user.id]);
+        await audit(c, req, resolve ? 'problem.resolve' : 'problem.error', 'patient', p.patient_id, { problemId: id, from: p.status, length: reason.length, rowVersion: rv + 1 });
+        const problem = (await c.query(`SELECT ${PROB} ${PROB_FROM} WHERE p.id = $1`, [id])).rows[0];
+        const events = (await c.query(`SELECT ${EVENT} FROM patient_problem_events e JOIN users u ON u.id = e.by_user WHERE e.problem_id = $1 ORDER BY e.seq`, [id])).rows;
+        return { status: 200, body: { problem: { ...problem, events } } };
+      });
+      res.status(out.status).json(out.body);
+    };
+  }
+  app.post('/api/problems/:id/resolve', A.requirePerm(pool, 'problems:write'), move('resolve'));
+  app.post('/api/problems/:id/entered-in-error', A.requirePerm(pool, 'problems:write'), move('error'));
 }
 module.exports = { mountProblems };
