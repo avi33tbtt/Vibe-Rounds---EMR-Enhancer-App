@@ -17,6 +17,7 @@ const { mountNotes } = require('./notes');
 const { mountProblems } = require('./problems');
 const { mountAllergies } = require('./allergies');
 const { mountMedications } = require('./medications');
+const { mountPatientTimeline } = require('./patient-timeline');
 const { mountPathways } = require('./pathways');
 const { mountContext } = require('./context');
 const { mountCcisRuns, isRunImportPath } = require('./ccis-runs');
@@ -318,6 +319,9 @@ function createApp(pool, opts = {}) {
 
   /* ---------- patient medication history, recorded list only (task R3e) ---------- */
   mountMedications(app, pool);
+
+  /* ---------- one timeline across a patient's cases, read only (task R3g) ---------- */
+  mountPatientTimeline(app, pool);
 
   /* ---------- pathways and applying them (task B4a) ---------- */
   mountPathways(app, pool);
