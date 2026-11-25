@@ -102,10 +102,12 @@ function markValError(fid,asetId){const a=(CASE.applied||[]).find(x=>x.setId===a
 function setVal(id,val,asetId){
   if(srvCase())return obsSave(id,val,asetId);
   CASE.values[id]=val;
+  const reDraw=adaptIsParent(id);   // R1c: a parent answer can reveal or hold back a follow-up
   if(id==='intake'||id==='output'){
     const inn=parseFloat(CASE.values.intake)||0,out=parseFloat(CASE.values.output)||0;
     CASE.values.balance=String(inn-out);
     const el=$('f_balance');if(el)el.value=CASE.values.balance;
   }
   save();
+  if(reDraw)renderForms();
 }

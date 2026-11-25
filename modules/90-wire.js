@@ -9,6 +9,7 @@ const ACT={
   archiveCase:()=>archiveCase(),
   fillDx:(el)=>fillDx(el),
   ccFilter:(el)=>{CC.q=el.value;renderComplaints()},
+  adaptAll:(el)=>{ADAPT_ALL.on=!!el.checked;renderForms()},
   generate:()=>generate(),
   importQ:()=>importQ(),
   loadQFile:(el)=>loadQFile(el),

@@ -416,6 +416,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 <script src="modules/40-patients.js"></script>
 <script src="modules/50-cases.js"></script>
 <script src="modules/52-complaints.js"></script>
+<script src="modules/54-adaptive.js"></script>
 <script src="modules/60-library.js"></script>
 <script src="modules/70-review.js"></script>
 <script src="modules/80-pins.js"></script>
@@ -1197,8 +1198,10 @@ function renderForms(){
       <h3 style="margin:0">${escA(s.title)} <span class="kind ${escA(s.kind)}">${escA(s.kind)}</span>${s.generated?' <span class="mu">generated</span>':''}${sdcBadge(s)}${uncodedBadge(s)}</h3>
       <button class="b sec sm" data-act="removeSet" data-arg="${escA(s.id)}">Remove</button></div>
       <div class="mu" style="margin-bottom:8px">${escA(s.desc||'')}${a.fromPathway?' · via pathway'+(a.fromPathwayTitle?' '+escA(a.fromPathwayTitle):'')+(a.fromPathwayVersion?' v'+Number(a.fromPathwayVersion):''):''}${verNote(a)}</div>`;
-    s.fields.forEach(f=>{html+=fieldHTML(f,a)});
-    html+=`</div>`;
+    let hid=0;
+    s.fields.forEach(f=>{if(adaptHidden(s,f,a)){hid++;return}html+=fieldHTML(f,a)});
+    html+=adaptNote(hid)+`</div>`;   // R1c: follow-up questions held back until an earlier answer asks for them
+
   });
   area.innerHTML=html;
 }
