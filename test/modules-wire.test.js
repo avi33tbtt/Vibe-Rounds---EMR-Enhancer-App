@@ -12,7 +12,7 @@ const mod = fs.readFileSync(path.join(__dirname, '..', 'modules', '90-wire.js'),
 
 test('90-wire.js loads after 30-store.js and before the inline script; ACT and the listener are no longer inline', () => {
   const l = localScripts();
-  assert.deepEqual(l, ['sdc.js', 'modules/00-boot.js', 'modules/10-escape.js', 'modules/20-session.js', 'modules/30-store.js', 'modules/40-patients.js', 'modules/50-cases.js', 'modules/60-library.js', 'modules/70-review.js', 'modules/90-wire.js']);
+  assert.deepEqual(l, ['sdc.js', 'modules/00-boot.js', 'modules/10-escape.js', 'modules/20-session.js', 'modules/30-store.js', 'modules/40-patients.js', 'modules/50-cases.js', 'modules/60-library.js', 'modules/70-review.js', 'modules/80-pins.js', 'modules/90-wire.js']);
   const inline = raw.slice(raw.indexOf('<script>'));
   assert.ok(!/const ACT=\{/.test(inline) && !/document\.addEventListener\(type/.test(inline), 'still inline');
   assert.match(mod, /const ACT=\{/); assert.match(mod, /document\.addEventListener\(type/);
