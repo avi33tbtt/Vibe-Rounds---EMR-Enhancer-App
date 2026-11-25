@@ -11,7 +11,7 @@ const TERM_DONE={submit:'Submitted for review.',approve:'Approved.',reject:'Reje
 function renderTermsNav(){
   const b=$('navTerms');if(!b)return;
   const show=srvCan('terms:read');b.style.display=show?'':'none';
-  if(!show){TERM.items=[];TERM.err={};TERM.draft={};TERM.msg='';TERM.formErr='';TERM.loaded=false;if(b.classList.contains('on'))document.querySelector('[data-t=case]').click()}
+  if(!show){termPickClose();TERM.items=[];TERM.err={};TERM.draft={};TERM.msg='';TERM.formErr='';TERM.loaded=false;if(b.classList.contains('on'))document.querySelector('[data-t=case]').click()}
 }
 async function termsLoad(){
   if(!srvCan('terms:read')){TERM.items=[];TERM.loaded=false;return renderTerms()}
@@ -81,4 +81,34 @@ async function termStep(action,arg){
   if(r.status===200){delete TERM.draft[id];toast(TERM_DONE[action]);await termsLoad();return}
   TERM.err[id]=apiMsg(r);
   if(r.status===409)await termsLoad();else renderTerms();
+}
+
+/* R2f-5b: local term picker for Create-screen binding rows (system local). Choose a PUBLISHED term from the server; it fills code, display
+   and version. A hand-typed local code stays allowed but unverified. Local bindings are never exported as FHIR Coding (unchanged rule). */
+const TPICK={items:[],row:null,q:''};
+function termPickClose(){document.querySelectorAll('.tpick').forEach(e=>e.remove());TPICK.row=null;TPICK.items=[];TPICK.q=''}
+async function termPick(btn){
+  const r=btn.closest('.bind');if(!r)return;
+  const open=r.nextElementSibling&&r.nextElementSibling.classList.contains('tpick');termPickClose();if(open)return;
+  if(r.querySelector('.f-sys').value!=='local')return toast('Choose the system Local first');
+  if(!srvCan('terms:read'))return toast('Sign in with access to local terms to pick a published term');
+  const res=await api('GET','/api/local-terms?status=published');
+  if(!srvCan('terms:read')||!r.isConnected)return;
+  if(res.status!==200)return toast('The terms could not be loaded: '+apiMsg(res));
+  TPICK.items=(res.body.terms||[]).filter(t=>t.status==='published');TPICK.row=r;TPICK.q='';
+  const box=document.createElement('div');box.className='tpick cd';
+  box.innerHTML='<div class="field-row"><input class="tp-q" placeholder="search published local terms" aria-label="Search terms" data-act="termPickFilter" data-ev="input"><button class="b sec sm" data-act="termPickClose">Close</button></div><div class="tp-list"></div>';
+  r.after(box);termPickDraw();
+}
+function termPickDraw(){
+  const box=TPICK.row&&TPICK.row.nextElementSibling;if(!box||!box.classList.contains('tpick'))return;
+  const q=TPICK.q.trim().toLowerCase(),l=TPICK.items.filter(t=>!q||(t.display+' '+t.code).toLowerCase().includes(q));
+  box.querySelector('.tp-list').innerHTML=l.length?l.map(t=>`<div class="field-row"><span style="flex:1"><b>${escA(t.display)}</b> <span class="mu">${escA(t.code)} · v${escA(t.version)} · ${escA(t.category)}</span></span><button class="b sm" data-act="termChoose" data-arg="${escA(t.id)}">Use</button></div>`).join(''):'<div class="empty">No published local term matches.</div>';
+}
+function termChoose(id){
+  const r=TPICK.row,t=TPICK.items.find(x=>String(x.id)===String(id));if(!r||!t)return;
+  r.querySelector('.f-code').value=t.code;r.querySelector('.f-disp').value=t.display;
+  r.dataset.pver=String(t.version);r.dataset.pcode=t.code;r.dataset.pdisp=t.display;
+  r.querySelector('.f-stat').textContent='local term v'+t.version+' (published); not a FHIR Coding';
+  termPickClose();
 }

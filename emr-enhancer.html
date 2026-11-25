@@ -1461,6 +1461,7 @@ function polRefresh(blk){
   blk.querySelector('.f-polnote').textContent=skip?(has?'Saving removes this field’s bindings. It stays usable, uncoded.':'No code on this field.'):'';
   blk.querySelectorAll('.f-binds .bind').forEach(r=>{
     const sys=r.querySelector('.f-sys').value;
+    r.querySelector('.f-tp').style.display=sys==='local'?'':'none';
     r.querySelector('.f-pw').textContent=!skip&&sys&&p.systems.length&&!p.systems.includes(sys)?'⚠ outside this field’s chosen systems':'';
   });
 }
@@ -1470,10 +1471,12 @@ function addBindRow(blk,b){
   r.innerHTML=`<select class="f-sys" style="flex:.6" data-act="polSysChange" data-ev="change">${sysOptions(b.system)}</select>
     <input class="f-code" placeholder="code" value="${escA(b.code)}" style="flex:.7">
     <input class="f-disp" placeholder="display (official term)" value="${escA(b.display)}" style="flex:1.5">
+    <button class="b sec sm f-tp" style="display:none" title="Pick a published local term" data-act="termPick">Pick term</button>
     <button class="b sec sm" data-act="verifyRow">Verify</button>
     <span class="mu f-stat" style="min-width:110px"></span><span class="gen-warn f-pw"></span>
     <button class="b sec sm" title="Remove this binding" data-act="rmBind">×</button>`;
   r.querySelector('.f-sys').value=b.system||(pol.systems[0]||'');
+  if(b.system==='local'&&b.version){r.dataset.pver=String(b.version);r.dataset.pcode=b.code;r.dataset.pdisp=b.display||''}   // a picked term keeps its version
   if(b.code){const t=bst(b),rw=roleWarn(blk._orig,b);r.querySelector('.f-stat').textContent=(t==='verified'?STAT.verified:'unverified')+(rw?' · ⚠ '+rw:'')}
   blk.querySelector('.f-binds').appendChild(r);polRefresh(blk);
 }
@@ -1539,7 +1542,9 @@ function saveElement(){
         const system=br.querySelector('.f-sys').value,code=br.querySelector('.f-code').value.trim();
         if(!system||!code||bl.some(y=>ck(y)===ck({system,code})))return;
         const o=ob.find(x=>x.system===system&&x.code===code);
-        bl.push({system,code,display:br.querySelector('.f-disp').value.trim(),source:(o&&o.source)||'manual'});
+        const display=br.querySelector('.f-disp').value.trim(),nb={system,code,display,source:(o&&o.source)||'manual'};
+        if(system==='local'&&br.dataset.pver&&br.dataset.pcode===code&&br.dataset.pdisp===display)nb.version=br.dataset.pver;   // only while code and display are still the picked term's
+        bl.push(nb);
       });
       if(bl.length)f.bindings=bl;
     }
