@@ -3,7 +3,7 @@
 /* The server decides everything (status steps, own-term rule, second step by a different person); this page only shows the buttons the
    role may use and the server's own message when it refuses. Who and when are the server's values. All text is escaped. */
 const TERM={items:[],err:{},draft:{},msg:'',busy:false,loaded:false,form:{code:'',display:'',category:'other',definition:''},formErr:''};
-const TERM_CATS=['finding','condition','test','procedure','observation','other'];
+const TERM_CATS=['finding','condition','test','procedure','observation','drug','other'];
 const TERM_LBL={draft:'draft',in_review:'in review',rejected:'rejected',reviewed:'approved',published:'published',retired:'retired'};
 const TERM_NOTE={in_review:'Waiting for a reviewer.',rejected:'Rejected: this version is final. Add a new version.',reviewed:'Approved and frozen. An admin publishes it.',published:'Published and frozen.',retired:'Retired and frozen.'};
 const TERM_PERM={submit:'terms:submit',approve:'terms:review',reject:'terms:review',publish:'terms:publish',retire:'terms:publish'};

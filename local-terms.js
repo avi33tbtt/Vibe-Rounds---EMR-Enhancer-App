@@ -8,7 +8,7 @@ const { audit } = require('./audit');
 const A = require('./auth');
 
 const CODE_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-const CATEGORIES = ['finding', 'condition', 'test', 'procedure', 'observation', 'other'];
+const CATEGORIES = ['finding', 'condition', 'test', 'procedure', 'observation', 'drug', 'other'];
 const STATUSES = ['draft', 'in_review', 'rejected', 'reviewed', 'published', 'retired'];
 const BAD_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 // Plain one-line or short text: no control characters (tab and newline allowed only in the definition), no lone surrogates.
