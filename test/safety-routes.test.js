@@ -77,6 +77,8 @@ const MATRIX = {
   'POST /api/medication-orders/:id/change': { guard: 'orders:write' },
   'POST /api/medication-orders/:id/stop': { guard: 'orders:write' },
   'POST /api/medication-orders/:id/entered-in-error': { guard: 'orders:write' },
+  'GET /api/patients/:id/medication-reconciliation': { guard: 'orders:read' },
+  'POST /api/patients/:id/medication-reconciliation': { guard: 'orders:write' },
   'GET /api/local-terms':           { guard: 'terms:read' },
   'POST /api/local-terms':          { guard: 'terms:write' },
   'GET /api/local-terms/:id':       { guard: 'terms:read' },
@@ -526,6 +528,13 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/medication-orders/:id/entered-in-error', doctor, async () => {
         const ok = await doctor.c.post(`/api/medication-orders/${S.moid2}/entered-in-error`, { reason: 'Audit error', rowVersion: 2 });
         assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['medication_order.error'];
+      }],
+      ['POST /api/patients/:id/medication-reconciliation', doctor, async () => {
+        const m = await doctor.c.post(`/api/patients/${S.pid}/medications`, { medication: 'Audit reconcile' });
+        const body = { medicationId: m.body.medication.id, decision: 'not_taken', reason: 'Audit reason' };
+        assert.equal((await doctor.c.post(`/api/patients/${S.pid}/medication-reconciliation`, { ...body, ...fake })).status, 400, 'a body that names a user is refused');
+        const ok = await doctor.c.post(`/api/patients/${S.pid}/medication-reconciliation`, body);
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); return ['medication.add', 'medication_reconciliation.record'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);
