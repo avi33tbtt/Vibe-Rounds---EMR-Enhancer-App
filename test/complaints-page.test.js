@@ -101,3 +101,44 @@ test('a server-published complaint set (srv pin) appears in the picker and a non
   p.w.eval(`REGISTRY=[{id:'cc_fever',kind:'template',title:'Complaint: Fever',desc:'',fields:[],version:2,srv:{setId:7,version:2,checksum:'x',publishedBy:'a'}},{id:'dka_ctx',kind:'disease',title:'DKA context',fields:[]}];renderComplaints()`);
   assert.deepEqual(buttons(p).map(b => b.dataset.arg), ['cc_fever']);
 });
+
+// ---- R1b: structured symptom attributes ----
+const PREFIX = { cc_fever: 'fev', cc_cough: 'cgh', cc_abdo: 'abd', cc_headache: 'hdc', cc_chest: 'cpn', cc_joint: 'jnt' };
+const ATTR = [['onset', 'select'], ['start', 'datetime'], ['dur', 'number'], ['dur_u', 'select'], ['course', 'select'], ['sev', 'select']];
+
+test('R1b: every complaint set starts with the six attribute fields, typed as planned, with its own prefix and only types the envelope maps', () => {
+  const p = page();
+  for (const [id, x] of Object.entries(PREFIX)) {
+    const s = p.ev(`BUILTIN.find(b=>b.id==="${id}")`);
+    assert.deepEqual(s.fields.slice(0, 6).map(f => [f.id, f.type]), ATTR.map(([k, t]) => [`${x}_${k}`, t]), id);
+    assert.ok(s.fields.every(f => ['select', 'datetime', 'number', 'boolean', 'text'].includes(f.type)), id);
+    assert.deepEqual(s.fields[1].options, undefined);
+    assert.ok(s.fields[0].options.includes('Sudden') && s.fields[3].options.includes('Weeks') && s.fields[5].options.includes('Not stated'), id);
+    assert.ok(!s.fields[2].unit, 'the amount has no invented unit (the unit is its own select)');
+    const r = lint(s, { scrub: false, bindingState: () => 'verified' });
+    assert.equal(r.ok, true, id + ': ' + JSON.stringify(r.findings)); assert.equal(r.needsTwoReviewers, false, id);
+  }
+});
+
+test('R1b: attributes are recorded through the page (local mode) and checked by the same typing rules as the server path', () => {
+  const p = page();
+  p.w.applySet('cc_cough');
+  p.w.setVal('cgh_onset', 'Gradual'); p.w.setVal('cgh_dur_u', 'Weeks'); p.w.setVal('cgh_sev', 'Mild');
+  assert.deepEqual(['cgh_onset', 'cgh_dur_u', 'cgh_sev'].map(k => p.ev(`CASE.values.${k}`)), ['Gradual', 'Weeks', 'Mild']);
+  assert.match(p.d.getElementById('forms').textContent, /Onset as described/);
+  const f = id => p.ev(`BUILTIN.find(b=>b.id==="cc_cough").fields.find(f=>f.id==="${id}")`);
+  p.w.eval('window.__f=BUILTIN.find(b=>b.id==="cc_cough").fields');
+  assert.deepEqual(p.ev('toTyped(__f.find(f=>f.id==="cgh_onset"),"Gradual")'), { v: 'Gradual' });
+  assert.ok(p.ev('toTyped(__f.find(f=>f.id==="cgh_onset"),"Overnight")').err, 'an unlisted word is refused');
+  assert.deepEqual(p.ev('toTyped(__f.find(f=>f.id==="cgh_dur"),"3")'), { v: 3 });
+  assert.ok(p.ev('toTyped(__f.find(f=>f.id==="cgh_dur"),"about three")').err);
+  assert.match(p.ev('toTyped(__f.find(f=>f.id==="cgh_start"),"2026-11-20T08:00").v'), /^2026-11-20T/);
+  assert.ok(f('cgh_start'));
+});
+
+test('R1b: two complaints applied together keep separate attribute values (no shared field ids)', () => {
+  const p = page();
+  p.w.applySet('cc_fever'); p.w.applySet('cc_cough');
+  p.w.setVal('fev_sev', 'Severe'); p.w.setVal('cgh_sev', 'Mild');
+  assert.deepEqual([p.ev('CASE.values.fev_sev'), p.ev('CASE.values.cgh_sev')], ['Severe', 'Mild']);
+});
