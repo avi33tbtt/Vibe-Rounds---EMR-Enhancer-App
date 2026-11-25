@@ -60,6 +60,11 @@ const MATRIX = {
   'GET /api/problems/:id':          { guard: 'problems:read' },
   'POST /api/problems/:id/resolve': { guard: 'problems:write' },
   'POST /api/problems/:id/entered-in-error': { guard: 'problems:write' },
+  'GET /api/patients/:id/allergies': { guard: 'allergies:read' },
+  'POST /api/patients/:id/allergies': { guard: 'allergies:write' },
+  'GET /api/allergies/:id':         { guard: 'allergies:read' },
+  'POST /api/allergies/:id/resolve': { guard: 'allergies:write' },
+  'POST /api/allergies/:id/entered-in-error': { guard: 'allergies:write' },
   'GET /api/local-terms':           { guard: 'terms:read' },
   'POST /api/local-terms':          { guard: 'terms:write' },
   'GET /api/local-terms/:id':       { guard: 'terms:read' },
@@ -112,6 +117,8 @@ const EXPECTED_ROLES = {
   'terms:publish':     ['admin'],
   'problems:read':     ['admin', 'doctor', 'nurse', 'viewer'],
   'problems:write':    ['admin', 'doctor', 'nurse'],
+  'allergies:read':    ['admin', 'doctor', 'nurse', 'viewer'],
+  'allergies:write':   ['admin', 'doctor', 'nurse'],
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],
   'ccis:import':       ['admin', 'doctor'],
@@ -447,6 +454,23 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/problems/:id/entered-in-error', nurse, async () => {
         const ok = await nurse.c.post(`/api/problems/${S.prid}/entered-in-error`, { reason: 'Audit error', rowVersion: 2 });
         assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['problem.error'];
+      }],
+      ['POST /api/patients/:id/allergies', nurse, async () => {
+        const r = await nurse.c.post(`/api/patients/${S.pid}/allergies`, { substance: 'Audit allergy', ...fake });
+        assert.equal(r.status, 400, 'a body that names a user is refused');
+        const ok = await nurse.c.post(`/api/patients/${S.pid}/allergies`, { substance: 'Audit allergy' });
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); return ['allergy.add'];
+      }],
+      ['POST /api/allergies/:id/resolve', nurse, async () => {
+        const a = await nurse.c.post(`/api/patients/${S.pid}/allergies`, { substance: 'Audit resolve' });
+        const r = await nurse.c.post(`/api/allergies/${a.body.allergy.id}/resolve`, { reason: 'Audit resolution', rowVersion: 1, ...fake });
+        assert.equal(r.status, 400, 'a body that names a user is refused');
+        const ok = await nurse.c.post(`/api/allergies/${a.body.allergy.id}/resolve`, { reason: 'Audit resolution', rowVersion: 1 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body)); S.alid = a.body.allergy.id; return ['allergy.add', 'allergy.resolve'];
+      }],
+      ['POST /api/allergies/:id/entered-in-error', nurse, async () => {
+        const ok = await nurse.c.post(`/api/allergies/${S.alid}/entered-in-error`, { reason: 'Audit error', rowVersion: 2 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['allergy.error'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);
