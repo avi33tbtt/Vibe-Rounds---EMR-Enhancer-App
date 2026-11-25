@@ -222,6 +222,11 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
         <div class="mu" style="margin:4px 0 8px">Add the findings of one body system; each finding has the same three answers, so a blank is never read as normal (no codes, doses or advice).</div>
         <div id="exList"></div>
       </div>
+      <div class="cd" id="apPick">
+        <b>Assessment and plan</b>
+        <div class="mu" style="margin:4px 0 8px">Record the problems, their status, the plan and the follow-up in the clinician's own words (no codes, doses or suggestions).</div>
+        <div id="apList"></div>
+      </div>
       <div id="formArea">
         <div class="empty" id="formEmpty"><b>Start the consult:</b> <button class="b sm" data-act="applySet" data-arg="pw_opd">OPD consultation</button> <button class="b sm" data-act="applySet" data-arg="pw_ipd">IPD admission</button><div class="mu" style="margin-top:8px">Or apply another pathway, generate a context, or add elements.</div></div>
         <div id="forms"></div>
@@ -423,6 +428,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 <script src="modules/52-complaints.js"></script>
 <script src="modules/54-adaptive.js"></script>
 <script src="modules/56-exam.js"></script>
+<script src="modules/58-assessment.js"></script>
 <script src="modules/60-library.js"></script>
 <script src="modules/70-review.js"></script>
 <script src="modules/80-pins.js"></script>
@@ -735,6 +741,7 @@ const DEMO_DKA={id:'gen_dka',kind:'disease',title:'Diabetic ketoacidosis',desc:'
   ]};
 BUILTIN.push(...COMPLAINT_SETS);   // R1a: OPD complaint sets (modules/52-complaints.js)
 BUILTIN.push(...EXAM_SETS);   // R1d: examination sets (modules/56-exam.js)
+BUILTIN.push(...AP_SETS);   // R1e: assessment and plan set (modules/58-assessment.js)
 [...BUILTIN,DEMO_SNAKE,DEMO_DKA].forEach(migrateSet);
 
 /* The AI system prompts live on the server (ai.js); the browser only sends a whitelisted payload. */
@@ -1117,7 +1124,7 @@ function saveGenerated(){commitGenerated(false)}
 
 
 /* Render */
-function renderAll(){renderBanner();renderEncounter();renderApplied();renderLists();renderComplaints();renderExam();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases();renderSrvCase()}
+function renderAll(){renderBanner();renderEncounter();renderApplied();renderLists();renderComplaints();renderExam();renderAP();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases();renderSrvCase()}
 function renderApplied(){
   const box=$('appliedChips'),empty=$('appliedEmpty');box.innerHTML='';
   if(!CASE.applied.length){empty.style.display='block';return}
