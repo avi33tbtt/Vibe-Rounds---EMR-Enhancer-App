@@ -17,6 +17,8 @@ const PERMS = {
   'terms:submit':      ['admin', 'doctor'],                      // submit a draft local term for review (R2f-2)
   'terms:review':      ['informatician'],                        // approve or reject a local term in review; never its author or submitter (R2f-2)
   'terms:publish':     ['admin'],                                // publish an approved local term and retire one (R2f-2)
+  'problems:read':     ['admin', 'doctor', 'nurse', 'viewer'],   // patient problem list (R3a)
+  'problems:write':    ['admin', 'doctor', 'nurse'],              // add a problem; resolve or mark entered in error in R3a-2
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],   // the de-identified context envelope for CCIS (B5); no nurse, viewer or informatician
   'ccis:import':       ['admin', 'doctor'],   // import a CCIS run record made from an envelope exported for the same case (DM2a)

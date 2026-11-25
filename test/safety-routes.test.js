@@ -55,6 +55,9 @@ const MATRIX = {
   'POST /api/notes/:id/discard':    { guard: 'cases:write' },
   'POST /api/notes/:id/sign':       { guard: 'cases:write' },
   'POST /api/notes/:id/amend':      { guard: 'cases:write' },
+  'GET /api/patients/:id/problems': { guard: 'problems:read' },
+  'POST /api/patients/:id/problems': { guard: 'problems:write' },
+  'GET /api/problems/:id':          { guard: 'problems:read' },
   'GET /api/local-terms':           { guard: 'terms:read' },
   'POST /api/local-terms':          { guard: 'terms:write' },
   'GET /api/local-terms/:id':       { guard: 'terms:read' },
@@ -105,6 +108,8 @@ const EXPECTED_ROLES = {
   'terms:submit':      ['admin', 'doctor'],
   'terms:review':      ['informatician'],
   'terms:publish':     ['admin'],
+  'problems:read':     ['admin', 'doctor', 'nurse', 'viewer'],
+  'problems:write':    ['admin', 'doctor', 'nurse'],
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],
   'ccis:import':       ['admin', 'doctor'],
@@ -423,6 +428,12 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/notes/:id/amend', nurse, async () => {
         const r = await nurse.c.post(`/api/notes/${S.nid}/amend`, { body: 'Audit note amended', reason: 'Audit amendment', amendmentCount: 0 });
         assert.equal(r.status, 201, JSON.stringify(r.body)); return ['note.amend'];
+      }],
+      ['POST /api/patients/:id/problems', nurse, async () => {
+        const r = await nurse.c.post(`/api/patients/${S.pid}/problems`, { label: 'Audit problem', ...fake });
+        assert.equal(r.status, 400, 'a body that names a user is refused');
+        const ok = await nurse.c.post(`/api/patients/${S.pid}/problems`, { label: 'Audit problem' });
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); return ['problem.add'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);

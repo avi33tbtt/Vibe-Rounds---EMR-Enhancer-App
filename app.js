@@ -14,6 +14,7 @@ const { mountReview } = require('./review');
 const { mountLocalTerms } = require('./local-terms');
 const { mountObservations } = require('./observations');
 const { mountNotes } = require('./notes');
+const { mountProblems } = require('./problems');
 const { mountPathways } = require('./pathways');
 const { mountContext } = require('./context');
 const { mountCcisRuns, isRunImportPath } = require('./ccis-runs');
@@ -306,6 +307,9 @@ function createApp(pool, opts = {}) {
 
   /* ---------- notes and signing (task B3c-1) ---------- */
   mountNotes(app, pool);
+
+  /* ---------- patient problem list (task R3a-1) ---------- */
+  mountProblems(app, pool);
 
   /* ---------- pathways and applying them (task B4a) ---------- */
   mountPathways(app, pool);

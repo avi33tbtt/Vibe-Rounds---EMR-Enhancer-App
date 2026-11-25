@@ -252,3 +252,11 @@ Moved out of `EMR_TASK_TRACKER.md` on 2026-11-22 so the tracker stays small. Cla
 | 2026-11-25 | R2f-5a | The screen lists each code's latest version only (as the server list does) and one form both adds a new code and the next version of an existing one. No draft editor. | An older published version is not shown while a newer draft exists; the server's 409 explains an open version. |
 | 2026-11-25 | R2f-5a | Added `modules/75-terms.js` between 70-review and 80-pins; the two exact-order tests (modules-pins, modules-wire) were updated on purpose. | Module order is pinned by tests so a moved script cannot go unnoticed. |
 | 2026-11-25 | R2f-5b | Picker code added to `modules/75-terms.js` (no new module, so the load-order tests stay as they are). Binding keeps the picked term's `version` (string) only while code and display are unchanged and the system is `local`. | Matches `term-verify.js`; a stale version is never sent for a different term. |
+
+
+## R3a-1 (2026-11-25)
+| Decision | Why |
+|---|---|
+| Problems belong to the patient; origin_case_id optional, same-patient enforced by composite FK | One list across cases for R3g, R3i, R9 |
+| `local_term_code` column added but not exposed by routes | Avoids a later migration; verification comes with a later row |
+| onsetDate must be a real date from 1900, not later than tomorrow UTC | Time-zone slack |
