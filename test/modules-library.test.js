@@ -24,7 +24,7 @@ test('60-library.js loads after 50-cases.js and before the inline script; none o
   for (const c of CONSTS) { assert.ok(!new RegExp(`^const ${c}=`, 'm').test(inline), 'constant still inline: ' + c); assert.ok(new RegExp(`^const ${c}=`, 'm').test(mod), 'constant missing: ' + c); }
   const tops = mod.split('\n').filter(x => /^(const|let|var) /.test(x)).map(x => x.split('=')[0].replace(/^(const|let|var) /, ''));
   assert.deepEqual(tops, CONSTS, 'no other top-level variables');
-  assert.match(inline, /Set versions: status badges/, 'the versions and review screens stay in the page (R0d-2)');
+  assert.ok(!/Set versions: status badges/.test(inline), 'the versions and review screens moved to 70-review.js (R0d-2)');
 });
 
 async function page(fetchImpl) {
