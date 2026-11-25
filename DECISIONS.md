@@ -264,3 +264,5 @@ Moved out of `EMR_TASK_TRACKER.md` on 2026-11-22 so the tracker stays small. Cla
 | Audit for allergies logs ids and the substance length only, never substance, reaction or reasons | Same as problems |
 | 2026-11-26 R3e | Medication history copies the allergy pattern: status active/stopped/entered_in_error, stop needs a reason, dose and frequency are free text as recorded (never suggested, never in audit). | No coding, no orders (R4). |
 | 2026-11-26 R3e | Route is POST /api/medications/:id/stop (not resolve); permissions medications:read/write same roles as allergies. | Matches the clinical wording. |
+| 2026-11-26 R4a | Drug data = local drug list only (R2f-style review); no licensed or open drug database. | Owner decision; no licence check needed. |
+| 2026-11-26 R4a | Clinician owner for R4 = project owner for the synthetic demo only; a real clinician is a go-live gate item. | Owner decision; see docs/R4A-DECISIONS.md. |
