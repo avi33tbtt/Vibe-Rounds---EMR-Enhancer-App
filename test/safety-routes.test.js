@@ -84,6 +84,10 @@ const MATRIX = {
   'GET /api/investigation-orders/:id': { guard: 'orders:read' },
   'POST /api/investigation-orders/:id/cancel': { guard: 'orders:write' },
   'POST /api/investigation-orders/:id/entered-in-error': { guard: 'orders:write' },
+  'GET /api/investigation-orders/:id/results': { guard: 'results:read' },
+  'POST /api/investigation-orders/:id/specimens': { guard: 'results:write' },
+  'POST /api/investigation-orders/:id/results': { guard: 'results:write' },
+  'POST /api/investigation-results/:id/correct': { guard: 'results:write' },
   'GET /api/local-terms':           { guard: 'terms:read' },
   'POST /api/local-terms':          { guard: 'terms:write' },
   'GET /api/local-terms/:id':       { guard: 'terms:read' },
@@ -142,6 +146,8 @@ const EXPECTED_ROLES = {
   'medications:write': ['admin', 'doctor', 'nurse'],
   'orders:read':       ['admin', 'doctor', 'nurse', 'viewer'],
   'orders:write':      ['admin', 'doctor'],
+  'results:read':      ['admin', 'doctor', 'nurse', 'viewer'],
+  'results:write':     ['admin', 'doctor', 'nurse'],
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],
   'ccis:import':       ['admin', 'doctor'],
@@ -551,6 +557,23 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal((await doctor.c.post(`/api/investigation-orders/${S.ioid}/cancel`, { reason: 'Audit cancel', rowVersion: 1, ...fake })).status, 400, 'a body that names a user is refused');
         const ok = await doctor.c.post(`/api/investigation-orders/${S.ioid}/cancel`, { reason: 'Audit cancel', rowVersion: 1 });
         assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['investigation_order.cancel'];
+      }],
+      ['POST /api/investigation-orders/:id/specimens', nurse, async () => {
+        const o = await doctor.c.post(`/api/patients/${S.pid}/investigation-orders`, { testName: 'Audit result order' }); S.irid = o.body.order.id;
+        const r = await nurse.c.post(`/api/investigation-orders/${S.irid}/specimens`, { specimenType: 'Audit specimen', ...fake });
+        assert.equal(r.status, 400, 'a body that names a user is refused');
+        const ok = await nurse.c.post(`/api/investigation-orders/${S.irid}/specimens`, { specimenType: 'Audit specimen' });
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); return ['investigation_order.add', 'investigation_specimen.add'];
+      }],
+      ['POST /api/investigation-orders/:id/results', nurse, async () => {
+        assert.equal((await nurse.c.post(`/api/investigation-orders/${S.irid}/results`, { valueText: 'v', ...fake })).status, 400, 'a body that names a user is refused');
+        const ok = await nurse.c.post(`/api/investigation-orders/${S.irid}/results`, { valueText: 'v' });
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); S.irrid = ok.body.result.id; return ['investigation_result.add'];
+      }],
+      ['POST /api/investigation-results/:id/correct', nurse, async () => {
+        assert.equal((await nurse.c.post(`/api/investigation-results/${S.irrid}/correct`, { valueText: 'v2', reason: 'Audit correct', ...fake })).status, 400, 'a body that names a user is refused');
+        const ok = await nurse.c.post(`/api/investigation-results/${S.irrid}/correct`, { valueText: 'v2', reason: 'Audit correct' });
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); return ['investigation_result.correct'];
       }],
       ['POST /api/investigation-orders/:id/entered-in-error', doctor, async () => {
         const ok = await doctor.c.post(`/api/investigation-orders/${S.ioid}/entered-in-error`, { reason: 'Audit error', rowVersion: 2 });
