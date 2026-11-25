@@ -32,7 +32,7 @@ async function openPage() {
     async login(u) { ui.$('lg_u').value = u; ui.$('lg_p').value = PW; await w.srvLogin(); await until(() => ui.S().user, 'login'); },
     tab: t => d.querySelector(`[data-t=${t}]`).click(),
   };
-  await until(() => w.srvInit && w.eval('typeof Srv')==='object', 'page ready');
+  await until(() => w.srvInit && w.eval('typeof Srv')==='object' && d.readyState === 'complete', 'page ready');   // R0e-4: every module and the inline script have run
   return ui;
 }
 
