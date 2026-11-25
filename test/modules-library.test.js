@@ -14,7 +14,8 @@ const CONSTS = ['LIB', 'SRV_RO', 'srvLocked', 'DEMO_IMPORT', 'DEF_FIELD_KEYS', '
 
 test('60-library.js loads after 50-cases.js and before the inline script; none of it is inline any more', () => {
   const l = localScripts();
-  assert.equal(l.indexOf('modules/60-library.js'), l.indexOf('modules/50-cases.js') + 1, l.join(', '));
+  assert.equal(l.indexOf('modules/60-library.js'), l.indexOf('modules/52-complaints.js') + 1, l.join(', '));   // R1a: 52-complaints.js now sits between 50-cases and 60-library
+  assert.equal(l.indexOf('modules/52-complaints.js'), l.indexOf('modules/50-cases.js') + 1, l.join(', '));
   const inline = raw.slice(raw.indexOf('<script>'));
   for (const n of NAMES) {
     const re = new RegExp(`(async )?function ${n}\\(`);

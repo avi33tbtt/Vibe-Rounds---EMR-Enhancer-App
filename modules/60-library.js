@@ -7,7 +7,7 @@
 const LIB={busy:false,msg:'',loaded:false,slugs:new Set(),pwSlugs:new Set()};
 const SRV_RO='Sets from the server library are read-only. Make a new version through the library API, or use a different id.';
 const srvLocked=id=>{const s=REGISTRY.find(x=>x.id===id);return!!(s&&s.srv)};
-const DEMO_IMPORT=['basic_emr','glucose_ss','dka_ctx','snake_ctx','vitals','opd_visit','ipd_admission','ipd_progress','ipd_discharge'];
+const DEMO_IMPORT=['basic_emr','glucose_ss','dka_ctx','snake_ctx','vitals','opd_visit','ipd_admission','ipd_progress','ipd_discharge','cc_fever','cc_cough','cc_abdo','cc_headache','cc_chest','cc_joint'];
 const DEF_FIELD_KEYS=['id','label','type','unit','options','repeat','required','derived','flag','rationale','citation','codingPolicy','linkId','sdcType','text','path'];
 function libDef(s,withCodes=true){   // the whitelist the server accepts: declarative text, true/false, lists and objects only
   const fields=(s.fields||[]).map(f=>{

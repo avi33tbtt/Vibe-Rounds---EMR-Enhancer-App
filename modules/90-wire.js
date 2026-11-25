@@ -8,6 +8,7 @@ const ACT={
   applyGenerated:()=>applyGenerated(),
   archiveCase:()=>archiveCase(),
   fillDx:(el)=>fillDx(el),
+  ccFilter:(el)=>{CC.q=el.value;renderComplaints()},
   generate:()=>generate(),
   importQ:()=>importQ(),
   loadQFile:(el)=>loadQFile(el),

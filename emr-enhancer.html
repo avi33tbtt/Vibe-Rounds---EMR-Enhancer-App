@@ -211,6 +211,12 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
           <span id="narSt" class="mu" role="status"></span>
         </div>
       </div>
+      <div class="cd" id="ccPick">
+        <b>Complaint</b>
+        <div class="mu" style="margin:4px 0 8px">Pick what the patient came for; each adds a short set of history questions (no codes, doses or advice).</div>
+        <input type="text" id="cc_q" placeholder="Search complaints" aria-label="Search complaints" data-act="ccFilter" data-ev="input">
+        <div id="ccList" style="margin-top:8px"></div>
+      </div>
       <div id="formArea">
         <div class="empty" id="formEmpty"><b>Start the consult:</b> <button class="b sm" data-act="applySet" data-arg="pw_opd">OPD consultation</button> <button class="b sm" data-act="applySet" data-arg="pw_ipd">IPD admission</button><div class="mu" style="margin-top:8px">Or apply another pathway, generate a context, or add elements.</div></div>
         <div id="forms"></div>
@@ -409,6 +415,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 <script src="modules/30-store.js"></script>
 <script src="modules/40-patients.js"></script>
 <script src="modules/50-cases.js"></script>
+<script src="modules/52-complaints.js"></script>
 <script src="modules/60-library.js"></script>
 <script src="modules/70-review.js"></script>
 <script src="modules/80-pins.js"></script>
@@ -719,6 +726,7 @@ const DEMO_DKA={id:'gen_dka',kind:'disease',title:'Diabetic ketoacidosis',desc:'
     {id:'hco3',label:'Bicarbonate',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'1963-8',display:'Bicarbonate [Moles/volume] in Serum or Plasma'}},{id:'k',label:'K⁺ before insulin',type:'number',unit:'mmol/L',coding:{system:'loinc',code:'2823-3',display:'Potassium [Moles/volume] in Serum or Plasma'}},
     {id:'out',label:'Outcome',type:'select',options:['Recovered','ICU stay','Death']}
   ]};
+BUILTIN.push(...COMPLAINT_SETS);   // R1a: OPD complaint sets (modules/52-complaints.js)
 [...BUILTIN,DEMO_SNAKE,DEMO_DKA].forEach(migrateSet);
 
 /* The AI system prompts live on the server (ai.js); the browser only sends a whitelisted payload. */
@@ -1101,7 +1109,7 @@ function saveGenerated(){commitGenerated(false)}
 
 
 /* Render */
-function renderAll(){renderBanner();renderEncounter();renderApplied();renderLists();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases();renderSrvCase()}
+function renderAll(){renderBanner();renderEncounter();renderApplied();renderLists();renderComplaints();renderForms();renderLib();renderCustomList();codesUI();renderNotes();renderCases();renderSrvCase()}
 function renderApplied(){
   const box=$('appliedChips'),empty=$('appliedEmpty');box.innerHTML='';
   if(!CASE.applied.length){empty.style.display='block';return}
