@@ -204,10 +204,10 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | R4i | 04-demo-and-roadmap.md (R brief) | Procedures: server + page | SPLIT | 2026-11-26 |  | Replaced by R4i-1 (server) and R4i-2 (page): a migration, routes, matrix/audit/data tests plus a whole page screen is two sessions. Nothing built. |
 | R4i-1 | 04-demo-and-roadmap.md (R brief) | Procedures: server (migration 027, list, record, cancel, entered in error; append-only; reason on every move; reuses orders:read/write; no delete) | DONE | 2026-11-26 | 1 migration + 1 routes file + tests | 027 migration, procedures.js, 5 routes (orders:read/write), matrix+audit+data tests, procedures test. Free-text name/outcome, offset date-time not future. Not run here (yours). R4i-2 next. |
 | R4i-2 | 04-demo-and-roadmap.md (R brief) | Procedures in the page: record, cancel, entered in error, list on the Orders tab | DONE | 2026-11-26 | page + 1 test file | modules/89-procedures.js, page, wire, patients, procedures-page test, wire-list test. Record, cancel, entered in error on Orders tab; times in UTC. Not run here. R4j needs CCIS schema bump first. |
-| R4j | 04-demo-and-roadmap.md (R brief) | Envelope sections orders and results (CCIS schema bump first) | LOCKED |  | envelope.js + contracts + tests | Context impact: new sections. |
+| R4j | 04-demo-and-roadmap.md (R brief) | Envelope sections orders and results (CCIS schema bump first) | BLOCKED | 2026-11-26 | envelope.js + contracts + tests | CCIS envelope schema 0.1.0 has no orders/results sections and CCIS has no bump row. Needs a CCIS row first. Context impact: new sections. |
 | R5 | (written when reached) | C. IPD: admission, progress, medication administration, discharge | SPLIT | 2026-11-23 |  | Replaced by R5a to R5h. Still LOCKED. |
-| R5a | 04-demo-and-roadmap.md (R brief) | Admission record: server | LOCKED |  | 1 migration + 1 routes file + tests | Needs R4. |
-| R5b | 04-demo-and-roadmap.md (R brief) | Admission in the page | LOCKED |  | page + 1 test file |  |
+| R5a | chunk-R5a-admissions-server.md | Admission record: server | DONE | 2026-11-26 | 1 migration + 1 routes file + tests | 028 migration, admissions.js, 5 routes (orders:read/write), chunk-R5a file, matrix+audit+data tests, admissions test. One active admission per patient. Not run here (yours). R5b next. |
+| R5b | 04-demo-and-roadmap.md (R brief) | Admission in the page | TODO |  | page + 1 test file | Needs R5a (done). New module after 89-procedures.js; update the script-list test. |
 | R5c | 04-demo-and-roadmap.md (R brief) | Progress notes (reuse notes with a type): server and page | LOCKED |  | routes + page + tests |  |
 | R5d | 04-demo-and-roadmap.md (R brief) | Medication administration record: server (append-only) | LOCKED |  | 1 migration + 1 routes file + tests |  |
 | R5e | 04-demo-and-roadmap.md (R brief) | Medication administration record in the page | LOCKED |  | page + 1 test file |  |
@@ -280,6 +280,7 @@ Reorder done 2026-11-22: B0 to B2b now come before 8b to 8d, so B2r is merged in
 - First CCIS slice (in the CCIS repo): snake envenomation process metrics. No doses or bands; parameters from a local clinician, disabled by default. The EMR cohort exporter is the last EMR row.
 
 ## OPEN QUESTIONS
+- 2026-11-26: R4j is BLOCKED until CCIS adds a schema-bump row for orders and results sections (its envelope schema has none, 0.1.0 is frozen). Say if you want that row added in the CCIS tracker.
 - 2026-11-25: R9d needs a hypertension element set; none exists in the page today (diabetes and CKD sets do). Confirm it may be added as a demo set through review.
 - 2026-11-23: rehearse and review `docs/DEMO-SCRIPT.md` (row DM0 is a draft). The early "criteria met" example was dropped: CCIS outputs are descriptive process metrics with disabled thresholds.
 - 2026-11-23: hand-off to CCIS is by file and local CLI only (no network). Say if you want a different mechanism.

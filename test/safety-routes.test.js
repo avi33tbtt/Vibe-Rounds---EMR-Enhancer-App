@@ -98,6 +98,11 @@ const MATRIX = {
   'GET /api/procedures/:id': { guard: 'orders:read' },
   'POST /api/procedures/:id/cancel': { guard: 'orders:write' },
   'POST /api/procedures/:id/entered-in-error': { guard: 'orders:write' },
+  'GET /api/patients/:id/admissions': { guard: 'orders:read' },
+  'POST /api/patients/:id/admissions': { guard: 'orders:write' },
+  'GET /api/admissions/:id': { guard: 'orders:read' },
+  'POST /api/admissions/:id/cancel': { guard: 'orders:write' },
+  'POST /api/admissions/:id/entered-in-error': { guard: 'orders:write' },
   'GET /api/patients/:id/abnormal-results': { guard: 'results:read' },
   'POST /api/investigation-results/:id/acknowledge': { guard: 'results:ack' },
   'GET /api/local-terms':           { guard: 'terms:read' },
@@ -629,6 +634,22 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/procedures/:id/entered-in-error', doctor, async () => {
         const ok = await doctor.c.post(`/api/procedures/${S.prid}/entered-in-error`, { reason: 'Audit error', rowVersion: 2 });
         assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['procedure.error'];
+      }],
+      ['POST /api/patients/:id/admissions', doctor, async () => {
+        const body = { ward: 'Audit ward', reason: 'Audit reason', admittedAt: '2026-11-20T09:30:00+05:45' };
+        const r = await doctor.c.post(`/api/patients/${S.pid}/admissions`, { ...body, ...fake });
+        assert.equal(r.status, 400, 'a body that names a user is refused');
+        const ok = await doctor.c.post(`/api/patients/${S.pid}/admissions`, body);
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); S.adid = ok.body.admission.id; return ['admission.add'];
+      }],
+      ['POST /api/admissions/:id/cancel', doctor, async () => {
+        assert.equal((await doctor.c.post(`/api/admissions/${S.adid}/cancel`, { reason: 'Audit cancel', rowVersion: 1, ...fake })).status, 400, 'a body that names a user is refused');
+        const ok = await doctor.c.post(`/api/admissions/${S.adid}/cancel`, { reason: 'Audit cancel', rowVersion: 1 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['admission.cancel'];
+      }],
+      ['POST /api/admissions/:id/entered-in-error', doctor, async () => {
+        const ok = await doctor.c.post(`/api/admissions/${S.adid}/entered-in-error`, { reason: 'Audit error', rowVersion: 2 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['admission.error'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);
