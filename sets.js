@@ -79,9 +79,10 @@ function validateDefinition(def, slug, kind) {
       return v.forEach((b, i) => {
         const p = `${path}[${i}]`;
         if (!isObj(b)) return err(p, 'must be an object.');
-        for (const k of Object.keys(b)) if (!['system', 'code', 'display', 'source'].includes(k)) err(`${p}.${k}`, 'is not allowed here.');
+        for (const k of Object.keys(b)) if (!['system', 'code', 'display', 'source', 'version'].includes(k)) err(`${p}.${k}`, 'is not allowed here.');
         str(b.system, 80, `${p}.system`, true); str(b.code, 100, `${p}.code`, true);
         if (b.display !== undefined) str(b.display, 300, `${p}.display`);
+        if (b.version !== undefined && !(isStr(b.version) && /^[1-9]\d{0,8}$/.test(b.version))) err(`${p}.version`, 'must be the term version as digits in text, for example "2" (stored sets hold no numbers).');
         if (b.source !== undefined && !BINDING_SOURCES.includes(b.source)) err(`${p}.source`, 'must be one of: ' + BINDING_SOURCES.join(', ') + '.');
       });
     }

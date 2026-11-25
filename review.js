@@ -12,11 +12,11 @@ const { checksumOf, validateDefinition } = require('./sets');
 
 const BAD_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 const parseVersion = v => (/^\d{1,9}$/.test(v) && +v >= 1 ? +v : null);
-// The server has no terminology lookup for stored sets yet, so a bound code is never "verified" here (unknown never passes).
-const serverBindingState = () => 'not verified on the server';
+const { bindingStateFor } = require('./term-verify');
 
-function lintStored(slug, kind, def) {
-  const r = lint({ id: slug, kind: kind === 'custom' ? 'template' : kind, ...def }, { bindingState: serverBindingState });
+// R2f-4a: a bound `local` code is verified against PUBLISHED local terms; every other system stays unverified (unknown never passes).
+async function lintStored(c, slug, kind, def) {
+  const r = lint({ id: slug, kind: kind === 'custom' ? 'template' : kind, ...def }, { bindingState: await bindingStateFor(c, def) });
   return { ok: r.ok, findings: r.findings, needsTwoReviewers: r.needsTwoReviewers };
 }
 
@@ -44,7 +44,7 @@ function mountReview(app, pool) {
       if (checksumOf(v.definition_json) !== v.checksum) return reject('checksum_mismatch', 'The stored content no longer matches its checksum. It was not submitted.');
       const defErrors = validateDefinition(v.definition_json, set.slug, set.kind);
       if (defErrors.length) return reject('invalid_definition', 'The stored content is not valid declarative data. It was not submitted.');
-      const result = lintStored(set.slug, set.kind, v.definition_json);
+      const result = await lintStored(c, set.slug, set.kind, v.definition_json);
       const errors = result.findings.filter(f => f.severity === 'error');
       if (errors.length) return reject('lint_errors', `The set has ${errors.length} problem(s) that must be fixed first. Add a new draft version and submit that.`,
         { errors: errors.length, warnings: result.findings.length - errors.length }, { lint: result });
