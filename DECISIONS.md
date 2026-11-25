@@ -262,3 +262,5 @@ Moved out of `EMR_TASK_TRACKER.md` on 2026-11-22 so the tracker stays small. Cla
 | onsetDate must be a real date from 1900, not later than tomorrow UTC | Time-zone slack |
 | Allergies copy the problem rules (status active/resolved/entered_in_error, final error, no delete); substance, reaction, severity (mild/moderate/severe, optional) are immutable | Same patterns as R3a; a mistake is fixed by entered-in-error plus a new row |
 | Audit for allergies logs ids and the substance length only, never substance, reaction or reasons | Same as problems |
+| 2026-11-26 R3e | Medication history copies the allergy pattern: status active/stopped/entered_in_error, stop needs a reason, dose and frequency are free text as recorded (never suggested, never in audit). | No coding, no orders (R4). |
+| 2026-11-26 R3e | Route is POST /api/medications/:id/stop (not resolve); permissions medications:read/write same roles as allergies. | Matches the clinical wording. |

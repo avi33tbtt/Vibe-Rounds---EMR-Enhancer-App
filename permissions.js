@@ -21,6 +21,8 @@ const PERMS = {
   'problems:write':    ['admin', 'doctor', 'nurse'],              // add a problem; resolve or mark entered in error (R3a-2)
   'allergies:read':    ['admin', 'doctor', 'nurse', 'viewer'],   // patient allergy list (R3c)
   'allergies:write':   ['admin', 'doctor', 'nurse'],              // add an allergy; resolve or mark entered in error (R3c)
+  'medications:read':  ['admin', 'doctor', 'nurse', 'viewer'],   // patient medication history, recorded list only (R3e)
+  'medications:write': ['admin', 'doctor', 'nurse'],              // add; stop or mark entered in error (R3e)
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],   // the de-identified context envelope for CCIS (B5); no nurse, viewer or informatician
   'ccis:import':       ['admin', 'doctor'],   // import a CCIS run record made from an envelope exported for the same case (DM2a)
