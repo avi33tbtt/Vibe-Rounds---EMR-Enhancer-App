@@ -29,6 +29,7 @@ const { mountAdmissions } = require('./admissions');
 const { mountAdministrations } = require('./administrations');
 const { mountResultAcks } = require('./result-acks');
 const { mountPatientTimeline } = require('./patient-timeline');
+const { mountPatientLongitudinal } = require('./patient-longitudinal');
 const { mountPathways } = require('./pathways');
 const { mountContext } = require('./context');
 const { mountCcisRuns, isRunImportPath } = require('./ccis-runs');
@@ -364,6 +365,8 @@ function createApp(pool, opts = {}) {
 
   /* ---------- one timeline across a patient's cases, read only (task R3g) ---------- */
   mountPatientTimeline(app, pool);
+  /* ---------- the same rows, projected and labelled by context, read only (task R9e) ---------- */
+  mountPatientLongitudinal(app, pool);
 
   /* ---------- pathways and applying them (task B4a) ---------- */
   mountPathways(app, pool);

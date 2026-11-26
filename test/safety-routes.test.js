@@ -44,6 +44,7 @@ const MATRIX = {
   'POST /api/cases/:id/observations': { guard: 'cases:write' },
   'GET /api/cases/:id/timeline':    { guard: 'cases:read' },
   'GET /api/patients/:id/timeline': { guard: 'cases:read' },
+  'GET /api/patients/:id/longitudinal': { guard: 'cases:read' },
   'GET /api/cases/:id/context':     { guard: 'context:read' },
   'GET /api/cases/:id/ccis-runs':   { guard: 'ccis:read' },
   'POST /api/cases/:id/ccis-runs':  { guard: 'ccis:import' },

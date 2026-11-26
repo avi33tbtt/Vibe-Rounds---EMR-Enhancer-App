@@ -34,3 +34,11 @@
 | R6F2C-1 | New route `POST /api/import/proposals/:id/accept-to-patient` (body: `rowVersion`, `patientId`, optional `originCaseId`). Problems and allergies belong to the patient, so the chart is the patient the person names; the 2b `accept` route is unchanged and points other kinds here. |
 | R6F2C-2 | Needs `import:write` AND the kind's own permission (`problems:write` for Condition, `allergies:write` for AllergyIntolerance), checked after the proposal's kind is known; a denial is audited like any other. MedicationRequest is refused by both routes. |
 | R6F2C-3 | The existing label, date, reaction and severity rules are reused (exported from problems.js and allergies.js). The record starts active even when the source said otherwise (the parser warned); a person resolves it afterwards with a reason. |
+
+## R9e (2026-11-27): longitudinal route
+
+| ID | Decision |
+|----|----------|
+| R9E-1 | `GET /api/patients/:id/longitudinal` reuses the R3g reader (`readPatientEvents`, now exported from `patient-timeline.js`), then R9b projection and R9c membership. Observations on the old route gain `setSlug` (slug only). No second timeline, no new table, no migration. |
+| R9E-2 | `counts` cover the whole window BEFORE the context filter (so every chip shows its number); `total`, `limit`, `offset` apply AFTER it. `hiddenInError` is window-wide. A stored row the projection refuses gives 422, never a guess. |
+| R9E-3 | `context` is a comma list of listed keys, each once; unknown, repeated or empty-item values are 400. Pins come from `case_applied_sets` (withdrawn pins no longer place problems by case; observations keep their own set). Encounter, amendment and context-change kinds are still not sent (deferred). |

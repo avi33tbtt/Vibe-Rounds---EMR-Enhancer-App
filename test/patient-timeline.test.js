@@ -59,6 +59,8 @@ test('merges observations, signed notes, problems, allergies and medications of 
   const os = t.body.events.filter(e => e.kind === 'observation');
   assert.deepEqual(os.map(e => [e.caseId, e.value, e.unit, e.fieldKey]), [[k2, 91, 'bpm', 'hr'], [k1, 80, 'bpm', 'hr']], 'both cases, oldest effective time first');
   assert.ok(os.every(e => e.recordedAt && e.effectiveAt), 'effective and recorded time both present');
+  assert.ok(os.every(e => /^tl-set-\d+$/.test(e.setSlug)), 'R9e: each observation names the slug of the set it was recorded under');
+  assert.ok(t.body.events.filter(e => e.kind !== 'observation').every(e => e.setSlug === undefined), 'only observations carry a set slug');
   assert.equal(t.body.total, t.body.events.length);
   const text = JSON.stringify(t.body);
   assert.ok(!text.includes('SECRET-NOTE-BODY') && !text.includes('SECRET-DOSE'), 'no note text, no dose text');
