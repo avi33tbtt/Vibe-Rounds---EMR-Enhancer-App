@@ -1,5 +1,12 @@
 # Decisions
 
+## R9c (2026-11-26)
+| ID | Decision |
+|----|----------|
+| R9C-1 | Mapping and membership live together in `context-map.js` (one module, as the row's size guard allows); data stays plain and is changed by pull request. |
+| R9C-2 | Problem terms (diabetes, CKD, hypertension names) were listed by me. They place a problem, allergy or medication only on a WHOLE-label match; a clinician should review the list. Hypertension has terms but no set until R9d. |
+| R9C-3 | `vitals` and `urine_io` are "no single condition" (shown in All). Case pins are passed in by the caller as `{caseId: [{setSlug, pathwaySlug, active}]}`; R9e must supply them. |
+
 ## R6f-3 (2026-11-26)
 | ID | Decision |
 |----|----------|
