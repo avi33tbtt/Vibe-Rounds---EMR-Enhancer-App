@@ -5,24 +5,24 @@
 // active pin of a listed set on its case. Every membership keeps its reasons. Nothing here is a clinical rule, threshold or advice.
 // SYNTHETIC DEMO DATA - NOT FOR CLINICAL USE.
 
-// The clinician's own words and the repo's own set slugs, listed by hand. Hypertension has no set or pathway yet (row R9d adds them).
+// The clinician's own words and the repo's own set slugs, listed by hand. Row R9d-1 added the hypertension demo set and the combined pathway.
 const CONTEXTS = {
   diabetes: {
     label: 'Diabetes',
     setSlugs: ['dm_ctx', 'hba1c_mon', 'glucose_ss', 'foot_ulcer', 'dka_ctx'],
-    pathwaySlugs: ['pw_dm', 'pw_dm_ckd_foot', 'pw_dka'],
+    pathwaySlugs: ['pw_dm', 'pw_dm_ckd_foot', 'pw_dka', 'pw_dm_ckd_htn'],
     problemTerms: ['Diabetes mellitus', 'Type 1 diabetes mellitus', 'Type 2 diabetes mellitus', 'Diabetic ketoacidosis', 'Diabetic foot ulcer'],
   },
   ckd: {
     label: 'Chronic kidney disease',
     setSlugs: ['ckd_ctx'],
-    pathwaySlugs: ['pw_dm_ckd_foot'],
+    pathwaySlugs: ['pw_dm_ckd_foot', 'pw_dm_ckd_htn'],
     problemTerms: ['Chronic kidney disease'],
   },
   hypertension: {
     label: 'Hypertension',
-    setSlugs: [],
-    pathwaySlugs: [],
+    setSlugs: ['htn_ctx'],
+    pathwaySlugs: ['pw_dm_ckd_htn'],
     problemTerms: ['Hypertension', 'Essential hypertension'],
   },
 };

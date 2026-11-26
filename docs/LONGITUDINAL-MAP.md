@@ -50,7 +50,7 @@ Shape (data only):
 context key  ->  { label, setSlugs[], pathwaySlugs[], problemTerms[] }
 diabetes     ->  dm_ctx, hba1c_mon, glucose_ss, foot_ulcer, dka_ctx ; pw_dm, pw_dm_ckd_foot, pw_dka
 ckd          ->  ckd_ctx ; pw_dm_ckd_foot
-hypertension ->  (set added in R9d) ; (pathway added in R9d)
+hypertension ->  htn_ctx ; pw_dm_ckd_htn   (added in R9d-1; pw_dm_ckd_htn also listed under diabetes and ckd)
 ```
 
 Rules for R9c:

@@ -1,5 +1,12 @@
 # Decisions
 
+## R9d-1 (2026-11-26)
+| ID | Decision |
+|----|----------|
+| R9D1-1 | Added a hypertension demo set `htn_ctx` and a combined pathway `pw_dm_ckd_htn` (diabetes, CKD, hypertension); the pathway is also listed under diabetes and CKD in `context-map.js`. Demo content only, no thresholds or codes. |
+| R9D1-2 | Urine albumin-creatinine ratio (`uacr`) lives in `ckd_ctx` and creatinine/eGFR/BP fields are `repeat:true`; the page's own `ckd_ctx` has no uacr, so the published server set differs from the page demo set. Glucose is not in this series. |
+| R9D1-3 | Unknown = explicit point with no value; missing = no point (uacr, 2025-03); entered in error = one wrong sbp (190) later marked, with a separate corrected row (139). |
+
 ## R9c (2026-11-26)
 | ID | Decision |
 |----|----------|

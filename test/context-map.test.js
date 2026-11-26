@@ -35,7 +35,7 @@ test('problems match only an exact listed term: whole label, any case and spacin
   assert.deepEqual(membership(prob({ label: '  type 2   DIABETES mellitus ' })).contexts[0].reasons, ['term:Type 2 diabetes mellitus']);
   assert.equal(membership(prob({ label: 'Type 2 diabetes mellitus with neuropathy' })).scope, 'unmapped', 'longer label is not guessed');
   assert.equal(membership(prob({ label: 'Hyperkalaemia' })).scope, 'unmapped');
-  assert.deepEqual(keys(membership(prob({ label: 'Hypertension' }))), ['hypertension'], 'works by term although no hypertension set exists yet');
+  assert.deepEqual(keys(membership(prob({ label: 'Hypertension' }))), ['hypertension'], 'works by whole term as well as by set');
 });
 
 test('notes, encounters and listed items take context from an ACTIVE pin of a listed set on their case; withdrawn pins and other cases give nothing', () => {
@@ -83,12 +83,12 @@ test('annotate keeps a repeated source key once and counts it; inputs are not ch
   assert.deepEqual(keys(events.find(e => e.key === 'observation:2')), ['diabetes'], 'an error row keeps its context so the filter does not hide it silently');
 });
 
-test('the map itself is sane: every context lists only strings, no slug sits in two contexts, hypertension is empty until R9d', () => {
+test('the map itself is sane: every context lists only strings, no slug sits in two contexts, hypertension has its demo set (R9d-1)', () => {
   const seen = new Map();
   for (const [k, c] of Object.entries(CONTEXTS)) {
     for (const s of [...c.setSlugs, ...c.pathwaySlugs, ...c.problemTerms]) assert.equal(typeof s, 'string');
     for (const s of c.setSlugs) { assert.equal(seen.has(s), false, s + ' is in two contexts'); seen.set(s, k); }
   }
-  assert.deepEqual(CONTEXTS.hypertension.setSlugs, []);
+  assert.deepEqual(CONTEXTS.hypertension.setSlugs, ['htn_ctx']);
   assert.throws(() => membership(null), ContextError);
 });
