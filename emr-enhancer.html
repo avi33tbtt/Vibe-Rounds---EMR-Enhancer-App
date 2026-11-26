@@ -287,6 +287,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
       <div id="refBox"></div>
       <div id="prcBox"></div>
       <div id="admBox"></div>
+      <div id="marBox"></div>
     </div>
 
     <!-- MEDICATION HISTORY (R3f) -->
@@ -504,6 +505,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 <script src="modules/89-referrals.js"></script>
 <script src="modules/89-procedures.js"></script>
 <script src="modules/89-admissions.js"></script>
+<script src="modules/89-mar.js"></script>
 <script src="modules/90-wire.js"></script>
 <script>
 
@@ -1669,7 +1671,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     if(b.dataset.t==='problems')problemsLoad();
     if(b.dataset.t==='allergies')allergiesLoad();
     if(b.dataset.t==='medications')medicationsLoad();
-    if(b.dataset.t==='orders'){ordersLoad();reconcileLoad();invLoad();abnLoad();refLoad();prcLoad();admLoad()}
+    if(b.dataset.t==='orders'){ordersLoad();reconcileLoad();invLoad();abnLoad();refLoad();prcLoad();admLoad();marLoad()}
     if(b.dataset.t==='timeline')timelineLoad();
     if(b.dataset.t==='create')renderCustomList();
     if(b.dataset.t==='codes')codesUI();
