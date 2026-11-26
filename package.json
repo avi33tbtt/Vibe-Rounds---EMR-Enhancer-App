@@ -16,7 +16,7 @@
     "terms:bind": "node --env-file=.env scripts/bind-demo-codes.js",
     "demo:run": "node --env-file=.env scripts/demo-bridge.js",
     "start": "node --env-file=.env server.js",
-    "test": "node --env-file=.env --test --test-concurrency=1 test/*.test.js"
+    "test": "node --env-file=.env --test --test-concurrency=1 test/*.test.js",
 	"seed:render": "node seed.js"
   },
   "engines": {
