@@ -10,6 +10,7 @@ const { audit } = require('./audit');
 const A = require('./auth');
 
 const MAX_BODY = 20000;
+const NOTE_TYPES = ['general', 'progress'];   // a label chosen when the note is started; it never changes (migration 029)
 const BAD_CHARS = /\u0000|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;   // NUL and lone surrogates
 const bad = (res, message, extra = {}) => res.status(400).json({ error: 'invalid', message, ...extra });
 function strict(body, allowed) {
@@ -27,7 +28,7 @@ function mountNotes(app, pool) {
   const notFound = { status: 404, body: { error: 'not_found' } };
   const archived = { status: 409, body: { error: 'case_archived', message: 'Restore the case before changing it.' } };
   const touch = (c, caseId) => c.query('UPDATE clinical_cases SET updated_at = now() WHERE id = $1', [caseId]);
-  const NOTE = `n.id, n.case_id, n.encounter_id, n.status, n.body, n.row_version, n.created_at, n.updated_at, au.username AS author,
+  const NOTE = `n.id, n.case_id, n.encounter_id, n.note_type AS type, n.status, n.body, n.row_version, n.created_at, n.updated_at, au.username AS author,
                 su.username AS signed_by, n.signed_at, du.username AS discarded_by, n.discarded_at`;
   const NOTE_FROM = `FROM case_notes n JOIN users au ON au.id = n.author_id LEFT JOIN users su ON su.id = n.signed_by LEFT JOIN users du ON du.id = n.discarded_by`;
   const AMEND = `m.id, m.note_id, m.seq, m.reason, m.body, m.amended_at, u.username AS amended_by`;
@@ -75,8 +76,10 @@ function mountNotes(app, pool) {
 
   /* ---------- start a draft ---------- */
   app.post('/api/cases/:id/notes', A.requirePerm(pool, 'cases:write'), async (req, res) => {
-    const s = strict(req.body, ['body', 'encounterId']);
+    const s = strict(req.body, ['body', 'encounterId', 'type']);
     if (s.error) return res.status(400).json(s.error);
+    if (s.body.type !== undefined && !NOTE_TYPES.includes(s.body.type)) return bad(res, `type must be one of: ${NOTE_TYPES.join(', ')}.`);
+    const type = s.body.type === undefined ? 'general' : s.body.type;
     if (!okText(s.body.body, MAX_BODY)) return bad(res, `The note must be text of 1 to ${MAX_BODY} characters.`);
     if (s.body.encounterId !== undefined && !posInt(s.body.encounterId)) return bad(res, 'encounterId must be a whole number.');
     const out = await tx(pool, async c => {
@@ -93,9 +96,9 @@ function mountNotes(app, pool) {
                                       WHERE ce.case_id = $1 AND e.status = 'open' ORDER BY ce.id DESC LIMIT 1`, [cs.id])).rows[0];
         enc = open ? open.encounter_id : null;
       }
-      const id = (await c.query('INSERT INTO case_notes(case_id, encounter_id, author_id, body) VALUES ($1,$2,$3,$4) RETURNING id', [cs.id, enc, req.user.id, s.body.body])).rows[0].id;
+      const id = (await c.query('INSERT INTO case_notes(case_id, encounter_id, author_id, body, note_type) VALUES ($1,$2,$3,$4,$5) RETURNING id', [cs.id, enc, req.user.id, s.body.body, type])).rows[0].id;
       await touch(c, cs.id);
-      await audit(c, req, 'note.create', 'case', cs.id, { noteId: id, length: s.body.body.length });
+      await audit(c, req, 'note.create', 'case', cs.id, { noteId: id, type, length: s.body.body.length });
       return { status: 201, body: { note: await noteOf(c, id) } };
     });
     res.status(out.status).json(out.body);

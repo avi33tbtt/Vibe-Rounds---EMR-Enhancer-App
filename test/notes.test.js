@@ -155,3 +155,34 @@ test('database: a signed note refuses every UPDATE and DELETE, even for the tabl
   await assert.rejects(env.pool.query(`DELETE FROM case_note_amendments`), /not allowed/);
   await assert.rejects(asApp(`UPDATE case_note_amendments SET reason = 'edited'`), /permission denied/);
 });
+
+test('R5c-1: a note has a type (general by default, or progress), chosen when it is started; anything else is refused; the type survives signing and amending and is audited without the text', async () => {
+  const d = await as('doctor1'), caseId = await newCase(d);
+  const g = await draft(d, caseId, 'No type given'); assert.equal(g.type, 'general');
+  const r = await d.post(`/api/cases/${caseId}/notes`, { body: 'Ward round: afebrile', type: 'progress' });
+  assert.equal(r.status, 201, JSON.stringify(r.body)); assert.equal(r.body.note.type, 'progress');
+  for (const bad of ['', 'PROGRESS', 'discharge', 5, null, ['progress']]) {
+    const x = await d.post(`/api/cases/${caseId}/notes`, { body: 'x', type: bad });
+    assert.equal(x.status, 400, JSON.stringify(bad)); assert.equal(x.body.error, 'invalid');
+  }
+  const id = r.body.note.id;
+  const edit = await d.patch(`/api/notes/${id}`, { body: 'Ward round: afebrile, eating', rowVersion: 1 }); assert.equal(edit.status, 200); assert.equal(edit.body.note.type, 'progress');
+  assert.equal((await d.patch(`/api/notes/${id}`, { body: 'x', rowVersion: 2, type: 'general' })).body.error, 'unknown_field', 'the type cannot be sent on an edit');
+  const sign = await d.post(`/api/notes/${id}/sign`, { rowVersion: 2 }); assert.equal(sign.status, 200); assert.equal(sign.body.note.type, 'progress');
+  const am = await d.post(`/api/notes/${id}/amend`, { body: 'Ward round: afebrile, eating well', reason: 'Added detail', amendmentCount: 0 }); assert.equal(am.status, 201); assert.equal(am.body.note.type, 'progress');
+  const list = (await d.get(`/api/cases/${caseId}/notes`)).body.notes;
+  assert.deepEqual(list.map(n => n.type), ['general', 'progress']);
+  const a = (await env.pool.query(`SELECT detail FROM audit_log WHERE action = 'note.create' AND detail->>'noteId' = $1`, [String(id)])).rows[0];
+  assert.equal(a.detail.type, 'progress'); assert.ok(!JSON.stringify(a.detail).includes('Ward round'), 'no note text in the audit log');
+});
+
+test('R5c-1: the database refuses a change of note type (owner and app role), for a draft and for a signed note; a bad type is refused by the table', async () => {
+  const d = await as('doctor1'), caseId = await newCase(d);
+  const n = await draft(d, caseId, 'Typed note');
+  await assert.rejects(env.pool.query(`UPDATE case_notes SET note_type = 'progress', row_version = row_version + 1 WHERE id = $1`, [n.id]), /type of a note cannot be changed/);
+  await assert.rejects(asApp(`UPDATE case_notes SET note_type = 'progress' WHERE id = $1`, [n.id]), /permission denied/);
+  await assert.rejects(env.pool.query(`INSERT INTO case_notes(case_id, author_id, body, note_type) VALUES ($1, $2, 'x', 'discharge')`, [caseId, (await row(n.id)).author_id]), /note_type|check/i);
+  assert.equal((await d.post(`/api/notes/${n.id}/sign`, { rowVersion: 1 })).status, 200);
+  await assert.rejects(env.pool.query(`UPDATE case_notes SET note_type = 'progress' WHERE id = $1`, [n.id]), /cannot be changed/);
+  assert.equal((await row(n.id)).note_type, 'general');
+});
