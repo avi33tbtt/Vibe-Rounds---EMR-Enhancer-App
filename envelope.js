@@ -66,6 +66,21 @@ function contextItems(rows, prefix, origin, counts, lifecycles = LIFECYCLE) {
 const MED_LIFE = { active: 'active', stopped: 'stopped', changed: 'replaced' }, INV_LIFE = { active: 'active', cancelled: 'cancelled' };
 const PLAIN_NUMBER = /^-?\d+(?:\.\d+)?$/;
 
+// R5h: administrations. No dose, reason or note text is ever read. rows: {id, order_id, outcome, administered_at, recorded_at, status, recorded_role}.
+// medOrders are the medication-order rows (to resolve orderRef to an order that is really exported).
+function administrationItems(rows, medOrders, counts) {
+  const rank = rankOf(rows), orderRank = rankOf(medOrders), sent = new Set(medOrders.filter(o => o.status !== 'entered_in_error').map(o => Number(o.id))), out = [];
+  for (const r of rows.slice().sort((a, b) => Number(a.id) - Number(b.id))) {
+    if (r.status === 'entered_in_error') { counts.enteredInError++; continue; }
+    if (!['given', 'held', 'refused'].includes(r.outcome)) throw new EnvelopeError('unknown outcome on administration row ' + r.id);
+    const item = { id: 'ad-' + rank.get(Number(r.id)), concept: { id: 'unclassified', codes: [] }, outcome: r.outcome, effective: time(r.administered_at), recorded: time(r.recorded_at),
+      status: 'final', sourceClass: 'clinician-entered', provenance: { roleClass: r.recorded_role || 'unknown', origin: 'emr-enhancer/medication-administrations', verified: false, corrected: false } };
+    if (sent.has(Number(r.order_id))) item.orderRef = 'om-' + orderRank.get(Number(r.order_id)); else counts.orderNotSent++;
+    out.push(item);
+  }
+  return out;
+}
+
 // R4j: results. Only a strictly numeric value with a one-token unit and a specimen collection time goes out; the rest is counted, never guessed.
 // rows: {id, replaces_result_id, value_text, unit_text, collected_at, recorded_at, recorded_role}
 function resultItems(rows, counts) {
@@ -92,7 +107,7 @@ function resultItems(rows, counts) {
 // medicationOrders, investigationOrders (R4j, same row shape with recorded_at = ordered_at) and results (see resultItems);
 // observations (id, applied_set_id, field_key, value_type, value_json, unit_display, effective_at, recorded_at, source_type, status, corrects_id, recorded_role);
 // events (only counted). exportedAt is an input.
-function buildEnvelope({ caseRow, pins, observations, events = [], problems = [], allergies = [], medicationOrders = [], investigationOrders = [], results = [], exportedAt, producerVersion, refSecret }) {
+function buildEnvelope({ caseRow, pins, observations, events = [], problems = [], allergies = [], medicationOrders = [], investigationOrders = [], results = [], administrations = [], exportedAt, producerVersion, refSecret }) {
   const sets = pins.sets, pathways = pins.pathways;
   checkUnique(sets.map(s => [s.slug, seg(s.slug)]), 'set');
   checkUnique(pathways.map(p => [p.slug, seg(p.slug)]), 'pathway');
@@ -151,6 +166,8 @@ function buildEnvelope({ caseRow, pins, observations, events = [], problems = []
   const oc = { enteredInError: 0, unclassified: 0 }, rc = { notNumeric: 0, withoutUnit: 0, withoutSpecimen: 0, correctionTargetsWithheld: 0 };
   const orderItems = [...contextItems(medicationOrders, 'om-', 'emr-enhancer/medication-orders', oc, MED_LIFE), ...contextItems(investigationOrders, 'oi-', 'emr-enhancer/investigation-orders', oc, INV_LIFE)];
   const resultOut = resultItems(results, rc);
+  const ac2 = { enteredInError: 0, orderNotSent: 0 }, adminOut = administrationItems(administrations, medicationOrders, ac2);
+  if (administrations.length) { withheld.administrationsEnteredInError = ac2.enteredInError; withheld.administrationsOrderNotSent = ac2.orderNotSent; }
   if (medicationOrders.length || investigationOrders.length) { withheld.enteredInErrorOrders = oc.enteredInError; withheld.unclassifiedOrders = oc.unclassified; }
   if (results.length) Object.assign(withheld, { resultsNotNumeric: rc.notNumeric, resultsWithoutUnit: rc.withoutUnit, resultsWithoutSpecimen: rc.withoutSpecimen, resultCorrectionTargetsWithheld: rc.correctionTargetsWithheld, unclassifiedResults: resultOut.length });
   const sections = {};
@@ -158,8 +175,9 @@ function buildEnvelope({ caseRow, pins, observations, events = [], problems = []
   if (allergyItems.length) sections.allergies = allergyItems;
   if (orderItems.length) sections.orders = orderItems;
   if (resultOut.length) sections.results = resultOut;
+  if (adminOut.length) sections.administrations = adminOut;
   return {
-    envelope: { version: Object.keys(sections).length ? '0.2.0' : '0.1.0', exportedAt: iso(exportedAt), producer: { system: 'emr-enhancer', version: producerVersion } },
+    envelope: { version: sections.administrations ? '0.3.0' : Object.keys(sections).length ? '0.2.0' : '0.1.0', exportedAt: iso(exportedAt), producer: { system: 'emr-enhancer', version: producerVersion } },
     inclusions: { identity: false, narrative: false, enteredInError: false },
     case: { ref: caseRef(refSecret, caseRow.id) },
     applied: { elements: uniq(sets.filter(s => s.state === 'active'), 'contextual-element'), pathways: uniq(pathways, 'pathway') },

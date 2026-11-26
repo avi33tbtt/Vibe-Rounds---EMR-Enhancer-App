@@ -48,8 +48,12 @@ function mountContext(app, pool, opts = {}) {
       const results = await q(`SELECT r.id, r.replaces_result_id, r.value_text, r.unit_text, s.collected_at, r.recorded_at, u.role AS recorded_role
                                  FROM investigation_results r JOIN users u ON u.id = r.recorded_by LEFT JOIN investigation_specimens s ON s.id = r.specimen_id
                                 WHERE r.patient_id = (SELECT patient_id FROM clinical_cases WHERE id = $1) ORDER BY r.id`, [caseId]);
+      // R5h: administrations of the same patient. Outcome and times only: dose, reason and note text are never selected.
+      const administrations = await q(`SELECT x.id, x.order_id, x.outcome, x.administered_at, x.recorded_at, x.status, u.role AS recorded_role
+                                         FROM medication_administrations x JOIN users u ON u.id = x.recorded_by
+                                        WHERE x.patient_id = (SELECT patient_id FROM clinical_cases WHERE id = $1) ORDER BY x.id`, [caseId]);
       await c.query('COMMIT');
-      rows = { sets, pathways, observations, events, problems, allergies, medicationOrders, investigationOrders, results };
+      rows = { administrations, sets, pathways, observations, events, problems, allergies, medicationOrders, investigationOrders, results };
     } catch (e) {
       try { await c.query('ROLLBACK'); } catch (_) { /* ignore */ }
       throw e;
@@ -60,7 +64,7 @@ function mountContext(app, pool, opts = {}) {
 
     let envelope;
     try {
-      envelope = buildEnvelope({ caseRow: { id: caseId }, pins: { sets: rows.sets, pathways: rows.pathways }, observations: rows.observations, events: rows.events, problems: rows.problems, allergies: rows.allergies, medicationOrders: rows.medicationOrders, investigationOrders: rows.investigationOrders, results: rows.results,
+      envelope = buildEnvelope({ caseRow: { id: caseId }, pins: { sets: rows.sets, pathways: rows.pathways }, observations: rows.observations, events: rows.events, problems: rows.problems, allergies: rows.allergies, medicationOrders: rows.medicationOrders, investigationOrders: rows.investigationOrders, results: rows.results, administrations: rows.administrations,
                                  exportedAt: now(), producerVersion: PKG.version, refSecret: secret() });
     } catch (e) {
       if (e instanceof EnvelopeError) return res.status(422).json({ error: 'envelope_unmappable', message: e.message });   // set or field ids only, never patient data

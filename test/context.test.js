@@ -327,3 +327,21 @@ test('route R4j: another patient\'s orders and results never appear', async () =
   for (const k of ['orders', 'results']) assert.equal(k in r.body, false);
   assert.equal('enteredInErrorOrders' in r.body['x-emr'].withheld, false);
 });
+
+// ---- R5h: administrations in the route ----
+test('route R5h: administrations travel as outcome and times only; dose, reason, note and error rows never do', async () => {
+  const f = await fixture(), d = f.d;
+  const m = await d.post(`/api/patients/${f.patientId}/medication-orders`, { medication: 'Amoxicillin Zelda Hargrove', doseText: '500 mg Quentin', routeText: 'oral', frequencyText: 'twice daily' });
+  assert.equal(m.status, 201, JSON.stringify(m.body));
+  const mk = async body => { await new Promise(r => setTimeout(r, 15)); return d.post(`/api/patients/${f.patientId}/administrations`, { orderId: m.body.order.id, administeredAt: new Date(Date.now() - 1).toISOString(), ...body }); };   // just now, distinct, after the order
+  const a1 = await mk({ outcome: 'given', dose: '500 mg Zelda', note: 'Quentin note' }); assert.equal(a1.status, 201, JSON.stringify(a1.body));
+  assert.equal((await mk({ outcome: 'refused', reason: 'Hargrove vomiting' })).status, 201);
+  const a3 = await mk({ outcome: 'given' }); assert.equal(a3.status, 201);
+  assert.equal((await d.post(`/api/administrations/${a3.body.administration.id}/entered-in-error`, { reason: 'wrong patient', rowVersion: 1 })).status, 200);
+  const r = await ctx(d, f.caseId); assert.equal(r.status, 200, JSON.stringify(r.body)); ok(r.body);
+  const e = r.body;
+  assert.equal(e.envelope.version, '0.3.0');
+  assert.deepEqual(e.administrations.map(a => [a.id, a.outcome, a.orderRef]), [['ad-1', 'given', 'om-1'], ['ad-2', 'refused', 'om-1']]);
+  assert.equal(e['x-emr'].withheld.administrationsEnteredInError, 1);
+  const j = JSON.stringify(e); for (const t of ['Zelda', 'Hargrove', 'Quentin', 'vomiting']) assert.equal(j.includes(t), false, t);
+});

@@ -223,3 +223,30 @@ test('R4j: no rows means no sections and the exact old envelope; an unknown orde
   assert.throws(() => buildEnvelope({ ...input(), investigationOrders: [ord({ status: 'changed' })] }), EnvelopeError, 'a status of the other table is not guessed');
   assert.equal(buildEnvelope({ ...input(), results: [res({ value_text: 'x' })] }).envelope.version, '0.1.0', 'nothing sent: plain 0.1.0');
 });
+
+// ---- R5h: administrations (envelope 0.3.0) ----
+const ADOSE = '500 mg given to Zelda Hargrove', AWHY = 'patient refused, vomiting', ANOTE = 'ward note for Quentin';
+const adm = o => ({ id: 1, order_id: 4, outcome: 'given', administered_at: '2026-11-22T09:30:00.000Z', recorded_at: '2026-11-22T10:15:00.000Z', status: 'recorded', recorded_role: 'nurse', dose_text: ADOSE, reason_text: AWHY, note_text: ANOTE, ...o });
+
+test('R5h: no administrations means no section and the old version', () => {
+  const e = buildEnvelope({ ...input(), medicationOrders: [ord({ id: 4 })] }); ok(e);
+  assert.equal(e.administrations, undefined); assert.equal(e.envelope.version, '0.2.0'); assert.equal(e['x-emr'].withheld.administrationsEnteredInError, undefined);
+});
+test('R5h: given, held and refused validate against 0.3.0; no dose, reason or note travels; effective and recorded stay apart', () => {
+  const e = buildEnvelope({ ...input(), medicationOrders: [ord({ id: 4 })], administrations: [adm({ id: 9, outcome: 'refused' }), adm({ id: 5 }), adm({ id: 7, outcome: 'held' })] }); ok(e);
+  assert.equal(e.envelope.version, '0.3.0');
+  assert.deepEqual(e.administrations.map(a => [a.id, a.outcome, a.orderRef]), [['ad-1', 'given', 'om-1'], ['ad-2', 'held', 'om-1'], ['ad-3', 'refused', 'om-1']]);
+  assert.equal(e.administrations[0].effective.value, '2026-11-22T09:30:00.000Z'); assert.equal(e.administrations[0].recorded.value, '2026-11-22T10:15:00.000Z');
+  const j = JSON.stringify(e); for (const t of [ADOSE, AWHY, ANOTE, 'Hargrove', 'Quentin']) assert.equal(j.includes(t), false, t);
+});
+test('R5h: entered-in-error rows are withheld and counted; an order that is not sent drops orderRef and is counted', () => {
+  const e = buildEnvelope({ ...input(), medicationOrders: [ord({ id: 4, status: 'entered_in_error' }), ord({ id: 6 })], administrations: [adm({ id: 1, status: 'entered_in_error' }), adm({ id: 2, order_id: 4 }), adm({ id: 3, order_id: 6 })] }); ok(e);
+  assert.deepEqual(e.administrations.map(a => [a.id, a.orderRef]), [['ad-2', undefined], ['ad-3', 'om-2']], 'rank counts all rows, including the withheld one');
+  assert.equal(e['x-emr'].withheld.administrationsEnteredInError, 1); assert.equal(e['x-emr'].withheld.administrationsOrderNotSent, 1);
+});
+test('R5h: an unknown outcome is refused by the builder, and the 0.3.0 schema refuses the section under 0.2.0 and a text member', () => {
+  assert.throws(() => buildEnvelope({ ...input(), administrations: [adm({ outcome: 'maybe' })] }), /unknown outcome/);
+  const e = buildEnvelope({ ...input(), medicationOrders: [ord({ id: 4 })], administrations: [adm()] });
+  assert.equal(validate({ ...e, envelope: { ...e.envelope, version: '0.2.0' } }), false);
+  assert.equal(validate({ ...e, administrations: [{ ...e.administrations[0], dose: '5 mg' }] }), false);
+});
