@@ -51,9 +51,9 @@ const must = (r, okStatuses, what) => {
 };
 
 // Take a set version through the real review rules: doctor submits, informaticians approve, admin publishes.
-async function publishedSetVersion(U, def) {
-  let list = must(await U.doctor.get('/api/element-sets'), [200], 'list sets').sets.find(s => s.slug === SET_SLUG);
-  if (!list) { must(await U.doctor.post('/api/element-sets', { slug: SET_SLUG, kind: 'disease', definition: def }), [201], 'create set'); list = must(await U.doctor.get('/api/element-sets'), [200], 'list sets').sets.find(s => s.slug === SET_SLUG); }
+async function publishedSetVersion(U, def, slug = SET_SLUG, kind = 'disease') {
+  let list = must(await U.doctor.get('/api/element-sets'), [200], 'list sets').sets.find(s => s.slug === slug);
+  if (!list) { must(await U.doctor.post('/api/element-sets', { slug, kind, definition: def }), [201], 'create set'); list = must(await U.doctor.get('/api/element-sets'), [200], 'list sets').sets.find(s => s.slug === slug); }
   if (list.published_version) return { id: list.id, version: list.published_version };
   const v = list.latest_version, base = `/api/element-sets/${list.id}/versions/${v}`;
   for (let i = 0; i < 6; i++) {
@@ -66,11 +66,12 @@ async function publishedSetVersion(U, def) {
   }
   throw new Error('The demo set did not reach published.');
 }
-async function publishedPathway(U, set) {
-  let p = must(await U.doctor.get('/api/pathways'), [200], 'list pathways').pathways.find(x => x.slug === PATHWAY_SLUG);
+async function publishedPathway(U, set, def = { slug: PATHWAY_SLUG, title: 'Snake envenomation documentation', description: 'Demo pathway: documents the timing set. Synthetic.' }) {
+  const sets = Array.isArray(set) ? set : [set];
+  let p = must(await U.doctor.get('/api/pathways'), [200], 'list pathways').pathways.find(x => x.slug === def.slug);
   if (!p) {
-    must(await U.doctor.post('/api/pathways', { slug: PATHWAY_SLUG, title: 'Snake envenomation documentation', description: 'Demo pathway: documents the timing set. Synthetic.', steps: [{ setId: set.id, version: set.version }] }), [201], 'create pathway');
-    p = must(await U.doctor.get('/api/pathways'), [200], 'list pathways').pathways.find(x => x.slug === PATHWAY_SLUG);
+    must(await U.doctor.post('/api/pathways', { slug: def.slug, title: def.title, description: def.description, steps: sets.map(x => ({ setId: x.id, version: x.version })) }), [201], 'create pathway');
+    p = must(await U.doctor.get('/api/pathways'), [200], 'list pathways').pathways.find(x => x.slug === def.slug);
   }
   if (!p.published_version) { must(await U.admin.post(`/api/pathways/${p.id}/versions/${p.latest_version}/publish`, {}), [200], 'publish pathway'); p.published_version = p.latest_version; }
   return { id: p.id, version: p.published_version };
@@ -121,7 +122,7 @@ async function seedDemo({ base, password, reset = false, now = Date.now(), log =
   return { created: true, patientId: pat.id, caseId: cs.id, appliedSetId, observationIds: obs.map(x => x.id) };
 }
 
-module.exports = { seedDemo, PATIENT, CASE_TITLE, SET_SLUG, PATHWAY_SLUG };
+module.exports = { seedDemo, client, must, publishedSetVersion, publishedPathway, PATIENT, CASE_TITLE, SET_SLUG, PATHWAY_SLUG };
 
 if (require.main === module) {
   (async () => {
