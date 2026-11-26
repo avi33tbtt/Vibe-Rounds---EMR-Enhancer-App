@@ -54,6 +54,7 @@ test('bad input is refused, not guessed: status, label, date, time, id, patient 
   assert.throws(() => build([row({ status: 'weird' })]), FhirExportError);
   assert.throws(() => build([row({ label: '  ' })]), FhirExportError);
   assert.throws(() => build([row({ onset_date: '2020-02-31' })]), FhirExportError);
+  assert.throws(() => build([row({ onset_date: '2020-13-01' })]), FhirExportError);
   assert.throws(() => build([row({ recorded_at: 'soon' })]), FhirExportError);
   assert.throws(() => build([row({ id: undefined })]), FhirExportError);
   assert.throws(() => buildFhirConditions({ patientRef: '', rows: [] }), FhirExportError);

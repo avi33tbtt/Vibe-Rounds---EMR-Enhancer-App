@@ -24,7 +24,8 @@ function iso(v, what) {
 }
 function dateOnly(v, what) {
   if (v === null || v === undefined || v === '') return null;
-  if (typeof v !== 'string' || !DATE.test(v) || new Date(v + 'T00:00:00Z').toISOString().slice(0, 10) !== v) throw new FhirExportError(what + ' is not a valid date');
+  const d = typeof v === 'string' && DATE.test(v) ? new Date(v + 'T00:00:00Z') : null;
+  if (!d || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) throw new FhirExportError(what + ' is not a valid date');
   return v;
 }
 

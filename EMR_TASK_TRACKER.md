@@ -221,7 +221,7 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | R6 | (written when reached) | E. FHIR R4 export, Questionnaire/Bundle import, conformance tests | SPLIT | 2026-11-23 |  | Replaced by R6a to R6g. Still LOCKED. |
 | R6a | 04-demo-and-roadmap.md (R brief) | FHIR Observation export from verified codings only (check what exists) | DONE | 2026-11-26 | 1 module + 1 test file | fhir-observation.js, its test. Pure export of server rows; code is text unless a verifier says so (never local); unknown and error kept. 12 pass, 3 breakages seen. No route. R6b next. |
 | R6b | 04-demo-and-roadmap.md (R brief) | FHIR Condition export (problems) | DONE | 2026-11-26 | 1 module + 1 test file | fhir-condition.js, its test. Pure export of server problems; text code unless a verifier says so (never local); error kept, no abatement claimed. 10 pass, 3 breakages seen. No route. R6c next. |
-| R6c | 04-demo-and-roadmap.md (R brief) | FHIR AllergyIntolerance export | LOCKED |  | 1 module + 1 test file | Needs R3d. |
+| R6c | 04-demo-and-roadmap.md (R brief) | FHIR AllergyIntolerance export | DONE | 2026-11-26 | 1 module + 1 test file | fhir-allergy.js, its test; also fixed month-13 date bug in fhir-condition.js (+1 assert). Pure; text code; error kept; no invented reaction. 11 pass, 3 breakages seen. No route. R6d next. |
 | R6d | 04-demo-and-roadmap.md (R brief) | FHIR MedicationRequest export | LOCKED |  | 1 module + 1 test file | Needs R4c. |
 | R6e | 04-demo-and-roadmap.md (R brief) | Questionnaire import into element sets (draft only, goes through review) | LOCKED |  | 1 module + 1 test file |  |
 | R6f | 04-demo-and-roadmap.md (R brief) | Bundle import (draft only, audited) | LOCKED |  | 1 module + 1 test file |  |
