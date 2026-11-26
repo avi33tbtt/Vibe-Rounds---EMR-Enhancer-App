@@ -2,12 +2,13 @@
 // Task R5a-1: admissions on the server (list, get, admit, cancel, entered in error). Admissions only: no beds, transfers, discharge or progress notes (later rows).
 // The admitter, canceller and error-marker come from the session; a body that names one is refused. Nothing is suggested: ward (or unit) and reason are free text as typed;
 // the admission date-time must carry an offset and cannot be in the future. A patient has at most one active admission. A move needs a reason (1..1000) and the loaded row_version
-// (stale gives 409); entered_in_error is final. Ward, reason and move reasons never go into the audit log: ids and lengths only. Reuses orders:read and orders:write. The database enforces the same rules (migration 028).
+// (stale gives 409); entered_in_error is final. R5f-1 adds the discharge (POST /api/admissions/:id/discharge): the stated moment (offset, not future, not before the admission), a summary
+// and an optional condition as typed; the admission becomes 'discharged' and the discharge row is kept (never changed). Summary and condition text also stay out of the audit log. Ward, reason and move reasons never go into the audit log: ids and lengths only. Reuses orders:read and orders:write. The database enforces the same rules (migration 028).
 const { tx } = require('./db');
 const { audit } = require('./audit');
 const A = require('./auth');
 
-const MAX_WARD = 200, MAX_INFO = 500, MAX_REASON = 1000;
+const MAX_WARD = 200, MAX_INFO = 500, MAX_REASON = 1000, MAX_SUMMARY = 2000;
 const BAD_CHARS = /\u0000|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 const bad = (res, message) => res.status(400).json({ error: 'invalid', message });
 function strict(body, allowed) {
@@ -32,8 +33,10 @@ const posInt = v => (Number.isInteger(v) && v >= 1 && v <= 2147483646 ? v : null
 
 function mountAdmissions(app, pool) {
   const COLS = `o.id, o.patient_id, o.origin_case_id, o.ward_text, o.reason_text, o.admitted_at, o.status, o.row_version,
-                ru.username AS recorded_by, o.recorded_at, cu.username AS cancelled_by, o.cancelled_at, o.cancel_reason, xu.username AS error_by, o.error_at, o.error_reason`;
-  const FROM = `FROM patient_admissions o JOIN users ru ON ru.id = o.recorded_by LEFT JOIN users cu ON cu.id = o.cancelled_by LEFT JOIN users xu ON xu.id = o.error_by`;
+                ru.username AS recorded_by, o.recorded_at, cu.username AS cancelled_by, o.cancelled_at, o.cancel_reason, xu.username AS error_by, o.error_at, o.error_reason,
+                d.discharged_at, d.summary_text AS discharge_summary, d.condition_text AS discharge_condition, du.username AS discharged_by, d.recorded_at AS discharge_recorded_at`;
+  const FROM = `FROM patient_admissions o JOIN users ru ON ru.id = o.recorded_by LEFT JOIN users cu ON cu.id = o.cancelled_by LEFT JOIN users xu ON xu.id = o.error_by
+                LEFT JOIN admission_discharges d ON d.admission_id = o.id LEFT JOIN users du ON du.id = d.recorded_by`;
   const load = async (c, id) => {
     const admission = (await c.query(`SELECT ${COLS} ${FROM} WHERE o.id = $1`, [id])).rows[0];
     if (admission) admission.events = (await c.query(`SELECT e.seq, e.from_status, e.to_status, e.reason, u.username AS by_user, e.at FROM patient_admission_events e JOIN users u ON u.id = e.by_user WHERE e.admission_id = $1 ORDER BY e.seq`, [id])).rows;
@@ -110,6 +113,32 @@ function mountAdmissions(app, pool) {
       res.status(out.status).json(out.body);
     };
   }
+  app.post('/api/admissions/:id/discharge', A.requirePerm(pool, 'orders:write'), async (req, res) => {
+    const s = strict(req.body, ['dischargedAt', 'summary', 'condition', 'rowVersion']);
+    if (s.error) return res.status(400).json(s.error);
+    const b = s.body, id = idParam(req.params.id), rv = posInt(b.rowVersion);
+    if (!text(b.summary, MAX_SUMMARY)) return bad(res, `summary must be 1 to ${MAX_SUMMARY} characters.`);
+    if (b.condition !== undefined && b.condition !== null && !text(b.condition, MAX_INFO)) return bad(res, `condition must be 1 to ${MAX_INFO} characters when given.`);
+    const when = admittedAt(b.dischargedAt);
+    if (!when) return bad(res, 'dischargedAt must be a date-time with an offset (for example 2026-11-26T09:30:00+05:45), and cannot be in the future.');
+    if (rv === null) return bad(res, 'rowVersion is required (the version you loaded).');
+    if (!id) return res.status(404).json({ error: 'not_found' });
+    const out = await tx(pool, async c => {
+      const o = (await c.query('SELECT id, patient_id, status, row_version, admitted_at FROM patient_admissions WHERE id = $1 FOR UPDATE', [id])).rows[0];
+      if (!o) return { status: 404, body: { error: 'not_found' } };
+      if (o.status === 'entered_in_error') return { status: 409, body: { error: 'admission_final', message: 'An admission entered in error is final.', currentRowVersion: o.row_version } };
+      if (o.row_version !== rv) return { status: 409, body: { error: 'version_conflict', message: 'This admission was changed by someone else. Reload it and try again.', currentRowVersion: o.row_version } };
+      if (o.status !== 'active') return { status: 409, body: { error: 'not_active', message: 'Only an active admission can be discharged.', currentRowVersion: o.row_version } };
+      if (when < o.admitted_at) return { status: 409, body: { error: 'before_admission', message: 'A discharge cannot be before the admission.', currentRowVersion: o.row_version } };
+      const summary = b.summary.trim(), condition = b.condition == null ? null : b.condition.trim();
+      await c.query('INSERT INTO admission_discharges(admission_id, patient_id, discharged_at, summary_text, condition_text, recorded_by) VALUES ($1,$2,$3,$4,$5,$6)', [id, o.patient_id, when.toISOString(), summary, condition, req.user.id]);
+      await c.query(`UPDATE patient_admissions SET status = 'discharged', row_version = row_version + 1 WHERE id = $1`, [id]);
+      await c.query(`INSERT INTO patient_admission_events(admission_id, seq, from_status, to_status, by_user) SELECT $1, coalesce(max(seq), 0) + 1, 'active', 'discharged', $2 FROM patient_admission_events WHERE admission_id = $1`, [id, req.user.id]);
+      await audit(c, req, 'admission.discharge', 'patient', o.patient_id, { admissionId: id, summaryLength: summary.length, conditionLength: condition == null ? 0 : condition.length, rowVersion: rv + 1 });
+      return { status: 200, body: { admission: await load(c, id) } };
+    });
+    res.status(out.status).json(out.body);
+  });
   app.post('/api/admissions/:id/cancel', A.requirePerm(pool, 'orders:write'), move('cancel'));
   app.post('/api/admissions/:id/entered-in-error', A.requirePerm(pool, 'orders:write'), move('error'));
 }
