@@ -133,3 +133,54 @@ test('the schema really is closed: an identity field added to a valid envelope i
   const e = buildEnvelope(input()); e.case.name = NAME;
   assert.equal(validate(e), false);
 });
+
+// ---- R3i: problems and allergies (envelope 0.2.0) ----
+const PL = 'Hypertension in Zelda Hargrove', SUB = 'Penicillin for Zelda', REACT = 'Rash and Quentin saw it';
+const prob = o => ({ id: 1, status: 'active', onset_date: '2019-05-04', recorded_at: '2026-11-20T09:00:00.000Z', recorded_role: 'doctor', label: PL, ...o });
+const alg = o => ({ id: 1, status: 'active', onset_date: null, recorded_at: '2026-11-21T09:00:00.000Z', recorded_role: 'nurse', substance: SUB, reaction: REACT, severity: 'severe', ...o });
+
+test('R3i: problems and allergies validate against the 0.2.0 schema; no text travels; ids are stable ranks', () => {
+  const e = buildEnvelope({ ...input(), problems: [prob({ id: 5 }), prob({ id: 3, status: 'resolved', onset_date: null })], allergies: [alg({})] }); ok(e);
+  assert.equal(e.envelope.version, '0.2.0');
+  assert.deepEqual(e.problems.map(p => [p.id, p.lifecycle]), [['pr-1', 'resolved'], ['pr-2', 'active']], 'sorted by row id, rank among all rows');
+  assert.deepEqual(e.allergies.map(p => p.id), ['al-1']);
+  const p2 = e.problems[1];
+  assert.deepEqual(p2.concept, { id: 'unclassified', codes: [] });
+  assert.deepEqual(p2.effective, { value: '2019-05-04T00:00', zone: 'unknown' }, 'a date has no zone: said so');
+  assert.equal('effective' in e.problems[0], false, 'unknown onset is left out, not invented');
+  assert.equal('period' in e.problems[0], false, 'the recording of a resolution is not the end of the condition');
+  assert.deepEqual([p2.status, p2.sourceClass, p2.provenance], ['final', 'clinician-entered', { roleClass: 'doctor', origin: 'emr-enhancer/problem-list', verified: false, corrected: false }]);
+  assert.equal(e.allergies[0].provenance.roleClass, 'nurse');
+  const bytes = JSON.stringify(e);
+  for (const t of [PL, SUB, REACT, 'severe', 'Hargrove', 'Quentin']) assert.equal(bytes.includes(t), false, t + ' must not travel');
+});
+
+test('R3i: entered-in-error rows are never sent, only counted; the version follows what is sent', () => {
+  const e = buildEnvelope({ ...input(), problems: [prob({ id: 1, status: 'entered_in_error' }), prob({ id: 2 })], allergies: [alg({ id: 1, status: 'entered_in_error' })] }); ok(e);
+  assert.deepEqual(e.problems.map(p => p.id), ['pr-2'], 'the id keeps its rank, so a withheld row leaves a gap, not a shift');
+  assert.equal('allergies' in e, false, 'all allergies in error: no section at all');
+  assert.equal(e.envelope.version, '0.2.0');
+  assert.deepEqual([e['x-emr'].withheld.enteredInErrorProblems, e['x-emr'].withheld.unclassifiedProblems, e['x-emr'].withheld.enteredInErrorAllergies, e['x-emr'].withheld.unclassifiedAllergies], [1, 1, 1, 0]);
+  const none = buildEnvelope({ ...input(), allergies: [alg({ status: 'entered_in_error' })] }); ok(none);
+  assert.equal(none.envelope.version, '0.1.0', 'nothing sent: the envelope is a plain 0.1.0');
+});
+
+test('R3i: no rows means no section and nothing else changes (an empty list never says "no known allergies")', () => {
+  const plain = buildEnvelope(input()), none = buildEnvelope({ ...input(), problems: [], allergies: [] }); ok(none);
+  assert.deepEqual(none, plain);
+  assert.equal(none.envelope.version, '0.1.0');
+  for (const k of ['problems', 'allergies']) assert.equal(k in none, false);
+  assert.equal('enteredInErrorProblems' in none['x-emr'].withheld, false, 'the existing withheld object keeps its exact shape');
+});
+
+test('R3i: unknown status or a non-date onset is refused, never guessed', () => {
+  assert.throws(() => buildEnvelope({ ...input(), problems: [prob({ status: 'maybe' })] }), EnvelopeError);
+  assert.throws(() => buildEnvelope({ ...input(), allergies: [alg({ onset_date: new Date('2019-05-04') })] }), EnvelopeError);
+  assert.throws(() => buildEnvelope({ ...input(), problems: [prob({ onset_date: '04/05/2019' })] }), EnvelopeError);
+});
+
+test('R3i: the 0.2.0 schema refuses a text member on an item, and a section under version 0.1.0', () => {
+  const e = buildEnvelope({ ...input(), problems: [prob({})] });
+  const bad = structuredClone(e); bad.problems[0].label = PL; assert.equal(validate(bad), false);
+  const old = structuredClone(e); old.envelope.version = '0.1.0'; assert.equal(validate(old), false);
+});

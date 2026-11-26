@@ -35,8 +35,13 @@ function mountContext(app, pool, opts = {}) {
       const observations = await q(`SELECT o.id, o.applied_set_id, o.field_key, o.value_type, o.value_json, o.unit_display, o.effective_at, o.recorded_at, o.source_type, o.status, o.corrects_id, u.role AS recorded_role
                                       FROM observations o JOIN users u ON u.id = o.recorded_by WHERE o.case_id = $1 ORDER BY o.id LIMIT $2`, [caseId, MAX_OBSERVATIONS + 1]);
       const events = await q('SELECT id FROM clinical_events WHERE case_id = $1 ORDER BY id', [caseId]);   // only counted, never exported
+      // R3i: the patient's problems and allergies. Only ids, status, onset date, recording time and role are selected: label, substance, reaction and reasons never leave the database.
+      const listOf = table => q(`SELECT x.id, x.status, to_char(x.onset_date, 'YYYY-MM-DD') AS onset_date, x.recorded_at, u.role AS recorded_role
+                                   FROM ${table} x JOIN users u ON u.id = x.recorded_by
+                                  WHERE x.patient_id = (SELECT patient_id FROM clinical_cases WHERE id = $1) ORDER BY x.id`, [caseId]);
+      const problems = await listOf('patient_problems'), allergies = await listOf('patient_allergies');
       await c.query('COMMIT');
-      rows = { sets, pathways, observations, events };
+      rows = { sets, pathways, observations, events, problems, allergies };
     } catch (e) {
       try { await c.query('ROLLBACK'); } catch (_) { /* ignore */ }
       throw e;
@@ -47,7 +52,7 @@ function mountContext(app, pool, opts = {}) {
 
     let envelope;
     try {
-      envelope = buildEnvelope({ caseRow: { id: caseId }, pins: { sets: rows.sets, pathways: rows.pathways }, observations: rows.observations, events: rows.events,
+      envelope = buildEnvelope({ caseRow: { id: caseId }, pins: { sets: rows.sets, pathways: rows.pathways }, observations: rows.observations, events: rows.events, problems: rows.problems, allergies: rows.allergies,
                                  exportedAt: now(), producerVersion: PKG.version, refSecret: secret() });
     } catch (e) {
       if (e instanceof EnvelopeError) return res.status(422).json({ error: 'envelope_unmappable', message: e.message });   // set or field ids only, never patient data

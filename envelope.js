@@ -5,6 +5,9 @@
 //   identity and narrative (no field exists for them), free-text values, entered-in-error rows (inclusions.enteredInError is false),
 //   unitless numbers (the schema cannot say "a number without a unit"; we never invent a unit), derived rows (the EMR keeps no formula),
 //   system events (EMR actions, not clinical events classified by meaning).
+// R3i: problems and allergies (envelope 0.2.0). The EMR keeps them as free text and binds no code, so each item goes out as concept `unclassified`
+//   with no text at all (the route never selects label, substance, reaction or reasons). Entered-in-error rows are only counted. A section is sent only when it has an item:
+//   a missing or empty section says NOTHING (it never means "no known allergies").
 // Nothing is coerced: an explicitly unknown value is state "unknown" with no value; false stays false; no code is ever "verified".
 const crypto = require('crypto');
 
@@ -37,10 +40,34 @@ function caseRef(secret, caseId) {
 const rankOf = rows => new Map(rows.slice().sort((a, b) => Number(a.id) - Number(b.id)).map((r, i) => [Number(r.id), i + 1]));
 const T_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/, T_BARE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/;
 
+const LIFECYCLE = { active: 'active', resolved: 'resolved' };                                   // entered_in_error never gets here
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+// rows: {id, status, onset_date ('YYYY-MM-DD' or null), recorded_at, recorded_role}. Returns the items; counts go into `counts`.
+function contextItems(rows, prefix, origin, counts) {
+  const rank = rankOf(rows), out = [];
+  for (const r of rows.slice().sort((a, b) => Number(a.id) - Number(b.id))) {
+    if (r.status === 'entered_in_error') { counts.enteredInError++; continue; }
+    const lifecycle = LIFECYCLE[r.status];
+    if (!lifecycle) throw new EnvelopeError('unknown status on ' + origin + ' row ' + r.id);
+    const item = { id: prefix + rank.get(Number(r.id)), concept: { id: 'unclassified', codes: [] }, lifecycle };
+    if (r.onset_date != null) {
+      if (!DATE_ONLY.test(r.onset_date)) throw new EnvelopeError('onset of ' + origin + ' row ' + r.id + ' is not a plain date');
+      item.effective = { value: r.onset_date + 'T00:00', zone: 'unknown' };                      // a date has no zone: said so, never invented
+    }
+    item.recorded = time(r.recorded_at);
+    item.status = 'final'; item.sourceClass = 'clinician-entered';
+    item.provenance = { roleClass: r.recorded_role || 'unknown', origin, verified: false, corrected: false };
+    out.push(item); counts.unclassified++;
+  }
+  return out;
+}
+
 // caseRow {id}; pins {sets, pathways} (rows as read by the route: sets have id, slug, version, definition_json, state; pathways have id, slug, version);
+// problems and allergies (R3i, rows of the case's patient: id, status, onset_date, recorded_at, recorded_role; never text);
 // observations (id, applied_set_id, field_key, value_type, value_json, unit_display, effective_at, recorded_at, source_type, status, corrects_id, recorded_role);
 // events (only counted). exportedAt is an input.
-function buildEnvelope({ caseRow, pins, observations, events = [], exportedAt, producerVersion, refSecret }) {
+function buildEnvelope({ caseRow, pins, observations, events = [], problems = [], allergies = [], exportedAt, producerVersion, refSecret }) {
   const sets = pins.sets, pathways = pins.pathways;
   checkUnique(sets.map(s => [s.slug, seg(s.slug)]), 'set');
   checkUnique(pathways.map(p => [p.slug, seg(p.slug)]), 'pathway');
@@ -91,13 +118,22 @@ function buildEnvelope({ caseRow, pins, observations, events = [], exportedAt, p
     const m = new Map(rows.map(r => [seg(r.slug) + '|' + ver(r.version), { id: seg(r.slug), type, version: ver(r.version) }]));
     return [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(e => e[1]);
   };
+  const pc = { enteredInError: 0, unclassified: 0 }, ac = { enteredInError: 0, unclassified: 0 };
+  const problemItems = contextItems(problems, 'pr-', 'emr-enhancer/problem-list', pc);
+  const allergyItems = contextItems(allergies, 'al-', 'emr-enhancer/allergy-list', ac);
+  if (problems.length) { withheld.enteredInErrorProblems = pc.enteredInError; withheld.unclassifiedProblems = pc.unclassified; }
+  if (allergies.length) { withheld.enteredInErrorAllergies = ac.enteredInError; withheld.unclassifiedAllergies = ac.unclassified; }
+  const sections = {};
+  if (problemItems.length) sections.problems = problemItems;
+  if (allergyItems.length) sections.allergies = allergyItems;
   return {
-    envelope: { version: '0.1.0', exportedAt: iso(exportedAt), producer: { system: 'emr-enhancer', version: producerVersion } },
+    envelope: { version: Object.keys(sections).length ? '0.2.0' : '0.1.0', exportedAt: iso(exportedAt), producer: { system: 'emr-enhancer', version: producerVersion } },
     inclusions: { identity: false, narrative: false, enteredInError: false },
     case: { ref: caseRef(refSecret, caseRow.id) },
     applied: { elements: uniq(sets.filter(s => s.state === 'active'), 'contextual-element'), pathways: uniq(pathways, 'pathway') },
     observations: obsOut,
     events: [],
+    ...sections,
     'x-emr': { withheld },
   };
 }

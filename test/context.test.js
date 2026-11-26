@@ -260,3 +260,35 @@ test('route: if the export row cannot be written, nothing is sent and nothing is
     await env.pool.query('ALTER TABLE context_exports DROP CONSTRAINT ctx_test_block');
   }
 });
+
+// ---- R3i: problems and allergies in the route ----
+test('route R3i: the patient\'s problems and allergies travel as unclassified items with no text; in-error rows are only counted', async () => {
+  const f = await fixture();
+  const PROB = 'Hypertension noted for Zelda Hargrove', SUBS = 'Penicillin for Zelda Hargrove', RX = 'Rash seen by Quentin';
+  const p1 = await f.d.post(`/api/patients/${f.patientId}/problems`, { label: PROB, onsetDate: '2019-05-04' });
+  assert.equal(p1.status, 201, JSON.stringify(p1.body));
+  const p2 = await f.d.post(`/api/patients/${f.patientId}/problems`, { label: 'Wrong entry for Zelda Hargrove' });
+  assert.equal((await f.d.post(`/api/problems/${p2.body.problem.id}/entered-in-error`, { reason: REASON, rowVersion: p2.body.problem.row_version ?? 1 })).status, 200);
+  const a1 = await f.d.post(`/api/patients/${f.patientId}/allergies`, { substance: SUBS, reaction: RX, severity: 'severe' });
+  assert.equal(a1.status, 201, JSON.stringify(a1.body));
+  const r = await ctx(f.d, f.caseId); assert.equal(r.status, 200, JSON.stringify(r.body));
+  const e = r.body; ok(e);
+  assert.equal(e.envelope.version, '0.2.0');
+  assert.deepEqual(e.problems.map(x => [x.id, x.lifecycle, x.concept.id]), [['pr-1', 'active', 'unclassified']]);
+  assert.deepEqual(e.problems[0].effective, { value: '2019-05-04T00:00', zone: 'unknown' });
+  assert.deepEqual(e.allergies.map(x => [x.id, x.lifecycle]), [['al-1', 'active']]);
+  const bytes = JSON.stringify(e);
+  for (const t of [PROB, SUBS, RX, 'Wrong entry', 'severe', 'Hargrove', 'Quentin']) assert.equal(bytes.includes(t), false, t + ' must not travel');
+  assert.equal(e['x-emr'].withheld.enteredInErrorProblems, 1);
+  const x = (await env.pool.query(`SELECT detail FROM audit_log WHERE action = 'context.export' ORDER BY id DESC LIMIT 1`)).rows[0].detail;
+  assert.equal(JSON.stringify(x).includes('Hargrove'), false, 'the audit row holds counts only');
+});
+
+test('route R3i: another patient\'s problems never appear; a case whose patient has none stays a plain 0.1.0', async () => {
+  const f = await fixture(), g = await fixture();
+  assert.equal((await f.d.post(`/api/patients/${f.patientId}/allergies`, { substance: 'Sulfa for the other patient' })).status, 201);
+  const r = await ctx(g.d, g.caseId); assert.equal(r.status, 200); ok(r.body);
+  assert.equal(r.body.envelope.version, '0.1.0');
+  assert.equal('allergies' in r.body, false); assert.equal('problems' in r.body, false);
+  assert.equal('enteredInErrorAllergies' in r.body['x-emr'].withheld, false);
+});

@@ -115,6 +115,30 @@
       "items": {
         "$ref": "#/$defs/event"
       }
+    },
+    "problems": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/contextItem"
+      }
+    },
+    "allergies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/contextItem"
+      }
+    },
+    "orders": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/contextItem"
+      }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
     }
   },
   "$defs": {
@@ -770,6 +794,140 @@
           }
         }
       ]
+    },
+    "contextItem": {
+      "description": "A classified problem, allergy or order for the EMR (envelope 0.2.0). No free-text member exists: meaning travels only as a concept id. Entered-in-error items are never sent.",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "id",
+        "concept",
+        "lifecycle",
+        "status",
+        "sourceClass",
+        "provenance",
+        "recorded"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/localId"
+        },
+        "concept": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          },
+          "required": [
+            "id",
+            "codes"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactId"
+            },
+            "codes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/code"
+              }
+            }
+          }
+        },
+        "lifecycle": {
+          "enum": [
+            "active",
+            "resolved",
+            "stopped",
+            "cancelled",
+            "replaced",
+            "unknown"
+          ]
+        },
+        "effective": {
+          "$ref": "#/$defs/time"
+        },
+        "period": {
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": {
+            "^x-": {}
+          },
+          "required": [
+            "start"
+          ],
+          "properties": {
+            "start": {
+              "$ref": "#/$defs/time"
+            },
+            "end": {
+              "$ref": "#/$defs/time"
+            }
+          }
+        },
+        "recorded": {
+          "$ref": "#/$defs/recordedTime"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "sourceClass": {
+          "$ref": "#/$defs/sourceClass"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "correctionOf": {
+          "$ref": "#/$defs/localId"
+        }
+      }
     }
-  }
+  },
+  "allOf": [
+    {
+      "description": "The sections problems, allergies, orders and results need envelope version 0.2.0 or later.",
+      "if": {
+        "type": "object",
+        "anyOf": [
+          {
+            "required": [
+              "problems"
+            ]
+          },
+          {
+            "required": [
+              "allergies"
+            ]
+          },
+          {
+            "required": [
+              "orders"
+            ]
+          },
+          {
+            "required": [
+              "results"
+            ]
+          }
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "envelope": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "pattern": "^(?:0\\.(?:[2-9]|[1-9]\\d+)\\.\\d+|[1-9]\\d*\\.\\d+\\.\\d+)"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
