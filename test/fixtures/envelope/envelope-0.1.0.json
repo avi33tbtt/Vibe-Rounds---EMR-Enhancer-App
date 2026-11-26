@@ -1,0 +1,67 @@
+{
+  "envelope": {
+    "version": "0.1.0",
+    "exportedAt": "2026-11-23T08:00:00.000Z",
+    "producer": {
+      "system": "emr-enhancer",
+      "version": "0.1.0"
+    }
+  },
+  "inclusions": {
+    "identity": false,
+    "narrative": false,
+    "enteredInError": false
+  },
+  "case": {
+    "ref": "cx_34fbc6a770954ee0470ed401b5d7a14e"
+  },
+  "applied": {
+    "elements": [
+      {
+        "id": "vitals-set",
+        "type": "contextual-element",
+        "version": "1.0.0"
+      }
+    ],
+    "pathways": []
+  },
+  "observations": [
+    {
+      "id": "ob-1",
+      "concept": {
+        "id": "vitals-set.hr",
+        "codes": []
+      },
+      "kind": "quantity",
+      "value": 88,
+      "unit": "bpm",
+      "effective": {
+        "value": "2026-11-23T07:30:00.000Z",
+        "zone": "stated"
+      },
+      "recorded": {
+        "value": "2026-11-23T07:31:00.000Z",
+        "zone": "stated"
+      },
+      "status": "final",
+      "sourceClass": "clinician-entered",
+      "provenance": {
+        "roleClass": "doctor",
+        "origin": "emr-enhancer/vitals-set@1.0.0",
+        "verified": false,
+        "corrected": false
+      }
+    }
+  ],
+  "events": [],
+  "x-emr": {
+    "withheld": {
+      "narrativeObservations": 0,
+      "enteredInErrorObservations": 0,
+      "unitlessNumbers": 0,
+      "derivedObservations": 0,
+      "correctionTargetsWithheld": 0,
+      "events": 0
+    }
+  }
+}
