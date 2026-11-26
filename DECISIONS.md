@@ -1,0 +1,4 @@
+
+| 2026-11-26 R5d | MAR permissions | New `mar:read` (admin, doctor, nurse, viewer) and `mar:write` (admin, doctor, nurse): a nurse gives the doses, but orders:write is doctor-only. Recording only: no schedule, due list or alerts. | Revisit if a pharmacist role appears. |
+| 2026-11-26 R5d | Dose timing rules | A dose cannot be before the order was made; a stopped or changed order takes only doses before it ended; one recorded entry per order per moment. A wrong entry is marked entered in error (final), never edited. | Late recording of a past dose stays possible. |
+| 2026-11-26 R5d | Dose text | The dose actually given is typed free text, only for `given`; held or refused need a reason and no dose. Nothing is copied from the order. | |

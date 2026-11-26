@@ -25,6 +25,8 @@ const PERMS = {
   'medications:write': ['admin', 'doctor', 'nurse'],              // add; stop or mark entered in error (R3e)
   'orders:read':       ['admin', 'doctor', 'nurse', 'viewer'],   // orders and results: medication orders (R4b)
   'orders:write':      ['admin', 'doctor'],                       // order, change with reason, stop, mark entered in error (R4b)
+  'mar:read':          ['admin', 'doctor', 'nurse', 'viewer'],   // medication administration record: read (R5d)
+  'mar:write':         ['admin', 'doctor', 'nurse'],              // record an administration (given, held, refused); mark one entered in error (R5d)
   'results:read':      ['admin', 'doctor', 'nurse', 'viewer'],   // specimens and results of investigation orders (R4f)
   'results:write':     ['admin', 'doctor', 'nurse'],              // record a specimen or a result; correct a result with a reason (R4f)
   'results:ack':       ['admin', 'doctor'],                       // acknowledge a result flagged abnormal (R4g-1)
