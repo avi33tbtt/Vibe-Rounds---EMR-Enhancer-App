@@ -23,6 +23,7 @@ const { mountInvestigationOrders } = require('./investigation-orders');
 const { mountInvestigationResults } = require('./investigation-results');
 const { mountReferrals } = require('./referrals');
 const { mountProcedures } = require('./procedures');
+const { mountFollowups } = require('./followups');
 const { mountAdmissions } = require('./admissions');
 const { mountAdministrations } = require('./administrations');
 const { mountResultAcks } = require('./result-acks');
@@ -349,6 +350,9 @@ function createApp(pool, opts = {}) {
 
   /* ---------- admissions (task R5a-1) ---------- */
   mountAdmissions(app, pool);
+
+  /* ---------- follow-up after discharge (task R5f-2) ---------- */
+  mountFollowups(app, pool);
 
   /* ---------- medication administration record (task R5d) ---------- */
   mountAdministrations(app, pool);
