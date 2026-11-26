@@ -110,6 +110,10 @@ const MATRIX = {
   'GET /api/followups/:id': { guard: 'orders:read' },
   'POST /api/admissions/:id/followups': { guard: 'orders:write' },
   'POST /api/followups/:id/cancel': { guard: 'orders:write' },
+  'GET /api/import/bundles': { guard: 'import:write' },
+  'POST /api/import/bundles': { guard: 'import:write' },
+  'GET /api/import/bundles/:id': { guard: 'import:write' },
+  'POST /api/import/proposals/:id/reject': { guard: 'import:write' },
   'POST /api/followups/:id/entered-in-error': { guard: 'orders:write' },
   'POST /api/admissions/:id/cancel': { guard: 'orders:write' },
   'POST /api/admissions/:id/entered-in-error': { guard: 'orders:write' },
@@ -178,6 +182,7 @@ const EXPECTED_ROLES = {
   'results:read':      ['admin', 'doctor', 'nurse', 'viewer'],
   'results:write':     ['admin', 'doctor', 'nurse'],
   'results:ack':       ['admin', 'doctor'],
+  'import:write':      ['admin', 'doctor'],
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],
   'ccis:import':       ['admin', 'doctor'],
@@ -703,6 +708,20 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal((await nurse.c.post(`/api/administrations/${S.mrid}/entered-in-error`, { reason: 'Audit error', rowVersion: 1, ...fake })).status, 400, 'a body that names a user is refused');
         const ok = await nurse.c.post(`/api/administrations/${S.mrid}/entered-in-error`, { reason: 'Audit error', rowVersion: 1 });
         assert.equal(ok.status, 200, JSON.stringify(ok.body)); return ['administration.error'];
+      }],
+      ['POST /api/import/bundles', doctor, async () => {
+        const b = { resourceType: 'Bundle', type: 'collection', entry: [{ resource: { resourceType: 'Patient', identifier: [{ value: 'AUDIT-ID-1' }], name: [{ family: 'Audit Name' }] } },
+          { resource: { resourceType: 'Observation', status: 'final', code: { text: 'Audit sample' }, valueInteger: 7, effectiveDateTime: '2026-11-20T09:30:00Z' } }], ...fake };
+        const ok = await doctor.c.post('/api/import/bundles', b);
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); S.ibid = ok.body.bundle.id; S.ipid = ok.body.bundle.proposals[0].id;
+        assert.equal((await doctor.c.post('/api/import/bundles', { resourceType: 'Patient' })).status, 400); return ['import.stage', 'import.refused'];
+      }],
+      ['POST /api/import/proposals/:id/reject', doctor, async () => {
+        assert.equal((await doctor.c.post(`/api/import/proposals/${S.ipid}/reject`, { reason: 'Audit reject', rowVersion: 1, ...fake })).status, 400, 'a body that names a user is refused');
+        const ok = await doctor.c.post(`/api/import/proposals/${S.ipid}/reject`, { reason: 'Audit reject', rowVersion: 1 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body));
+        assert.equal((await doctor.c.get('/api/import/bundles')).status, 200); assert.equal((await doctor.c.get('/api/import/bundles/' + S.ibid)).status, 200);   // the two reads are audited too
+        return ['import.proposal_reject', 'import.bundles_view', 'import.bundle_view'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);

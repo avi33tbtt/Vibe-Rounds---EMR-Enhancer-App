@@ -17,7 +17,7 @@ test.after(async () => { await env.close(); });
 
 // ---------- database ----------
 // Every table must be listed here. A new table fails this test until someone decides which kind it is.
-const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events', 'case_notes', 'case_note_amendments', 'pathways', 'pathway_versions', 'pathway_version_steps', 'case_applied_pathways', 'context_exports', 'ccis_runs', 'ccis_run_acks', 'local_terms', 'local_term_reviews', 'patient_problems', 'patient_problem_events', 'patient_allergies', 'patient_allergy_events', 'patient_medications', 'patient_medication_events', 'medication_orders', 'medication_order_events', 'medication_reconciliations', 'investigation_orders', 'investigation_order_events', 'investigation_specimens', 'investigation_results', 'investigation_result_acks', 'patient_referrals', 'patient_referral_events', 'patient_procedures', 'patient_procedure_events', 'patient_admissions', 'patient_admission_events', 'admission_discharges', 'patient_followups', 'patient_followup_events', 'medication_administrations', 'medication_administration_events'];        // never deleted: rows are archived, closed, appended or retired
+const CLINICAL = ['patients', 'encounters', 'audit_log', 'clinical_cases', 'case_encounters', 'case_narrative_entries', 'element_sets', 'element_set_versions', 'element_set_reviews', 'case_applied_sets', 'observations', 'clinical_events', 'case_notes', 'case_note_amendments', 'pathways', 'pathway_versions', 'pathway_version_steps', 'case_applied_pathways', 'context_exports', 'ccis_runs', 'ccis_run_acks', 'local_terms', 'local_term_reviews', 'patient_problems', 'patient_problem_events', 'patient_allergies', 'patient_allergy_events', 'patient_medications', 'patient_medication_events', 'medication_orders', 'medication_order_events', 'medication_reconciliations', 'investigation_orders', 'investigation_order_events', 'investigation_specimens', 'investigation_results', 'investigation_result_acks', 'patient_referrals', 'patient_referral_events', 'patient_procedures', 'patient_procedure_events', 'patient_admissions', 'patient_admission_events', 'admission_discharges', 'patient_followups', 'patient_followup_events', 'medication_administrations', 'medication_administration_events', 'import_bundles', 'import_proposals'];        // never deleted: rows are archived, closed, appended or retired
 const NOT_CLINICAL = ['users', 'sessions', 'schema_migrations', 'ai_settings'];   // accounts, logins, bookkeeping, settings
 
 test('every table is classified, and every clinical table refuses DELETE', async () => {
@@ -90,6 +90,10 @@ test('every table is classified, and every clinical table refuses DELETE', async
   const km = await a.post(`/api/patients/${p.body.patient.id}/medications`, { medication: 'Keep medication' });
   assert.equal(km.status, 201, JSON.stringify(km.body));
 
+  // one staged bundle with its proposals: the import staging tables have rows to protect too (task R6f-2a)
+  const kb = await d.post('/api/import/bundles', { resourceType: 'Bundle', type: 'collection', entry: [{ resource: { resourceType: 'Condition', code: { text: 'Keep staged problem' } } }] });
+  assert.equal(kb.status, 201, JSON.stringify(kb.body));
+
   for (const t of CLINICAL) {
     const n = Number((await env.pool.query(`SELECT count(*) n FROM ${t}`)).rows[0].n);
     assert.ok(n > 0, `${t} has rows to protect`);
@@ -144,6 +148,7 @@ test('patients and encounters refuse TRUNCATE even for the owner connection (tri
     await c.query('ALTER TABLE patient_admissions DROP CONSTRAINT patient_admissions_patient_id_fkey');   // admissions also reference patients (R5a-1)
     await c.query('ALTER TABLE admission_discharges DROP CONSTRAINT admission_discharges_patient_id_fkey');   // discharges also reference patients (R5f-1)
     await c.query('ALTER TABLE patient_followups DROP CONSTRAINT patient_followups_patient_id_fkey');   // follow-ups also reference patients (R5f-2)
+    await c.query('ALTER TABLE import_proposals DROP CONSTRAINT import_proposals_accepted_patient_id_fkey');   // staged proposals reference the chart they were accepted into (R6f-2a)
     await c.query('ALTER TABLE medication_administrations DROP CONSTRAINT medication_administrations_patient_id_fkey');   // administrations also reference patients (R5d)
     await assert.rejects(c.query('TRUNCATE patients'), /patients is append-only; TRUNCATE is not allowed/);
   } finally { await c.query('ROLLBACK'); }

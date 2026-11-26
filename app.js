@@ -24,6 +24,7 @@ const { mountInvestigationResults } = require('./investigation-results');
 const { mountReferrals } = require('./referrals');
 const { mountProcedures } = require('./procedures');
 const { mountFollowups } = require('./followups');
+const { mountBundleStaging, isBundleStagePath } = require('./bundle-staging');
 const { mountAdmissions } = require('./admissions');
 const { mountAdministrations } = require('./administrations');
 const { mountResultAcks } = require('./result-acks');
@@ -97,7 +98,7 @@ function createApp(pool, opts = {}) {
   app.set('trust proxy', opts.trustProxy ?? proxyHops(process.env.TRUST_PROXY));
   const txConnect = txOrigin(opts.txHost ?? process.env.TX_HOST);
   const json50 = express.json({ limit: '50kb' });
-  app.use((req, res, next) => (req.method === 'POST' && isRunImportPath(req.path) ? next() : json50(req, res, next)));   // run-record import has its own, larger limit (ccis-runs.js)
+  app.use((req, res, next) => (req.method === 'POST' && (isRunImportPath(req.path) || isBundleStagePath(req.path)) ? next() : json50(req, res, next)));   // run-record import and bundle staging have their own, larger limits (ccis-runs.js, bundle-staging.js)
   app.use((req, res, next) => {
     res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
     res.set('Content-Security-Policy', cspHeader(res.locals.cspNonce, txConnect));
@@ -353,6 +354,7 @@ function createApp(pool, opts = {}) {
 
   /* ---------- follow-up after discharge (task R5f-2) ---------- */
   mountFollowups(app, pool);
+  mountBundleStaging(app, pool);
 
   /* ---------- medication administration record (task R5d) ---------- */
   mountAdministrations(app, pool);
