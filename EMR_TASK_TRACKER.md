@@ -207,8 +207,8 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | R4j | chunk-R4j-envelope-orders-results.md | Envelope sections orders and results (CCIS schema bump first) | DONE | 2026-11-26 | envelope.js + contracts + tests | envelope.js, context.js, 2 lock fixes (results, acks), 6 tests, chunk, R4J-DECISIONS. Real CCIS import OK. 2 safety tests fail on baseline too. Full suite NOT run. |
 | R5 | (written when reached) | C. IPD: admission, progress, medication administration, discharge | SPLIT | 2026-11-23 |  | Replaced by R5a to R5h. Still LOCKED. |
 | R5a | chunk-R5a-admissions-server.md | Admission record: server | DONE | 2026-11-26 | 1 migration + 1 routes file + tests | 028 migration, admissions.js, 5 routes (orders:read/write), chunk-R5a file, matrix+audit+data tests, admissions test. One active admission per patient. Not run here (yours). R5b next. |
-| R5b | 04-demo-and-roadmap.md (R brief) | Admission in the page | TODO |  | page + 1 test file | Needs R5a (done). New module after 89-procedures.js; update the script-list test. |
-| R5c | 04-demo-and-roadmap.md (R brief) | Progress notes (reuse notes with a type): server and page | LOCKED |  | routes + page + tests |  |
+| R5b | 04-demo-and-roadmap.md (R brief) | Admission in the page | DONE | 2026-11-26 | page + 1 test file | modules/89-admissions.js, page, 40-patients, 90-wire, admissions-page test, wire-list test. Record, cancel, error on Orders tab; form hidden while active. Targeted tests pass; DB suites and browser not run. R5c next. |
+| R5c | 04-demo-and-roadmap.md (R brief) | Progress notes (reuse notes with a type): server and page | TODO |  | routes + page + tests |  |
 | R5d | 04-demo-and-roadmap.md (R brief) | Medication administration record: server (append-only) | LOCKED |  | 1 migration + 1 routes file + tests |  |
 | R5e | 04-demo-and-roadmap.md (R brief) | Medication administration record in the page | LOCKED |  | page + 1 test file |  |
 | R5f | 04-demo-and-roadmap.md (R brief) | Discharge and follow-up: server | LOCKED |  | 1 migration + 1 routes file + tests |  |
