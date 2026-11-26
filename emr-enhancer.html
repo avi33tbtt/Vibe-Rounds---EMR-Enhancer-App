@@ -110,6 +110,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     <button data-t="medications" id="navMedications" style="display:none">Medications</button>
     <button data-t="orders" id="navOrders" style="display:none">Orders</button>
     <button data-t="timeline" id="navTimeline" style="display:none">Timeline</button>
+    <button data-t="bundles" id="navBundles" style="display:none">Import</button>
     <button data-t="create">Create / Generate</button>
     <button data-t="notes">Notes</button>
     <button data-t="codes">Codes &amp; FHIR<span class="planned" title="Server-side terminology verification is planned. Verification here calls a public test server.">verify: planned</span></button>
@@ -289,6 +290,13 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
       <div id="admBox"></div>
       <div id="marBox"></div>
       <div id="fupBox"></div>
+    </div>
+
+    <!-- IMPORT (R6f-3) -->
+    <div class="pane" id="bundles">
+      <h3>Import a FHIR Bundle</h3>
+      <input type="file" id="bnd_file" accept=".json,application/json" aria-label="FHIR Bundle file" style="display:none" data-act="bndPick" data-ev="change">
+      <div id="bundleBox"></div>
     </div>
 
     <!-- MEDICATION HISTORY (R3f) -->
@@ -508,6 +516,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 <script src="modules/89-admissions.js"></script>
 <script src="modules/89-mar.js"></script>
 <script src="modules/89-followups.js"></script>
+<script src="modules/89-bundles.js"></script>
 <script src="modules/90-wire.js"></script>
 <script>
 
@@ -1675,6 +1684,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     if(b.dataset.t==='medications')medicationsLoad();
     if(b.dataset.t==='orders'){ordersLoad();reconcileLoad();invLoad();abnLoad();refLoad();prcLoad();admLoad();marLoad();fupLoad()}
     if(b.dataset.t==='timeline')timelineLoad();
+    if(b.dataset.t==='bundles')bundlesLoad();
     if(b.dataset.t==='create')renderCustomList();
     if(b.dataset.t==='codes')codesUI();
     if(b.dataset.t==='cases')casesShow();
