@@ -2,6 +2,8 @@
 // Top-level constants are plain values or arrows (nothing here runs at load); page state (CASE, Srv) stays in the page and is used only when a function runs.
 /* Notes: draft → sign → amend-with-reason (never deleted) */
 const AMEND={};
+const NOTEF={f:'all'};   // R5c-2: which notes the list shows ('all' or 'progress'); a view choice only, nothing is hidden on the server
+const NOTE_TYPE_LABEL={general:'general',progress:'progress'};
 const noteCurrent=n=>n.amendments.length?n.amendments[n.amendments.length-1].body:n.body;
 function snapshotText(){
   return CASE.applied.map(a=>{const s=resolve(a);if(!s||!s.fields)return'';
@@ -14,7 +16,7 @@ function snapshotText(){
    saved first) reloads the notes and keeps the text you typed on screen, marked as not saved. Author, signer and amender are the session, set by the server. */
 const NQ={p:Promise.resolve()};
 const noteQ=fn=>{const r=NQ.p.then(fn);NQ.p=r.catch(()=>{});return r};
-function noteFromRow(r,lost){return{id:'s'+r.id,srvId:r.id,kind:'note',title:'Note',body:r.body,status:r.status,createdAt:r.created_at,rowVersion:r.row_version,author:r.author,
+function noteFromRow(r,lost){return{id:'s'+r.id,srvId:r.id,kind:'note',type:r.type==='progress'?'progress':'general',title:'Note',body:r.body,status:r.status,createdAt:r.created_at,rowVersion:r.row_version,author:r.author,
   signedBy:r.signed_by,signedAt:r.signed_at,discardedBy:r.discarded_by,lost:lost||'',amendments:(r.amendments||[]).map(m=>({at:m.amended_at,by:m.amended_by,reason:m.reason,body:m.body}))}}
 async function notesLoad(c,lost){   // lost: {server note id: the text that was refused}
   const r=await api('GET','/api/cases/'+c.serverId+'/notes');
@@ -34,7 +36,7 @@ async function srvNoteAdd(kind){
   if(!srvCan('cases:write'))return toast('Your role cannot add notes.');
   const body=kind==='structured'?(snapshotText()||'(no values entered)'):$('n_body').value.trim();
   if(!body)return toast('Write something first');
-  const r=await noteQ(()=>api('POST','/api/cases/'+c.serverId+'/notes',{body}));
+  const r=await noteQ(()=>api('POST','/api/cases/'+c.serverId+'/notes',{body,type:$('n_type').value==='progress'?'progress':'general'}));
   if(r.status!==201)return toast(apiMsg(r));
   c.notes.unshift(noteFromRow(r.body.note));$('n_body').value='';if(c===CASE)renderNotes();
 }
@@ -62,9 +64,12 @@ function submitAmend(id){const n=nid(id),r=$('am_r_'+id).value.trim(),b=$('am_b_
 function renderNotes(){
   $('n_who').textContent=user()?`${Srv.user.username} (${Srv.user.role}), from your sign-in`:'Not signed in: you can write drafts, but signing and amending are disabled. Sign in on the Patients tab.';
   $('n_titleRow').style.display=srvMode()?'none':'';
+  $('n_typeRow').style.display=srvMode()?'':'none';   // a note type exists only on the server
+  $('n_filter').value=NOTEF.f;
   const srvM=srvMode(),canW=!srvM||srvCan('cases:write');
-  $('noteList').innerHTML=CASE.notes.map(n=>{
-    const head=`<b>${escA(n.title)}</b> <span class="kind">${escA(n.kind)}</span> <span class="mu">${escA(n.status)}${n.srvId?' · '+escA(n.author):''} · ${escA(n.createdAt.slice(0,16).replace('T',' '))}</span>`;
+  const shown=CASE.notes.filter(n=>NOTEF.f!=='progress'||n.type==='progress');
+  $('noteList').innerHTML=shown.map(n=>{
+    const head=`<b>${escA(n.title)}</b> <span class="kind">${escA(n.kind)}</span>${n.type==='progress'?' <span class="kind">progress note</span>':''} <span class="mu">${escA(n.status)}${n.srvId?' · '+escA(n.author):''} · ${escA(n.createdAt.slice(0,16).replace('T',' '))}</span>`;
     if(n.status==='draft'&&n.srvId&&(!noteMine(n)||!canW))return`<div class="cd nt draft">${head}<pre class="body">${escA(n.body)}</pre><div class="mu">Draft by ${escA(n.author)}: only the author can edit, sign or discard it.</div></div>`;
     if(n.status==='draft')return`<div class="cd nt draft">${head}<textarea data-act="editNote" data-arg="${escA(n.id)}" data-ev="change">${escA(n.body)}</textarea>${lostBox(n)}
       <button class="b sm" data-act="signNote" data-arg="${escA(n.id)}"${user()?'':' disabled title="Sign in to sign notes"'}>Sign</button><button class="b sec sm" data-act="discardNote" data-arg="${escA(n.id)}">Discard</button></div>`;
@@ -75,5 +80,5 @@ function renderNotes(){
       :`<button class="b sec sm" data-act="toggleAmend" data-arg="${escA(n.id)}"${canW||!n.srvId?'':' disabled title="Your role cannot change cases"'}>Amend…</button>`;
     return`<div class="cd nt signed">${head}<pre class="body">${escA(noteCurrent(n))}</pre>${lostBox(n)}<div class="mu">Signed by ${escA(n.signedBy)} · ${n.signedAt.slice(0,16).replace('T',' ')}</div>${am}
       ${n.amendments.length?`<details><summary class="mu">Original (as signed)</summary><pre class="body">${escA(n.body)}</pre></details>`:''}${form}</div>`;
-  }).join('')||`<div class="empty">${srvM&&CASE.notesOk!==true?'Open a patient case on the Patients tab to see and write its notes.':'No notes yet.'}</div>`;
+  }).join('')||`<div class="empty">${srvM&&CASE.notesOk!==true?'Open a patient case on the Patients tab to see and write its notes.':NOTEF.f==='progress'&&CASE.notes.length?'No progress notes yet. Choose "All notes" to see the others.':'No notes yet.'}</div>`;
 }

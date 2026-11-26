@@ -425,11 +425,13 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
       <div class="cd">
         <label>Signing as</label><div id="n_who" class="mu"></div>
         <div id="n_titleRow"><label>Title</label><input id="n_title" placeholder="e.g. Progress note"></div>
+        <div id="n_typeRow"><label>Note type</label><select id="n_type" aria-label="Note type"><option value="general">General note</option><option value="progress">Progress note</option></select></div>
         <label>Free text</label><textarea id="n_body"></textarea>
         <div class="flex" style="margin-top:8px"><button class="b" data-act="addNote" data-arg="free">Save as draft</button>
           <button class="b sec" data-act="addNote" data-arg="structured">Draft from current values</button></div>
         <div class="mu" style="margin-top:6px">Signed notes cannot be edited; change them by amendment with a reason. Nothing is deleted. Signed in, notes are saved on the server and have no title; only the author edits, signs or discards a draft.</div>
       </div>
+      <div class="mu"><label>Show <select id="n_filter" data-act="noteFilter" data-ev="change" aria-label="Which notes to show"><option value="all">All notes</option><option value="progress">Progress notes only</option></select></label></div>
       <div id="noteList"></div>
     </div>
 

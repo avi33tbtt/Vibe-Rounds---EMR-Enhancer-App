@@ -48,7 +48,7 @@ test('draft, edit, sign and amend through the page: the server holds them, the s
   assert.match(a.$('noteList').textContent, /No notes yet/);
   await a.add('SYNTH-NOTE first draft');
   assert.equal((await dbNotes(cid)).length, 1);
-  const post = a.fetched.filter(f => f.method === 'POST' && /\/notes$/.test(f.path)); assert.deepEqual(JSON.parse(post[0].body), { body: 'SYNTH-NOTE first draft' }, 'only the text is sent');
+  const post = a.fetched.filter(f => f.method === 'POST' && /\/notes$/.test(f.path)); assert.deepEqual(JSON.parse(post[0].body), { body: 'SYNTH-NOTE first draft', type: 'general' }, 'only the text and the chosen type are sent');
   let n = a.notes()[0]; assert.equal(n.status, 'draft'); assert.equal(n.author, 'nurse1');
 
   const ta = a.d.querySelector('#noteList textarea'); ta.value = 'SYNTH-NOTE edited draft'; ta.dispatchEvent(new a.w.Event('change', { bubbles: true }));
@@ -137,5 +137,31 @@ test('the page never sends an author, signer or amender, and nothing in it sets 
   await a.w.signNote(n.id); await a.w.signNote(a.notes()[0].id); await wait(100);
   for (const f of a.fetched.filter(f => /\/api\/(cases\/\d+\/notes|notes\/)/.test(f.path) && f.method !== 'GET')) assert.doesNotMatch(f.body, /author|signed|amend(ed)?By|Evil|nurse1/i, f.path);
   assert.equal(a.notes()[0].signedBy, 'nurse1');
+  await a.close();
+});
+
+test('R5c-2: a progress note is chosen with the type selector, sent as type, shown with a badge, and the filter shows only progress notes; a general note stays general; the filter hides nothing on the server', async () => {
+  const pid = await newPatient(), a = await openPage(); await a.login('doctor1'); await a.open(pid);
+  const cid = a.ev('CASE.serverId');
+  assert.notEqual(a.$('n_typeRow').style.display, 'none', 'the type selector is shown for a server case');
+  assert.deepEqual([...a.$('n_type').options].map(o => o.value), ['general', 'progress']);
+  await a.add('SYNTH-NOTE general one');
+  a.$('n_type').value = 'progress'; await a.add('SYNTH-NOTE ward round');
+  const posts = a.fetched.filter(f => f.method === 'POST' && /\/notes$/.test(f.path)).map(f => JSON.parse(f.body));
+  assert.deepEqual(posts, [{ body: 'SYNTH-NOTE general one', type: 'general' }, { body: 'SYNTH-NOTE ward round', type: 'progress' }]);
+  assert.deepEqual((await env.pool.query('SELECT note_type FROM case_notes WHERE case_id = $1 ORDER BY id', [cid])).rows.map(r => r.note_type), ['general', 'progress']);
+  assert.equal(a.d.querySelectorAll('#noteList .nt').length, 2);
+  assert.equal((a.$('noteList').textContent.match(/progress note/g) || []).length, 1, 'only the progress note has the badge');
+  a.$('n_filter').value = 'progress'; a.$('n_filter').dispatchEvent(new a.w.Event('change', { bubbles: true }));
+  assert.equal(a.d.querySelectorAll('#noteList .nt').length, 1); assert.match(a.$('noteList').textContent, /ward round/); assert.doesNotMatch(a.$('noteList').textContent, /general one/);
+  assert.equal((await env.pool.query('SELECT count(*)::int n FROM case_notes WHERE case_id = $1', [cid])).rows[0].n, 2, 'nothing hidden or removed on the server');
+  a.$('n_filter').value = 'all'; a.$('n_filter').dispatchEvent(new a.w.Event('change', { bubbles: true }));
+  assert.equal(a.d.querySelectorAll('#noteList .nt').length, 2);
+  await a.close();
+});
+
+test('R5c-2: without a server case the type selector is hidden and the demo note path is unchanged', async () => {
+  const a = await openPage();
+  assert.equal(a.$('n_typeRow').style.display, 'none'); assert.equal(a.$('n_titleRow').style.display, '');
   await a.close();
 });

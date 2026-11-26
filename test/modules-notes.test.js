@@ -11,7 +11,7 @@ const raw = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'ut
 const mod = fs.readFileSync(path.join(__dirname, '..', 'modules', '84-notes.js'), 'utf8');
 const NAMES = ['snapshotText', 'noteFromRow', 'notesLoad', 'noteCall', 'srvNoteAdd', 'srvNoteEdit', 'srvNoteSign', 'srvNoteDiscard', 'srvNoteAmend',
   'addNote', 'editNote', 'signNote', 'discardNote', 'toggleAmend', 'submitAmend', 'renderNotes'];
-const CONSTS = ['AMEND', 'noteCurrent', 'NQ', 'noteQ', 'noteMine', 'lostBox', 'nid'];
+const CONSTS = ['AMEND', 'NOTEF', 'NOTE_TYPE_LABEL', 'noteCurrent', 'NQ', 'noteQ', 'noteMine', 'lostBox', 'nid'];
 
 test('84-notes.js loads after 82-insights.js and before the inline script; none of it is inline any more', () => {
   const l = localScripts();
@@ -75,7 +75,7 @@ test('srvNoteAdd refuses without a saved case, with notes not loaded, or without
   assert.deepEqual(calls, []);
 });
 
-test('srvNoteAdd posts only the body and puts the server row first; the typed box is cleared', async () => {
+test('srvNoteAdd posts only the body and the note type, and puts the server row first; the typed box is cleared', async () => {
   const calls = [];
   const w = await page(async (u, o) => {
     calls.push((o && o.method) + ' ' + u + ' ' + (o && o.body));
@@ -85,7 +85,7 @@ test('srvNoteAdd posts only the body and puts the server row first; the typed bo
   w.document.getElementById('n_body').value = 'hello';
   calls.length = 0;
   await w.eval(`srvNoteAdd('note')`);
-  assert.deepEqual(calls, ['POST /api/cases/5/notes {"body":"hello"}']);
+  assert.deepEqual(calls, ['POST /api/cases/5/notes {"body":"hello","type":"general"}']);
   assert.equal(w.eval('CASE.notes[0].srvId'), 9);
   assert.equal(w.document.getElementById('n_body').value, '');
 });

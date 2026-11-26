@@ -44,6 +44,7 @@ const ACT={
   copyBundle:()=>copyBundle(),
   dlBundle:()=>dlBundle(),
   addNote:(el,e,a)=>addNote(a),
+  noteFilter:(el)=>{NOTEF.f=el.value==='progress'?'progress':'all';renderNotes()},
   upgradeSet:(el,e,a)=>upgradeSet(a),
   openCase:(el,e,a)=>openCase(a),
   restoreCase:(el,e,a)=>restoreCase(a),
