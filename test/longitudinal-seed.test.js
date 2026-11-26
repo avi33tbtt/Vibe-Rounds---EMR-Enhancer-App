@@ -25,7 +25,7 @@ test('first run: own patient, four published sets, one published pathway, one ca
   assert.deepEqual(cases.map(c => c.status), ['active']);
   const pins = await q(`SELECT count(*)::int n FROM case_applied_sets a JOIN case_applied_pathways ap ON ap.id = a.from_applied_pathway_id WHERE ap.case_id = $1`, [a.caseId]);
   assert.equal(pins[0].n, content.PATHWAY.memberSlugs.length);
-  assert.equal((await q('SELECT count(*)::int n FROM observations'))[0].n, 0);   // values come in R9d-3
+  assert.equal((await q('SELECT count(*)::int n FROM observations WHERE case_id = $1', [a.caseId]))[0].n, content.buildSeries().length);   // values: see longitudinal-values.test.js
 });
 
 test('running twice changes nothing', async () => {

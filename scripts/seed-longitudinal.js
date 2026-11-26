@@ -2,7 +2,10 @@
 // Row R9d-2: longitudinal demo seed, step 1. SYNTHETIC DATA ONLY. Prototype, not for clinical use.
 // Makes (once) the synthetic patient "DEMO, Patient L" (own MRN, never the DM1 patient), publishes the R9d-1 sets and pathway
 // through the real review rules (same helpers as seed-demo.js), and opens one case with the pathway pinned.
-// It records no values yet (R9d-3 does that, with the reset and the npm scripts). Safe to run again: it changes nothing then.
+// R9d-3 adds the values: 4 years of back-dated results recorded through POST /api/cases/:id/observations (the same rules as the page),
+// one wrong entry marked entered in error through its own route, and an archive-only reset (--reset). Nothing is ever deleted.
+//   npm run longitudinal:seed    safe to run again: with an active case holding values it changes nothing
+//   npm run longitudinal:reset   archives the previous longitudinal case and makes a fresh one
 const { makePool } = require('../db');
 const { migrate } = require('../migrate');
 const { createApp } = require('../app');
@@ -12,7 +15,7 @@ const content = require('../longitudinal-demo-content');
 const PATIENT = { name: 'DEMO, Patient L', mrn: 'DEMO-LONG-0001', dob: '1968-01-01', sex: 'U' };
 const CASE_TITLE = 'DEMO longitudinal case (synthetic)';
 
-async function seedLongitudinal({ base, password, log = () => {} }) {
+async function seedLongitudinal({ base, password, reset = false, log = () => {} }) {
   const U = { doctor: client(base), admin: client(base), inf1: client(base), inf2: client(base) };
   for (const [k, u] of [['doctor', 'doctor1'], ['admin', 'admin1'], ['inf1', 'informatician1'], ['inf2', 'informatician2']]) {
     const r = await U[k].post('/api/login', { username: u, password });
@@ -28,19 +31,42 @@ async function seedLongitudinal({ base, password, log = () => {} }) {
   for (const s of content.SETS) sets.push({ slug: s.slug, ...(await publishedSetVersion(U, s.definition, s.slug, s.kind)) });
   const members = content.PATHWAY.memberSlugs.map(slug => { const m = sets.find(s => s.slug === slug); if (!m) throw new Error('Pathway member set missing: ' + slug); return m; });
   const pw = await publishedPathway(U, members, content.PATHWAY);
-  // 3. the case, if there is not already an active one
-  const cases = must(await D.get(`/api/patients/${pat.id}/cases`), [200], 'list cases').cases.filter(c => c.title === CASE_TITLE && c.status === 'active');
-  if (cases.length) { log(`Longitudinal demo case ${cases[0].id} already exists; nothing changed.`); return { created: false, patientId: pat.id, caseId: cases[0].id, pathwayId: pw.id }; }
-  const cs = must(await D.post(`/api/patients/${pat.id}/cases`, { title: CASE_TITLE }), [201], 'create case').case;
-  must(await D.post(`/api/cases/${cs.id}/applied-pathways`, { pathwayId: pw.id, version: pw.version }), [201], 'apply pathway');
-  log(`Longitudinal demo ready: patient ${pat.id}, case ${cs.id}, ${sets.length} sets and pathway v${pw.version} published and pinned.`);
-  return { created: true, patientId: pat.id, caseId: cs.id, pathwayId: pw.id, pathwayVersion: pw.version, sets };
+  // 3. the case: an active one is kept (and filled if it has no values yet); reset archives it first, never deletes
+  let cases = must(await D.get(`/api/patients/${pat.id}/cases`), [200], 'list cases').cases.filter(c => c.title === CASE_TITLE && c.status === 'active');
+  if (reset) {
+    for (const c of cases) must(await D.patch(`/api/cases/${c.id}/archive`, { archived: true, rowVersion: c.row_version }), [200], 'archive previous longitudinal case');
+    cases = [];
+  }
+  let cs = cases[0], created = false;
+  if (!cs) {
+    cs = must(await D.post(`/api/patients/${pat.id}/cases`, { title: CASE_TITLE }), [201], 'create case').case;
+    must(await D.post(`/api/cases/${cs.id}/applied-pathways`, { pathwayId: pw.id, version: pw.version }), [201], 'apply pathway');
+    created = true;
+  }
+  const tl = must(await D.get(`/api/cases/${cs.id}/timeline?includeErrors=1`), [200], 'read timeline');
+  if (tl.observations.length) { log(`Longitudinal demo case ${cs.id} already has values; nothing changed. Use "npm run longitudinal:reset" for a fresh one.`); return { created: false, patientId: pat.id, caseId: cs.id, pathwayId: pw.id }; }
+  const applied = new Map((tl.appliedSets || []).map(a => [a.element_set_id, a.id]));
+  const idBySlug = new Map(sets.map(x => [x.slug, applied.get(x.id)]));
+  for (const [slug, id] of idBySlug) if (!id) throw new Error('The pathway was applied but the set pin was not found: ' + slug);
+  // 4. the series, oldest first. Only the effective time is back-dated; recorded_at is now. Unknown = no value; a missing item has no row.
+  const series = content.buildSeries();
+  const body = series.map(pt => ({ appliedSetId: idBySlug.get(pt.setSlug), fieldKey: pt.fieldKey, effectiveAt: pt.effectiveAt, sourceType: 'clinician', ...(pt.unknown ? { unknown: true } : { value: pt.value }) }));
+  const idByKey = new Map();
+  for (let k = 0; k < body.length; k += 40) {
+    const rows = must(await D.post(`/api/cases/${cs.id}/observations`, { observations: body.slice(k, k + 40) }), [201], 'record observations').observations;
+    rows.forEach((r, n) => idByKey.set(series[k + n].key, r.id));
+  }
+  // 5. the wrong entry is marked entered in error (row and value kept); the right value was recorded above as a new row
+  for (const pt of series.filter(x => x.enteredInError)) must(await D.post(`/api/observations/${idByKey.get(pt.key)}/entered-in-error`, { reason: content.ERROR_AT.reason }), [200], 'mark entered in error');
+  log(`Longitudinal demo ready: patient ${pat.id}, case ${cs.id}, ${series.length} values, ${sets.length} sets and pathway v${pw.version} pinned.`);
+  return { created: true, patientId: pat.id, caseId: cs.id, pathwayId: pw.id, pathwayVersion: pw.version, sets, observationCount: series.length };
 }
 
 module.exports = { seedLongitudinal, PATIENT, CASE_TITLE };
 
 if (require.main === module) {
   (async () => {
+    const reset = process.argv.includes('--reset');
     const password = process.env.SEED_PASSWORD;
     if (!password) throw new Error('Set SEED_PASSWORD in .env (the password the demo users were created with by "npm run seed").');
     const mpool = makePool(process.env.MIGRATE_DATABASE_URL || process.env.DATABASE_URL);
@@ -48,7 +74,7 @@ if (require.main === module) {
     const pool = makePool();
     const server = createApp(pool, { quiet: true, limits: { write: { max: 100000 }, loginIp: { max: 100000 }, loginUser: { max: 100000 } } }).listen(0, '127.0.0.1');
     await new Promise(r => server.once('listening', r));
-    try { await seedLongitudinal({ base: `http://127.0.0.1:${server.address().port}`, password, log: console.log }); }
+    try { await seedLongitudinal({ base: `http://127.0.0.1:${server.address().port}`, password, reset, log: console.log }); }
     finally { await new Promise(r => server.close(r)); await pool.end(); }
   })().catch(e => { console.error(e.message); process.exit(1); });
 }
