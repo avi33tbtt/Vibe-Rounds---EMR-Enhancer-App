@@ -44,11 +44,11 @@ const LIFECYCLE = { active: 'active', resolved: 'resolved' };                   
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 // rows: {id, status, onset_date ('YYYY-MM-DD' or null), recorded_at, recorded_role}. Returns the items; counts go into `counts`.
-function contextItems(rows, prefix, origin, counts) {
+function contextItems(rows, prefix, origin, counts, lifecycles = LIFECYCLE) {
   const rank = rankOf(rows), out = [];
   for (const r of rows.slice().sort((a, b) => Number(a.id) - Number(b.id))) {
     if (r.status === 'entered_in_error') { counts.enteredInError++; continue; }
-    const lifecycle = LIFECYCLE[r.status];
+    const lifecycle = lifecycles[r.status];
     if (!lifecycle) throw new EnvelopeError('unknown status on ' + origin + ' row ' + r.id);
     const item = { id: prefix + rank.get(Number(r.id)), concept: { id: 'unclassified', codes: [] }, lifecycle };
     if (r.onset_date != null) {
@@ -63,11 +63,36 @@ function contextItems(rows, prefix, origin, counts) {
   return out;
 }
 
+const MED_LIFE = { active: 'active', stopped: 'stopped', changed: 'replaced' }, INV_LIFE = { active: 'active', cancelled: 'cancelled' };
+const PLAIN_NUMBER = /^-?\d+(?:\.\d+)?$/;
+
+// R4j: results. Only a strictly numeric value with a one-token unit and a specimen collection time goes out; the rest is counted, never guessed.
+// rows: {id, replaces_result_id, value_text, unit_text, collected_at, recorded_at, recorded_role}
+function resultItems(rows, counts) {
+  const rank = rankOf(rows), replaced = new Set(rows.filter(r => r.replaces_result_id != null).map(r => Number(r.replaces_result_id)));
+  const kept = new Map(), out = [];
+  for (const r of rows.slice().sort((a, b) => Number(a.id) - Number(b.id))) {
+    const text = String(r.value_text).trim();
+    if (!PLAIN_NUMBER.test(text)) { counts.notNumeric++; continue; }
+    if (!r.unit_text || !/^\S+$/.test(r.unit_text)) { counts.withoutUnit++; continue; }
+    if (r.collected_at == null) { counts.withoutSpecimen++; continue; }
+    const item = { id: 'rs-' + rank.get(Number(r.id)), concept: { id: 'unclassified', codes: [] }, kind: 'quantity', value: Number(text), unit: r.unit_text,
+      effective: time(r.collected_at), recorded: time(r.recorded_at), status: r.replaces_result_id != null ? 'corrected' : 'final', sourceClass: 'clinician-entered',
+      provenance: { roleClass: r.recorded_role || 'unknown', origin: 'emr-enhancer/investigation-results', verified: false, corrected: replaced.has(Number(r.id)) } };
+    kept.set(Number(r.id), item.id); out.push({ item, from: r.replaces_result_id });
+  }
+  return out.map(({ item, from }) => {
+    if (from != null) { if (kept.has(Number(from))) item.correctionOf = kept.get(Number(from)); else counts.correctionTargetsWithheld++; }
+    return item;
+  });
+}
+
 // caseRow {id}; pins {sets, pathways} (rows as read by the route: sets have id, slug, version, definition_json, state; pathways have id, slug, version);
 // problems and allergies (R3i, rows of the case's patient: id, status, onset_date, recorded_at, recorded_role; never text);
+// medicationOrders, investigationOrders (R4j, same row shape with recorded_at = ordered_at) and results (see resultItems);
 // observations (id, applied_set_id, field_key, value_type, value_json, unit_display, effective_at, recorded_at, source_type, status, corrects_id, recorded_role);
 // events (only counted). exportedAt is an input.
-function buildEnvelope({ caseRow, pins, observations, events = [], problems = [], allergies = [], exportedAt, producerVersion, refSecret }) {
+function buildEnvelope({ caseRow, pins, observations, events = [], problems = [], allergies = [], medicationOrders = [], investigationOrders = [], results = [], exportedAt, producerVersion, refSecret }) {
   const sets = pins.sets, pathways = pins.pathways;
   checkUnique(sets.map(s => [s.slug, seg(s.slug)]), 'set');
   checkUnique(pathways.map(p => [p.slug, seg(p.slug)]), 'pathway');
@@ -123,9 +148,16 @@ function buildEnvelope({ caseRow, pins, observations, events = [], problems = []
   const allergyItems = contextItems(allergies, 'al-', 'emr-enhancer/allergy-list', ac);
   if (problems.length) { withheld.enteredInErrorProblems = pc.enteredInError; withheld.unclassifiedProblems = pc.unclassified; }
   if (allergies.length) { withheld.enteredInErrorAllergies = ac.enteredInError; withheld.unclassifiedAllergies = ac.unclassified; }
+  const oc = { enteredInError: 0, unclassified: 0 }, rc = { notNumeric: 0, withoutUnit: 0, withoutSpecimen: 0, correctionTargetsWithheld: 0 };
+  const orderItems = [...contextItems(medicationOrders, 'om-', 'emr-enhancer/medication-orders', oc, MED_LIFE), ...contextItems(investigationOrders, 'oi-', 'emr-enhancer/investigation-orders', oc, INV_LIFE)];
+  const resultOut = resultItems(results, rc);
+  if (medicationOrders.length || investigationOrders.length) { withheld.enteredInErrorOrders = oc.enteredInError; withheld.unclassifiedOrders = oc.unclassified; }
+  if (results.length) Object.assign(withheld, { resultsNotNumeric: rc.notNumeric, resultsWithoutUnit: rc.withoutUnit, resultsWithoutSpecimen: rc.withoutSpecimen, resultCorrectionTargetsWithheld: rc.correctionTargetsWithheld, unclassifiedResults: resultOut.length });
   const sections = {};
   if (problemItems.length) sections.problems = problemItems;
   if (allergyItems.length) sections.allergies = allergyItems;
+  if (orderItems.length) sections.orders = orderItems;
+  if (resultOut.length) sections.results = resultOut;
   return {
     envelope: { version: Object.keys(sections).length ? '0.2.0' : '0.1.0', exportedAt: iso(exportedAt), producer: { system: 'emr-enhancer', version: producerVersion } },
     inclusions: { identity: false, narrative: false, enteredInError: false },

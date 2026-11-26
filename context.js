@@ -40,8 +40,16 @@ function mountContext(app, pool, opts = {}) {
                                    FROM ${table} x JOIN users u ON u.id = x.recorded_by
                                   WHERE x.patient_id = (SELECT patient_id FROM clinical_cases WHERE id = $1) ORDER BY x.id`, [caseId]);
       const problems = await listOf('patient_problems'), allergies = await listOf('patient_allergies');
+      // R4j: orders (status, ordering time and role only: no drug, dose, test name or reason) and results of the same patient. A result's value and unit are read only so the builder can accept a plain number; any other text is dropped there and counted.
+      const orderList = table => q(`SELECT x.id, x.status, NULL::text AS onset_date, x.ordered_at AS recorded_at, u.role AS recorded_role
+                                      FROM ${table} x JOIN users u ON u.id = x.ordered_by
+                                     WHERE x.patient_id = (SELECT patient_id FROM clinical_cases WHERE id = $1) ORDER BY x.id`, [caseId]);
+      const medicationOrders = await orderList('medication_orders'), investigationOrders = await orderList('investigation_orders');
+      const results = await q(`SELECT r.id, r.replaces_result_id, r.value_text, r.unit_text, s.collected_at, r.recorded_at, u.role AS recorded_role
+                                 FROM investigation_results r JOIN users u ON u.id = r.recorded_by LEFT JOIN investigation_specimens s ON s.id = r.specimen_id
+                                WHERE r.patient_id = (SELECT patient_id FROM clinical_cases WHERE id = $1) ORDER BY r.id`, [caseId]);
       await c.query('COMMIT');
-      rows = { sets, pathways, observations, events, problems, allergies };
+      rows = { sets, pathways, observations, events, problems, allergies, medicationOrders, investigationOrders, results };
     } catch (e) {
       try { await c.query('ROLLBACK'); } catch (_) { /* ignore */ }
       throw e;
@@ -52,7 +60,7 @@ function mountContext(app, pool, opts = {}) {
 
     let envelope;
     try {
-      envelope = buildEnvelope({ caseRow: { id: caseId }, pins: { sets: rows.sets, pathways: rows.pathways }, observations: rows.observations, events: rows.events, problems: rows.problems, allergies: rows.allergies,
+      envelope = buildEnvelope({ caseRow: { id: caseId }, pins: { sets: rows.sets, pathways: rows.pathways }, observations: rows.observations, events: rows.events, problems: rows.problems, allergies: rows.allergies, medicationOrders: rows.medicationOrders, investigationOrders: rows.investigationOrders, results: rows.results,
                                  exportedAt: now(), producerVersion: PKG.version, refSecret: secret() });
     } catch (e) {
       if (e instanceof EnvelopeError) return res.status(422).json({ error: 'envelope_unmappable', message: e.message });   // set or field ids only, never patient data

@@ -292,3 +292,38 @@ test('route R3i: another patient\'s problems never appear; a case whose patient 
   assert.equal('allergies' in r.body, false); assert.equal('problems' in r.body, false);
   assert.equal('enteredInErrorAllergies' in r.body['x-emr'].withheld, false);
 });
+
+// ---- R4j: orders and results in the route ----
+test('route R4j: the patient\'s orders and numeric results travel as unclassified items with no text; others are counted', async () => {
+  const f = await fixture(), d = f.d;
+  const DRUG = 'Amoxicillin for Zelda Hargrove', TESTN = 'Serum potassium Hargrove';
+  const m = await d.post(`/api/patients/${f.patientId}/medication-orders`, { medication: DRUG, doseText: '500 mg Quentin', routeText: 'oral', frequencyText: 'twice daily' });
+  assert.equal(m.status, 201, JSON.stringify(m.body));
+  const io = await d.post(`/api/patients/${f.patientId}/investigation-orders`, { testName: TESTN, priority: 'urgent' });
+  assert.equal(io.status, 201, JSON.stringify(io.body));
+  const oid = io.body.order.id, base = `/api/investigation-orders/${oid}`;
+  const sp = await d.post(`${base}/specimens`, { specimenType: 'Blood', collectedAt: '2026-11-22T08:00:00.000Z' }); assert.equal(sp.status, 201, JSON.stringify(sp.body));
+  const r1 = await d.post(`${base}/results`, { valueText: '5.4', unitText: 'mmol/L', flag: 'abnormal', referenceText: '3.5-5.0', specimenId: sp.body.specimen.id }); assert.equal(r1.status, 201, JSON.stringify(r1.body));
+  const cr = await d.post(`/api/investigation-results/${r1.body.result.id}/correct`, { valueText: '5.1', unitText: 'mmol/L', reason: 'again' }); assert.equal(cr.status, 201, JSON.stringify(cr.body));
+  assert.equal((await d.post(`${base}/results`, { valueText: 'Haemolysed sample for Zelda', specimenId: sp.body.specimen.id })).status, 201);
+  const r = await ctx(d, f.caseId); assert.equal(r.status, 200, JSON.stringify(r.body));
+  const e = r.body; ok(e);
+  assert.equal(e.envelope.version, '0.2.0');
+  assert.deepEqual(e.orders.map(o => [o.id, o.lifecycle, o.concept.id]), [['om-1', 'active', 'unclassified'], ['oi-1', 'active', 'unclassified']]);
+  assert.deepEqual(e.results.map(x => [x.id, x.value, x.unit, x.status, x.correctionOf]), [['rs-1', 5.4, 'mmol/L', 'final', undefined], ['rs-2', 5.1, 'mmol/L', 'corrected', 'rs-1']]);
+  assert.equal(e.results[0].effective.value, '2026-11-22T08:00:00.000Z');
+  const bytes = JSON.stringify(e);
+  for (const t of [DRUG, TESTN, 'Quentin', 'oral', 'twice daily', 'abnormal', '3.5-5.0', 'Haemolysed', 'again', 'Hargrove']) assert.equal(bytes.includes(t), false, t + ' must not travel');
+  assert.equal(e['x-emr'].withheld.resultsNotNumeric, 1);
+  const x = (await env.pool.query(`SELECT detail FROM audit_log WHERE action = 'context.export' ORDER BY id DESC LIMIT 1`)).rows[0].detail;
+  assert.equal(JSON.stringify(x).includes('Haemolysed'), false, 'the audit row holds counts only');
+});
+
+test('route R4j: another patient\'s orders and results never appear', async () => {
+  const f = await fixture(), g = await fixture();
+  assert.equal((await f.d.post(`/api/patients/${f.patientId}/medication-orders`, { medication: 'Other drug', doseText: '1', routeText: 'oral', frequencyText: 'once' })).status, 201);
+  const r = await ctx(g.d, g.caseId); assert.equal(r.status, 200); ok(r.body);
+  assert.equal(r.body.envelope.version, '0.1.0');
+  for (const k of ['orders', 'results']) assert.equal(k in r.body, false);
+  assert.equal('enteredInErrorOrders' in r.body['x-emr'].withheld, false);
+});

@@ -184,3 +184,42 @@ test('R3i: the 0.2.0 schema refuses a text member on an item, and a section unde
   const bad = structuredClone(e); bad.problems[0].label = PL; assert.equal(validate(bad), false);
   const old = structuredClone(e); old.envelope.version = '0.1.0'; assert.equal(validate(old), false);
 });
+
+// ---- R4j: orders and results (envelope 0.2.0) ----
+const DRUG = 'Amoxicillin for Zelda Hargrove', DOSE = '500 mg twice daily for Quentin', TESTN = 'Serum potassium for Zelda', INFO = 'Query hyperkalaemia, Hargrove';
+const ord = o => ({ id: 1, status: 'active', onset_date: null, recorded_at: '2026-11-22T09:00:00.000Z', recorded_role: 'doctor', medication: DRUG, dose_text: DOSE, test_name: TESTN, clinical_info: INFO, end_reason: 'rash on Zelda', ...o });
+const res = o => ({ id: 1, replaces_result_id: null, value_text: '5.4', unit_text: 'mmol/L', collected_at: '2026-11-22T08:00:00.000Z', recorded_at: '2026-11-22T10:00:00.000Z', recorded_role: 'nurse', flag: 'abnormal', reference_text: '3.5-5.0', ...o });
+
+test('R4j: orders and results validate against 0.2.0; no drug, dose, test name, flag or reason travels', () => {
+  const e = buildEnvelope({ ...input(), medicationOrders: [ord({ id: 4, status: 'changed' }), ord({ id: 2, status: 'stopped' }), ord({ id: 6 })], investigationOrders: [ord({ id: 3, status: 'cancelled' })], results: [res({ id: 8 }), res({ id: 9, replaces_result_id: 8, value_text: '5.1' })] }); ok(e);
+  assert.equal(e.envelope.version, '0.2.0');
+  assert.deepEqual(e.orders.map(o => [o.id, o.lifecycle]), [['om-1', 'stopped'], ['om-2', 'replaced'], ['om-3', 'active'], ['oi-1', 'cancelled']], 'ranks by row id; a change is "replaced", not a correction');
+  assert.ok(e.orders.every(o => o.concept.id === 'unclassified' && !('effective' in o) && !('period' in o) && !('correctionOf' in o) && o.status === 'final'));
+  assert.deepEqual(e.results.map(r => [r.id, r.value, r.unit, r.status, r.correctionOf, r.provenance.corrected]), [['rs-1', 5.4, 'mmol/L', 'final', undefined, true], ['rs-2', 5.1, 'mmol/L', 'corrected', 'rs-1', false]]);
+  assert.deepEqual([e.results[0].kind, e.results[0].effective, e.results[0].recorded.zone, e.results[0].sourceClass], ['quantity', { value: '2026-11-22T08:00:00.000Z', zone: 'stated' }, 'stated', 'clinician-entered']);
+  const bytes = JSON.stringify(e);
+  for (const t of [DRUG, DOSE, TESTN, INFO, 'rash', 'abnormal', '3.5-5.0', 'Hargrove', 'Zelda']) assert.equal(bytes.includes(t), false, t + ' must not travel');
+});
+
+test('R4j: a result is withheld and counted unless it is a plain number with a one-token unit and a specimen time', () => {
+  const e = buildEnvelope({ ...input(), results: [res({ id: 1, value_text: 'Positive for Hargrove' }), res({ id: 2, value_text: '>5.0' }), res({ id: 3, value_text: '5,4' }), res({ id: 4, unit_text: null }),
+    res({ id: 5, unit_text: 'mmol per L' }), res({ id: 6, collected_at: null }), res({ id: 7, value_text: ' -12.50 ' })] }); ok(e);
+  assert.deepEqual(e.results.map(r => [r.id, r.value]), [['rs-7', -12.5]]);
+  const w = e['x-emr'].withheld; assert.deepEqual([w.resultsNotNumeric, w.resultsWithoutUnit, w.resultsWithoutSpecimen, w.unclassifiedResults], [3, 2, 1, 1]);
+  assert.equal(JSON.stringify(e).includes('Hargrove'), false);
+});
+
+test('R4j: entered-in-error orders are only counted; a withheld original leaves the link out, counted', () => {
+  const e = buildEnvelope({ ...input(), medicationOrders: [ord({ id: 1, status: 'entered_in_error' })], investigationOrders: [ord({ id: 1, status: 'entered_in_error' })],
+    results: [res({ id: 1, value_text: 'high' }), res({ id: 2, replaces_result_id: 1, value_text: '5.0' })] }); ok(e);
+  assert.equal('orders' in e, false);
+  assert.deepEqual([e['x-emr'].withheld.enteredInErrorOrders, e['x-emr'].withheld.unclassifiedOrders, e['x-emr'].withheld.resultCorrectionTargetsWithheld], [2, 0, 1]);
+  assert.equal('correctionOf' in e.results[0], false);
+});
+
+test('R4j: no rows means no sections and the exact old envelope; an unknown order status is refused', () => {
+  const plain = buildEnvelope(input()), none = buildEnvelope({ ...input(), medicationOrders: [], investigationOrders: [], results: [] }); ok(none);
+  assert.deepEqual(none, plain);
+  assert.throws(() => buildEnvelope({ ...input(), investigationOrders: [ord({ status: 'changed' })] }), EnvelopeError, 'a status of the other table is not guessed');
+  assert.equal(buildEnvelope({ ...input(), results: [res({ value_text: 'x' })] }).envelope.version, '0.1.0', 'nothing sent: plain 0.1.0');
+});

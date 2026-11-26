@@ -105,8 +105,10 @@ function mountInvestigationResults(app, pool) {
     if (!text(b.reason, 1000)) return bad(res, 'A reason of 1 to 1000 characters is required.');
     if (!id) return res.status(404).json({ error: 'not_found' });
     const out = await tx(pool, async c => {
-      const old = (await c.query('SELECT id, order_id, specimen_id FROM investigation_results WHERE id = $1 FOR UPDATE', [id])).rows[0];
+      // The results table is append-only (the app role has no UPDATE on it, so FOR UPDATE on it fails): serialize on the parent order row instead.
+      const old = (await c.query('SELECT id, order_id, specimen_id FROM investigation_results WHERE id = $1', [id])).rows[0];
       if (!old) return { status: 404, body: { error: 'not_found' } };
+      await c.query('SELECT 1 FROM investigation_orders WHERE id = $1 FOR UPDATE', [old.order_id]);
       const a = await activeOrder(c, old.order_id);
       if (a.refuse) return a.refuse;
       if ((await c.query('SELECT 1 FROM investigation_results WHERE replaces_result_id = $1', [id])).rowCount) return { status: 409, body: { error: 'already_corrected', message: 'This result was already corrected. Reload and correct the newest one.' } };

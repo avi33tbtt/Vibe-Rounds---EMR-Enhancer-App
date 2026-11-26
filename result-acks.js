@@ -39,8 +39,10 @@ function mountResultAcks(app, pool) {
     if (!id) return res.status(404).json({ error: 'not_found' });
     const note = b.note == null ? null : b.note.trim();
     const out = await tx(pool, async c => {
-      const r = (await c.query('SELECT id, patient_id, order_id, flag FROM investigation_results WHERE id = $1 FOR UPDATE', [id])).rows[0];
+      // Append-only table: no FOR UPDATE on results (the app role cannot UPDATE it); serialize on the parent order row instead.
+      const r = (await c.query('SELECT id, patient_id, order_id, flag FROM investigation_results WHERE id = $1', [id])).rows[0];
       if (!r) return { status: 404, body: { error: 'not_found' } };
+      await c.query('SELECT 1 FROM investigation_orders WHERE id = $1 FOR UPDATE', [r.order_id]);
       if (r.flag !== 'abnormal') return { status: 409, body: { error: 'not_flagged_abnormal', message: 'Only a result flagged abnormal is acknowledged.' } };
       if ((await c.query('SELECT 1 FROM investigation_results WHERE replaces_result_id = $1', [id])).rowCount) return { status: 409, body: { error: 'result_replaced', message: 'This result was corrected. Acknowledge the newest result.' } };
       if ((await c.query('SELECT 1 FROM investigation_result_acks WHERE result_id = $1', [id])).rowCount) return { status: 409, body: { error: 'already_acknowledged', message: 'This result was already acknowledged.' } };
