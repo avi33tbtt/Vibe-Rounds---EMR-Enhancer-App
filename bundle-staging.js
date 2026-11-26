@@ -1,6 +1,7 @@
 'use strict';
 // Task R6f-2a: stage a FHIR Bundle as PROPOSALS (stage, list, read one, reject one). Staging, listing, reading and rejecting create no clinical record.
-// Task R6f-2b: accept ONE ready Observation proposal into a chart the person chooses. Condition and AllergyIntolerance come with R6f-2c; a MedicationRequest is never accepted.
+// Task R6f-2b: accept ONE ready Observation proposal into a chart (case) the person chooses.
+// Task R6f-2c: accept ONE ready Condition (problem list) or AllergyIntolerance proposal into a patient the person chooses. A MedicationRequest is never accepted, by either route.
 // The parser is bundle-import.js (R6f-1, pure, unchanged). The request body IS the bundle; the person is the session user, never a value from the file.
 // Stored: the bundle hash, the parser's counts and the proposal fields. Never the raw bundle, names, notes or Patient identifiers (the parser reports a count only).
 // The same bundle (same hash) is staged once; a second try gives 409 with the id of the first. A proposal is rejected with a reason and the loaded row_version; rejected is final.
@@ -11,6 +12,8 @@ const { audit } = require('./audit');
 const A = require('./auth');
 const { parseBundle, BundleImportError } = require('./bundle-import');
 const { shapeValue, parseInstant, FUTURE_SLACK_MS } = require('./observations');   // accept uses the SAME value rules as normal entry
+const P = require('./problems'), AL = require('./allergies');                    // R6f-2c: and the same problem and allergy rules
+const { can } = require('./permissions');
 
 const BUNDLE_BODY_LIMIT = '2mb';   // up to 500 entries, so this route may exceed the 50 kb default (app.js skips the default for it)
 const MAX_LIST = 50, MAX_REASON = 1000;
@@ -126,7 +129,7 @@ function mountBundleStaging(app, pool) {
       if (p.status !== 'staged') return { status: 409, body: { error: 'proposal_final', message: 'This proposal was already ' + p.status + '.', currentRowVersion: p.row_version } };
       if (p.row_version !== rv) return { status: 409, body: { error: 'version_conflict', message: 'This proposal was changed by someone else. Reload it and try again.', currentRowVersion: p.row_version } };
       if (p.kind === 'MedicationRequest') return { status: 409, body: { error: 'never_acceptable', message: 'An imported bundle never creates a medication order.' } };
-      if (p.kind !== 'Observation') return { status: 409, body: { error: 'not_accepted_here', message: 'Only an Observation proposal can be accepted by this route.' } };
+      if (p.kind !== 'Observation') return { status: 409, body: { error: 'not_accepted_here', message: 'Only an Observation proposal can be accepted by this route; use accept-to-patient for a problem or an allergy.' } };
       if (!p.ready) return { status: 409, body: { error: 'blocked', message: 'A proposal with blockers cannot be accepted.', blockers: p.blockers } };
       const a = (await c.query('SELECT id, state, element_set_version_id FROM case_applied_sets WHERE id = $1 AND case_id = $2', [asid, cs.id])).rows[0];
       if (!a) return { status: 404, body: { error: 'applied_set_not_found', message: 'That set is not applied to this chart.' } };
@@ -158,6 +161,68 @@ function mountBundleStaging(app, pool) {
       const observation = (await c.query(`SELECT o.id, o.case_id, o.applied_set_id, o.field_key, o.value_type, o.value_json AS value, o.unit_display, o.effective_at, o.recorded_at, o.source_type, o.source_ref, o.status, ru.username AS recorded_by
                                           FROM observations o JOIN users ru ON ru.id = o.recorded_by WHERE o.id = $1`, [oid])).rows[0];
       return { status: 200, body: { proposal: (await c.query(`SELECT ${PCOLS}, p.accepted_at, p.accepted_patient_id, p.accepted_record_type, p.accepted_record_id ${PFROM} WHERE p.id = $1`, [id])).rows[0], observation: { ...observation, id: Number(observation.id) } } };
+    });
+    res.status(out.status).json(out.body);
+  });
+
+  /* ---------- R6f-2c: accept ONE ready Condition (problem list) or AllergyIntolerance proposal into a patient the person chooses ----------
+     Problems and allergies belong to the patient, so the person names patientId (and, if they wish, one of that patient's cases as originCaseId): nothing is matched from the file.
+     The record is made by the same rules as normal entry (same label, date, reaction and severity checks; an archived patient is refused). The recorder is the session user and it starts active,
+     as the parser warned when the source said otherwise. Needs import:write AND the permission of the kind (problems:write or allergies:write). MedicationRequest is never accepted. */
+  const KIND_PERM = { Condition: 'problems:write', AllergyIntolerance: 'allergies:write' };
+  app.post('/api/import/proposals/:id/accept-to-patient', A.requirePerm(pool, 'import:write'), async (req, res) => {
+    const s = strict(req.body, ['rowVersion', 'patientId', 'originCaseId']);
+    if (s.error) return res.status(400).json(s.error);
+    const id = idParam(req.params.id), rv = posInt(s.body.rowVersion), pid = posInt(s.body.patientId), origin = s.body.originCaseId === undefined || s.body.originCaseId === null ? null : posInt(s.body.originCaseId);
+    if (rv === null) return bad(res, 'rowVersion is required (the version you loaded).');
+    if (pid === null) return bad(res, 'patientId is required: the chart is chosen by a person, never matched from the file.');
+    if (s.body.originCaseId !== undefined && s.body.originCaseId !== null && origin === null) return bad(res, 'originCaseId must be a whole number.');
+    if (!id) return res.status(404).json({ error: 'not_found' });
+    const out = await tx(pool, async c => {
+      const probe = (await c.query('SELECT kind FROM import_proposals WHERE id = $1', [id])).rows[0];
+      if (!probe) return { status: 404, body: { error: 'not_found' } };
+      const need = KIND_PERM[probe.kind];
+      if (need && !can(req.user.role, need)) {
+        await audit(c, req, 'permission.denied', null, null, { perm: need, method: req.method, path: req.path });
+        return { status: 403, body: { error: 'forbidden', perm: need } };
+      }
+      const pt = (await c.query('SELECT id, archived FROM patients WHERE id = $1 FOR UPDATE', [pid])).rows[0];   // the patient first, like the problem and allergy routes
+      if (!pt) return { status: 404, body: { error: 'patient_not_found' } };
+      if (pt.archived) return { status: 409, body: { error: 'patient_archived', message: 'Restore the patient before adding a record.' } };
+      const p = (await c.query('SELECT id, bundle_id, key, kind, fields, blockers, ready, status, row_version FROM import_proposals WHERE id = $1 FOR UPDATE', [id])).rows[0];
+      if (p.status !== 'staged') return { status: 409, body: { error: 'proposal_final', message: 'This proposal was already ' + p.status + '.', currentRowVersion: p.row_version } };
+      if (p.row_version !== rv) return { status: 409, body: { error: 'version_conflict', message: 'This proposal was changed by someone else. Reload it and try again.', currentRowVersion: p.row_version } };
+      if (p.kind === 'MedicationRequest') return { status: 409, body: { error: 'never_acceptable', message: 'An imported bundle never creates a medication order.' } };
+      if (!need) return { status: 409, body: { error: 'not_accepted_here', message: 'Only a Condition or AllergyIntolerance proposal can be accepted by this route; use accept for an Observation.' } };
+      if (!p.ready) return { status: 409, body: { error: 'blocked', message: 'A proposal with blockers cannot be accepted.', blockers: p.blockers } };
+      if (origin !== null && !(await c.query('SELECT 1 FROM clinical_cases WHERE id = $1 AND patient_id = $2', [origin, pid])).rowCount) return { status: 400, body: { error: 'case_not_of_patient', message: 'That case is not a case of this patient.' } };
+      const f = p.fields, refuse = message => ({ status: 400, body: { error: 'invalid', message } });
+      let recId, type, auditRow;
+      if (p.kind === 'Condition') {
+        if (!P.okLabel(f.label)) return refuse('The imported problem name is not acceptable (1 to 200 characters).');
+        if (f.onsetDate != null && !P.okDate(f.onsetDate)) return refuse('The imported onset date is not usable (it must be a real date, not in the future).');
+        recId = (await c.query('INSERT INTO patient_problems(patient_id, origin_case_id, label, onset_date, recorded_by) VALUES ($1,$2,$3,$4,$5) RETURNING id', [pid, origin, f.label, f.onsetDate == null ? null : f.onsetDate, req.user.id])).rows[0].id;
+        await c.query(`INSERT INTO patient_problem_events(problem_id, seq, from_status, to_status, by_user) VALUES ($1, 1, NULL, 'active', $2)`, [recId, req.user.id]);
+        type = 'problem'; auditRow = ['problem.add', { problemId: recId, originCaseId: origin, length: f.label.length }];
+      } else {
+        if (!AL.okLabel(f.substance)) return refuse('The imported substance is not acceptable (1 to 200 characters).');
+        if (f.reaction != null && !AL.okReaction(f.reaction)) return refuse('The imported reaction is not acceptable (1 to 500 characters).');
+        if (f.severity != null && !AL.SEVERITIES.includes(f.severity)) return refuse('The imported severity is not mild, moderate or severe.');
+        if (f.onsetDate != null && !AL.okDate(f.onsetDate)) return refuse('The imported onset date is not usable (it must be a real date, not in the future).');
+        recId = (await c.query('INSERT INTO patient_allergies(patient_id, origin_case_id, substance, reaction, severity, onset_date, recorded_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+          [pid, origin, f.substance, f.reaction == null ? null : f.reaction, f.severity == null ? null : f.severity, f.onsetDate == null ? null : f.onsetDate, req.user.id])).rows[0].id;
+        await c.query(`INSERT INTO patient_allergy_events(allergy_id, seq, from_status, to_status, by_user) VALUES ($1, 1, NULL, 'active', $2)`, [recId, req.user.id]);
+        type = 'allergy'; auditRow = ['allergy.add', { allergyId: recId, originCaseId: origin, substanceLength: f.substance.length }];
+      }
+      recId = Number(recId);
+      await c.query(`UPDATE import_proposals SET status = 'accepted', row_version = row_version + 1, accepted_by = $2, accepted_at = clock_timestamp(), accepted_patient_id = $3, accepted_record_type = $4, accepted_record_id = $5 WHERE id = $1`,
+        [id, req.user.id, pid, type, recId]);
+      await audit(c, req, auditRow[0], 'patient', pid, auditRow[1]);   // ids and lengths only, like normal entry
+      await audit(c, req, 'import.proposal_accept', 'import_bundle', p.bundle_id, { proposalId: id, kind: p.kind, patientId: pid, recordType: type, recordId: recId, rowVersion: rv + 1 });
+      const rec = type === 'problem'
+        ? (await c.query(`SELECT r.id, r.patient_id, r.origin_case_id, r.label, to_char(r.onset_date, 'YYYY-MM-DD') AS onset_date, r.status, u.username AS recorded_by FROM patient_problems r JOIN users u ON u.id = r.recorded_by WHERE r.id = $1`, [recId])).rows[0]
+        : (await c.query(`SELECT r.id, r.patient_id, r.origin_case_id, r.substance, r.reaction, r.severity, to_char(r.onset_date, 'YYYY-MM-DD') AS onset_date, r.status, u.username AS recorded_by FROM patient_allergies r JOIN users u ON u.id = r.recorded_by WHERE r.id = $1`, [recId])).rows[0];
+      return { status: 200, body: { proposal: (await c.query(`SELECT ${PCOLS}, p.accepted_at, p.accepted_patient_id, p.accepted_record_type, p.accepted_record_id ${PFROM} WHERE p.id = $1`, [id])).rows[0], [type]: rec } };
     });
     res.status(out.status).json(out.body);
   });

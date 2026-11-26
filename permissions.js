@@ -30,7 +30,7 @@ const PERMS = {
   'results:read':      ['admin', 'doctor', 'nurse', 'viewer'],   // specimens and results of investigation orders (R4f)
   'results:write':     ['admin', 'doctor', 'nurse'],              // record a specimen or a result; correct a result with a reason (R4f)
   'results:ack':       ['admin', 'doctor'],                       // acknowledge a result flagged abnormal (R4g-1)
-  'import:write':      ['admin', 'doctor'],                       // stage a FHIR Bundle as proposals, read them, reject one (R6f-2a); accept one Observation (R6f-2b, also needs cases:write); Condition and AllergyIntolerance come with R6f-2c
+  'import:write':      ['admin', 'doctor'],                       // stage a FHIR Bundle as proposals, read them, reject one (R6f-2a); accept one Observation (R6f-2b, also needs cases:write); accept a Condition or AllergyIntolerance (R6f-2c, also needs problems:write or allergies:write)
   'audit:read':        ['admin'],
   'context:read':      ['admin', 'doctor'],   // the de-identified context envelope for CCIS (B5); no nurse, viewer or informatician
   'ccis:import':       ['admin', 'doctor'],   // import a CCIS run record made from an envelope exported for the same case (DM2a)

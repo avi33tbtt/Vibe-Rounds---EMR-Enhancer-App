@@ -115,4 +115,4 @@ function mountProblems(app, pool) {
   app.post('/api/problems/:id/resolve', A.requirePerm(pool, 'problems:write'), move('resolve'));
   app.post('/api/problems/:id/entered-in-error', A.requirePerm(pool, 'problems:write'), move('error'));
 }
-module.exports = { mountProblems };
+module.exports = { mountProblems, okLabel, okDate };   // R6f-2c: bundle accept uses the same label and date rules

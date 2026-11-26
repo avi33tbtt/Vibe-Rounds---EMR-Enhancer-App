@@ -119,4 +119,4 @@ function mountAllergies(app, pool) {
   app.post('/api/allergies/:id/resolve', A.requirePerm(pool, 'allergies:write'), move('resolve'));
   app.post('/api/allergies/:id/entered-in-error', A.requirePerm(pool, 'allergies:write'), move('error'));
 }
-module.exports = { mountAllergies };
+module.exports = { mountAllergies, okLabel, okReaction, okDate, SEVERITIES };   // R6f-2c: bundle accept uses the same rules
