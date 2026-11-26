@@ -1,5 +1,6 @@
 'use strict';
-// Task R6f-2a: stage a FHIR Bundle as PROPOSALS (stage, list, read one, reject one). Nothing here creates a clinical record and NO accept exists yet (R6f-2b, R6f-2c).
+// Task R6f-2a: stage a FHIR Bundle as PROPOSALS (stage, list, read one, reject one). Staging, listing, reading and rejecting create no clinical record.
+// Task R6f-2b: accept ONE ready Observation proposal into a chart the person chooses. Condition and AllergyIntolerance come with R6f-2c; a MedicationRequest is never accepted.
 // The parser is bundle-import.js (R6f-1, pure, unchanged). The request body IS the bundle; the person is the session user, never a value from the file.
 // Stored: the bundle hash, the parser's counts and the proposal fields. Never the raw bundle, names, notes or Patient identifiers (the parser reports a count only).
 // The same bundle (same hash) is staged once; a second try gives 409 with the id of the first. A proposal is rejected with a reason and the loaded row_version; rejected is final.
@@ -9,9 +10,13 @@ const { tx } = require('./db');
 const { audit } = require('./audit');
 const A = require('./auth');
 const { parseBundle, BundleImportError } = require('./bundle-import');
+const { shapeValue, parseInstant, FUTURE_SLACK_MS } = require('./observations');   // accept uses the SAME value rules as normal entry
 
 const BUNDLE_BODY_LIMIT = '2mb';   // up to 500 entries, so this route may exceed the 50 kb default (app.js skips the default for it)
 const MAX_LIST = 50, MAX_REASON = 1000;
+const KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+// What the imported value type may be stored into (never converted): a whole number fits a number field and a number fits an integer field only if it is whole (shapeValue checks); text fits a text or select field; unknown fits any field.
+const FITS = { number: ['number', 'integer'], integer: ['integer', 'number'], boolean: ['boolean'], text: ['text', 'select'], datetime: ['datetime'] };
 const isBundleStagePath = p => p === '/api/import/bundles';
 const BAD_CHARS = /\u0000|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 const bad = (res, message) => res.status(400).json({ error: 'invalid', message });
@@ -94,6 +99,65 @@ function mountBundleStaging(app, pool) {
       await c.query(`UPDATE import_proposals SET status = 'rejected', row_version = row_version + 1, rejected_by = $2, rejected_at = clock_timestamp(), reject_reason = $3 WHERE id = $1`, [id, req.user.id, reason]);
       await audit(c, req, 'import.proposal_reject', 'import_bundle', p.bundle_id, { proposalId: id, kind: p.kind, length: reason.length, rowVersion: rv + 1 });
       return { status: 200, body: { proposal: (await c.query(`SELECT ${PCOLS} ${PFROM} WHERE p.id = $1`, [id])).rows[0] } };
+    });
+    res.status(out.status).json(out.body);
+  });
+
+  /* ---------- R6f-2b: accept ONE ready Observation proposal into a chart the person chooses ----------
+     The person names the case (the chart), the applied set and the field: nothing is matched from the file, and the value is checked against the PINNED
+     version of that field exactly like a normal entry (no conversion, a different or missing unit is refused). The recorder is the session user, the
+     status is preliminary and the source is imported. One proposal makes one record; accepting twice is refused. Needs import:write AND cases:write. */
+  app.post('/api/import/proposals/:id/accept', A.requirePerm(pool, 'import:write'), A.requirePerm(pool, 'cases:write'), async (req, res) => {
+    const s = strict(req.body, ['rowVersion', 'caseId', 'appliedSetId', 'fieldKey']);
+    if (s.error) return res.status(400).json(s.error);
+    const id = idParam(req.params.id), rv = posInt(s.body.rowVersion), caseId = posInt(s.body.caseId), asid = posInt(s.body.appliedSetId), key = s.body.fieldKey;
+    if (rv === null) return bad(res, 'rowVersion is required (the version you loaded).');
+    if (caseId === null) return bad(res, 'caseId is required: the chart is chosen by a person, never matched from the file.');
+    if (asid === null) return bad(res, 'appliedSetId is required (the set applied to that chart that holds the field).');
+    if (typeof key !== 'string' || !KEY_RE.test(key)) return bad(res, 'fieldKey must be 1 to 64 letters, digits, . _ - .');
+    if (!id) return res.status(404).json({ error: 'not_found' });
+    const out = await tx(pool, async c => {
+      const probe = (await c.query('SELECT id FROM import_proposals WHERE id = $1', [id])).rows[0];
+      if (!probe) return { status: 404, body: { error: 'not_found' } };
+      const cs = (await c.query('SELECT id, patient_id, status FROM clinical_cases WHERE id = $1 FOR UPDATE', [caseId])).rows[0];   // the case first, like every other record route
+      if (!cs) return { status: 404, body: { error: 'case_not_found' } };
+      if (cs.status === 'archived') return { status: 409, body: { error: 'case_archived', message: 'Restore the case before changing it.' } };
+      const p = (await c.query('SELECT id, bundle_id, key, kind, fields, blockers, ready, starts_as, status, row_version FROM import_proposals WHERE id = $1 FOR UPDATE', [id])).rows[0];
+      if (p.status !== 'staged') return { status: 409, body: { error: 'proposal_final', message: 'This proposal was already ' + p.status + '.', currentRowVersion: p.row_version } };
+      if (p.row_version !== rv) return { status: 409, body: { error: 'version_conflict', message: 'This proposal was changed by someone else. Reload it and try again.', currentRowVersion: p.row_version } };
+      if (p.kind === 'MedicationRequest') return { status: 409, body: { error: 'never_acceptable', message: 'An imported bundle never creates a medication order.' } };
+      if (p.kind !== 'Observation') return { status: 409, body: { error: 'not_accepted_here', message: 'Only an Observation proposal can be accepted by this route.' } };
+      if (!p.ready) return { status: 409, body: { error: 'blocked', message: 'A proposal with blockers cannot be accepted.', blockers: p.blockers } };
+      const a = (await c.query('SELECT id, state, element_set_version_id FROM case_applied_sets WHERE id = $1 AND case_id = $2', [asid, cs.id])).rows[0];
+      if (!a) return { status: 404, body: { error: 'applied_set_not_found', message: 'That set is not applied to this chart.' } };
+      if (a.state !== 'active') return { status: 409, body: { error: 'set_not_active', message: `That set is ${a.state}; it takes no new values.` } };
+      const def = (await c.query('SELECT definition_json FROM element_set_versions WHERE id = $1', [a.element_set_version_id])).rows[0].definition_json;
+      const field = ((def || {}).fields || []).find(f => f && f.id === key);
+      const f = p.fields, refuse = (error, message) => ({ status: 400, body: { error, message } });
+      if (field && f.valueType !== 'unknown' && !(FITS[f.valueType] || []).includes(field.type)) return refuse('value_does_not_fit', `A ${f.valueType} value does not fit a field of type "${field.type}".`);
+      const fieldUnit = field && typeof field.unit === 'string' && field.unit ? field.unit : null;
+      if (field && fieldUnit && f.valueType !== 'unknown' && !f.unit) return refuse('invalid_unit', `The field "${key}" has the unit ${fieldUnit} but the imported value has no unit; a unit is never assumed.`);
+      const item = f.valueType === 'unknown' ? { unknown: true } : { value: f.value, ...(f.unit ? { unit: f.unit } : {}) };
+      const r = shapeValue(field, item);
+      if (r.error) return refuse(r.error[0], r.error[1]);
+      const t = parseInstant(f.effectiveAt);
+      if (t === null) return refuse('invalid', 'The imported effective time is not a usable date and time.');
+      if (t > Date.now() + FUTURE_SLACK_MS) return { status: 409, body: { error: 'effective_in_future', message: 'The effective time is in the future; this proposal cannot be accepted.' } };
+      const oid = Number((await c.query(
+        `INSERT INTO observations(case_id, applied_set_id, field_key, value_type, value_json, unit_display, effective_at, source_type, source_ref, status, recorded_by)
+         VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::timestamptz,'imported',$8,'preliminary',$9) RETURNING id`,
+        [cs.id, a.id, key, r.type, r.json === null ? null : JSON.stringify(r.json), r.unit, f.effectiveAt, 'import:' + p.bundle_id + '/' + p.key, req.user.id])).rows[0].id);
+      const enc = (await c.query(`SELECT ce.encounter_id FROM case_encounters ce JOIN encounters e ON e.id = ce.encounter_id WHERE ce.case_id = $1 AND e.status = 'open' ORDER BY ce.id DESC LIMIT 1`, [cs.id])).rows[0];
+      await c.query('INSERT INTO clinical_events(case_id, encounter_id, event_type, actor_id, detail) VALUES ($1,$2,$3,$4,$5)',
+        [cs.id, enc ? enc.encounter_id : null, 'observation_recorded', req.user.id, JSON.stringify({ count: 1, observationIds: [oid], appliedSetIds: [a.id], importProposalId: id })]);
+      await c.query('UPDATE clinical_cases SET updated_at = now() WHERE id = $1', [cs.id]);
+      await c.query(`UPDATE import_proposals SET status = 'accepted', row_version = row_version + 1, accepted_by = $2, accepted_at = clock_timestamp(), accepted_patient_id = $3, accepted_record_type = 'observation', accepted_record_id = $4 WHERE id = $1`,
+        [id, req.user.id, cs.patient_id, oid]);
+      await audit(c, req, 'observation.record', 'case', cs.id, { count: 1, observationIds: [oid], importProposalId: id });   // ids only, like normal entry: values never go into the audit log
+      await audit(c, req, 'import.proposal_accept', 'import_bundle', p.bundle_id, { proposalId: id, kind: p.kind, caseId: cs.id, observationId: oid, rowVersion: rv + 1 });
+      const observation = (await c.query(`SELECT o.id, o.case_id, o.applied_set_id, o.field_key, o.value_type, o.value_json AS value, o.unit_display, o.effective_at, o.recorded_at, o.source_type, o.source_ref, o.status, ru.username AS recorded_by
+                                          FROM observations o JOIN users ru ON ru.id = o.recorded_by WHERE o.id = $1`, [oid])).rows[0];
+      return { status: 200, body: { proposal: (await c.query(`SELECT ${PCOLS}, p.accepted_at, p.accepted_patient_id, p.accepted_record_type, p.accepted_record_id ${PFROM} WHERE p.id = $1`, [id])).rows[0], observation: { ...observation, id: Number(observation.id) } } };
     });
     res.status(out.status).json(out.body);
   });

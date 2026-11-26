@@ -114,6 +114,7 @@ const MATRIX = {
   'POST /api/import/bundles': { guard: 'import:write' },
   'GET /api/import/bundles/:id': { guard: 'import:write' },
   'POST /api/import/proposals/:id/reject': { guard: 'import:write' },
+  'POST /api/import/proposals/:id/accept': { guard: 'import:write' },   // R6f-2b: also needs cases:write (admin and doctor hold both)
   'POST /api/followups/:id/entered-in-error': { guard: 'orders:write' },
   'POST /api/admissions/:id/cancel': { guard: 'orders:write' },
   'POST /api/admissions/:id/entered-in-error': { guard: 'orders:write' },
@@ -467,6 +468,16 @@ test('audit coverage: every write route leaves an audit row, written from the se
       ['POST /api/cases/:id/observations', nurse, async () => {
         const r = await nurse.c.post(`/api/cases/${S.cid}/observations`, { observations: [{ appliedSetId: S.asid, fieldKey: 'hr', value: 72, effectiveAt: '2020-01-01T10:00:00Z', sourceType: 'clinician' }] });
         assert.equal(r.status, 201, JSON.stringify(r.body)); S.oid = r.body.observations[0].id; return ['observation.record'];
+      }],
+      ['POST /api/import/proposals/:id/accept', doctor, async () => {      // R6f-2b: needs the applied set of the observations step above (still active here)
+        const b = { resourceType: 'Bundle', type: 'collection', entry: [{ resource: { resourceType: 'Observation', status: 'final', code: { text: 'Audit accept sample' }, valueQuantity: { value: 71, unit: 'bpm' }, effectiveDateTime: '2020-01-02T10:00:00Z' } }] };
+        const st = await doctor.c.post('/api/import/bundles', b);
+        assert.equal(st.status, 201, JSON.stringify(st.body)); const p = st.body.bundle.proposals[0];
+        const mine = { caseId: S.cid, appliedSetId: S.asid, fieldKey: 'hr', rowVersion: p.row_version };
+        assert.equal((await doctor.c.post(`/api/import/proposals/${p.id}/accept`, { ...mine, ...fake })).status, 400, 'a body that names a user is refused');
+        const ok = await doctor.c.post(`/api/import/proposals/${p.id}/accept`, mine);
+        assert.equal(ok.status, 200, JSON.stringify(ok.body)); assert.equal(ok.body.observation.recorded_by, 'doctor1');
+        return ['import.proposal_accept', 'observation.record', 'import.stage'];
       }],
       ['POST /api/observations/:id/correct', nurse, async () => {
         const r = await nurse.c.post(`/api/observations/${S.oid}/correct`, { value: 74, sourceType: 'clinician', reason: 'Audit correction' });

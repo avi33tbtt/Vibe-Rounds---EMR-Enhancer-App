@@ -294,4 +294,4 @@ function mountObservations(app, pool) {
   });
 }
 
-module.exports = { mountObservations, APPLIED, APPLIED_FROM };
+module.exports = { mountObservations, APPLIED, APPLIED_FROM, shapeValue, parseInstant, FUTURE_SLACK_MS };   // R6f-2b: bundle accept reuses the same value rules
