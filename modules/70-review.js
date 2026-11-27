@@ -32,6 +32,7 @@ function renderVers(){
     const key=v.set_id+':'+v.version,lbl=VER_LBL[v.status]||v.status;
     h+=`<div style="margin:6px 0;padding-top:6px;border-top:1px solid var(--b,#ddd)"><span class="bd" style="background:var(${v.status==='rejected'?'--r':verTier(v.status)==='local draft'?'--a':'--g'})">${escA(verTier(v.status))}</span> <b>${escA(v.title)}</b> <span class="mu">${escA(v.slug)} · v${escA(v.version)} · ${escA(lbl)} · by ${escA(v.created_by)}</span>`;
     if(v.status==='draft')h+=canSub?` <button class="b sm" data-act="verSubmit" data-arg="${escA(key)}"${VER.busy?' disabled':''}>Submit for review</button>`:' <span class="mu">Draft. Your role cannot submit it.</span>';
+    else if(v.status==='reviewed'&&srvCan('sets:publish'))h+=` <button class="b sm" data-act="verPublish" data-arg="${escA(key)}"${VER.busy?' disabled':''}>Publish</button> <span class="mu">Approved. Publishing freezes it and makes it usable.</span>`;
     else h+=` <span class="mu">${escA(VER_NOTE[v.status]||'')}</span>`;
     if(VER.err[key])h+=`<div class="gen-warn">${escA(VER.err[key])}</div>`;
     if(VER.lint[key])h+=verFindings(VER.lint[key]);
@@ -54,6 +55,18 @@ async function verSubmit(arg){
   }
   VER.err[key]=apiMsg(r);
   const lint=r.body&&r.body.lint&&r.body.lint.findings;if(lint)VER.lint[key]=lint;
+  if(r.status===409)await verLoad();else renderVers();
+}
+
+async function verPublish(arg){
+  const m=/^(\d+):(\d+)$/.exec(arg||'');if(!m||VER.busy||!srvCan('sets:publish'))return;
+  const key=arg;delete VER.err[key];
+  if(!confirm('Publish this approved version? It is frozen from then on and becomes usable in the library.'))return;
+  VER.busy=true;renderVers();
+  const r=await api('POST','/api/element-sets/'+m[1]+'/versions/'+m[2]+'/publish',{});
+  VER.busy=false;if(!srvCan('sets:read'))return;
+  if(r.status===200){toast('Published.');await verLoad();await libLoad();return}
+  VER.err[key]=apiMsg(r);
   if(r.status===409)await verLoad();else renderVers();
 }
 

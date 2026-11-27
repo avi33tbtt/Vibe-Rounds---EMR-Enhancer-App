@@ -61,6 +61,7 @@ const ACT={
   reviewReload:()=>reviewLoad(),
   verReload:()=>verLoad(),
   verSubmit:(el,e,a)=>verSubmit(a),
+  verPublish:(el,e,a)=>verPublish(a),
   termReload:()=>termsLoad(),
   termAdd:()=>termAdd(),
   termSubmit:(el,e,a)=>termStep('submit',a),

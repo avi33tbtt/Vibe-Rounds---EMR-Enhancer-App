@@ -71,20 +71,20 @@ async function publishExample(U, ex) {
 }
 
 // Returns { published, made, resumed, retired } counts. Safe to call again.
-async function seedTerms({ base, password, reset = false, log = () => {} }) {
+async function seedTerms({ base, password, reset = false, log = () => {}, list = EXAMPLES, label = 'Example local terms' }) {
   const U = await login(base, password);
   let retired = 0;
-  if (reset) for (const ex of EXAMPLES) {
+  if (reset) for (const ex of list) {
     const t = await latest(U, ex.code);
     if (t && t.status === 'published') { must(await U.admin.post(`/api/local-terms/${t.id}/retire`, {}), [200], 'retire ' + ex.code); retired++; }
   }
   const out = { published: 0, made: 0, resumed: 0, retired };
-  for (const ex of EXAMPLES) out[await publishExample(U, ex)]++;
-  log(`Example local terms: ${out.made} made, ${out.resumed} carried on, ${out.published} already published, ${out.retired} retired first. ${EXAMPLES.length} in all.`);
+  for (const ex of list) out[await publishExample(U, ex)]++;
+  log(`${label}: ${out.made} made, ${out.resumed} carried on, ${out.published} already published, ${out.retired} retired first. ${list.length} in all.`);
   return out;
 }
 
-module.exports = { seedTerms, EXAMPLES };
+module.exports = { seedTerms, EXAMPLES, REVIEW_REASON };
 
 if (require.main === module) {
   (async () => {

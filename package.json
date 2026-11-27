@@ -15,6 +15,8 @@
     "longitudinal:reset": "node --env-file=.env scripts/seed-longitudinal.js --reset",
     "terms:seed": "node --env-file=.env scripts/seed-terms.js",
     "terms:reset": "node --env-file=.env scripts/seed-terms.js --reset",
+    "terms:starter": "node --env-file=.env scripts/seed-starter-terms.js",
+    "terms:starter:reset": "node --env-file=.env scripts/seed-starter-terms.js --reset",
     "terms:bind": "node --env-file=.env scripts/bind-demo-codes.js",
     "demo:run": "node --env-file=.env scripts/demo-bridge.js",
     "fhir:validate": "node scripts/validate-fhir.js",
