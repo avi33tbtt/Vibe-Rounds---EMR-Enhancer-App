@@ -1,0 +1,43 @@
+diff --git a/modules/70-review.js b/modules/70-review.js
+index a6e3f21..b3d9eff 100644
+--- a/modules/70-review.js
++++ b/modules/70-review.js
+@@ -32,6 +32,7 @@ function renderVers(){
+     const key=v.set_id+':'+v.version,lbl=VER_LBL[v.status]||v.status;
+     h+=`<div style="margin:6px 0;padding-top:6px;border-top:1px solid var(--b,#ddd)"><span class="bd" style="background:var(${v.status==='rejected'?'--r':verTier(v.status)==='local draft'?'--a':'--g'})">${escA(verTier(v.status))}</span> <b>${escA(v.title)}</b> <span class="mu">${escA(v.slug)} · v${escA(v.version)} · ${escA(lbl)} · by ${escA(v.created_by)}</span>`;
+     if(v.status==='draft')h+=canSub?` <button class="b sm" data-act="verSubmit" data-arg="${escA(key)}"${VER.busy?' disabled':''}>Submit for review</button>`:' <span class="mu">Draft. Your role cannot submit it.</span>';
++    else if(v.status==='reviewed'&&srvCan('sets:publish'))h+=` <button class="b sm" data-act="verPublish" data-arg="${escA(key)}"${VER.busy?' disabled':''}>Publish</button> <span class="mu">Approved. Publishing freezes it and makes it usable.</span>`;
+     else h+=` <span class="mu">${escA(VER_NOTE[v.status]||'')}</span>`;
+     if(VER.err[key])h+=`<div class="gen-warn">${escA(VER.err[key])}</div>`;
+     if(VER.lint[key])h+=verFindings(VER.lint[key]);
+@@ -57,6 +58,18 @@ async function verSubmit(arg){
+   if(r.status===409)await verLoad();else renderVers();
+ }
+ 
++async function verPublish(arg){
++  const m=/^(\d+):(\d+)$/.exec(arg||'');if(!m||VER.busy||!srvCan('sets:publish'))return;
++  const key=arg;delete VER.err[key];
++  if(!confirm('Publish this approved version? It is frozen from then on and becomes usable in the library.'))return;
++  VER.busy=true;renderVers();
++  const r=await api('POST','/api/element-sets/'+m[1]+'/versions/'+m[2]+'/publish',{});
++  VER.busy=false;if(!srvCan('sets:read'))return;
++  if(r.status===200){toast('Published.');await verLoad();await libLoad();return}
++  VER.err[key]=apiMsg(r);
++  if(r.status===409)await verLoad();else renderVers();
++}
++
+ /* ---------- Reviewer queue (8d-1) ----------
+    Only a signed-in user with sets:review (the informatician role) sees the Review tab. The list, lint findings, who reviewed and when,
+    and the approval counts are the server's values. The server decides everything (own version, second reviewer, status); this page
+diff --git a/modules/90-wire.js b/modules/90-wire.js
+index 998ffa7..fac479e 100644
+--- a/modules/90-wire.js
++++ b/modules/90-wire.js
+@@ -61,6 +61,7 @@ const ACT={
+   reviewReload:()=>reviewLoad(),
+   verReload:()=>verLoad(),
+   verSubmit:(el,e,a)=>verSubmit(a),
++  verPublish:(el,e,a)=>verPublish(a),
+   termReload:()=>termsLoad(),
+   termAdd:()=>termAdd(),
+   termSubmit:(el,e,a)=>termStep('submit',a),
