@@ -147,6 +147,8 @@ const ACT={
   longReload:()=>{lgKeep();longitudinalLoad(false)},
   longMore:()=>longitudinalLoad(true),
   longCtx:(el,e,a)=>lgToggle(a),
+  longSelect:(el,e,a)=>lgSelect(a),
+  longClose:()=>{LG.sel=null;renderLongitudinal()},
   longErrors:(el)=>{LG.errs=!!el.checked;lgKeep();longitudinalLoad(false)},
   longOpenCase:(el,e,a)=>lgOpenCase(a),
   termPick:(el)=>termPick(el),

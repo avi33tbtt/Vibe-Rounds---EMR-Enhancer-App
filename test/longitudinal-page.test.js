@@ -9,7 +9,7 @@ const { pageHtml, localScripts } = require('./html');
 
 const raw = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
 const mod = fs.readFileSync(path.join(__dirname, '..', 'modules', '79-longitudinal.js'), 'utf8');
-const NAMES = ['lgToggle', 'lgChips', 'lgLanes', 'renderLongitudinalNav', 'longitudinalLoad', 'renderLongitudinal', 'lgQuery', 'lgWhat', 'lgSource'];
+const NAMES = ['lgSelect', 'lgDrawer', 'lgNeighbours', 'lgToggle', 'lgChips', 'lgLanes', 'renderLongitudinalNav', 'longitudinalLoad', 'renderLongitudinal', 'lgQuery', 'lgWhat', 'lgSource'];
 
 async function page(fetchImpl) {
   const dom = new JSDOM(pageHtml(), { runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
@@ -148,4 +148,46 @@ test('switching context keeps the date range; clicking a chip goes through the d
   w.document.querySelector('[data-act="longCtx"][data-arg="ckd"]').click();
   await new Promise(r => setTimeout(r, 50));
   assert.match(calls[calls.length - 1], /from=2025-01-01.*context=ckd/);
+});
+
+const series = () => body([
+  E({ key: 'observation:1', sourceId: 1, at: '2025-01-10T08:00:00Z', effectiveAt: '2025-01-10T08:00:00Z', value: 7.1, scope: 'condition', contexts: [M('diabetes', 'Diabetes')] }),
+  E({ key: 'observation:2', sourceId: 2, at: '2025-06-10T08:00:00Z', effectiveAt: '2025-06-10T08:00:00Z', value: 999, status: 'entered_in_error', inError: true }),
+  E({ key: 'observation:3', sourceId: 3, at: '2025-09-10T08:00:00Z', effectiveAt: '2025-09-10T08:00:00Z', value: 7.9, by: '<i>x</i>', scope: 'condition', contexts: [M('diabetes', 'Diabetes'), M('ckd', 'Chronic kidney disease')] }),
+  E({ key: 'observation:4', sourceId: 4, at: '2026-01-10T08:00:00Z', effectiveAt: '2026-01-10T08:00:00Z', value: 8.2 })], { available: AV, counts: { all: 4, diabetes: 2, ckd: 1 } });
+
+test('drawer: facts from the record and derived labels are apart; times apart; contexts with reasons; previous/next skip entered-in-error; escaped; no causal claim', async () => {
+  const w = await page(async () => res(200, series()));
+  as(w, ['cases:read']); withCase(w, 7); await w.eval('longitudinalLoad()');
+  assert.ok(!box(w).includes('lg_drawer'), 'closed by default');
+  w.document.querySelector('[data-act="longSelect"][data-arg="observation:3"]').click();
+  await new Promise(r => setTimeout(r, 30));
+  const h = box(w), d = w.document.getElementById('lg_drawer').innerHTML;
+  assert.match(d, /From the record/); assert.match(d, /Worked out by this page/);
+  assert.ok(d.indexOf('From the record') < d.indexOf('Worked out by this page'));
+  assert.match(d, /7\.9 %/); assert.match(d, /Effective \(when true\): 2025-09-10 08:00/); assert.match(d, /Recorded \(when entered\): 2026-11-21 09:30|Recorded \(when entered\)/);
+  assert.match(d, /Diabetes: set diabetes/); assert.match(d, /Chronic kidney disease: set ckd/);
+  assert.match(d, /Previous: 7\.1 /); assert.ok(!/999/.test(d), 'entered in error is not a neighbour');
+  assert.match(d, /Next: 8\.2 /);
+  assert.match(d, /source observation #3/); assert.match(d, /data-act="longOpenCase"/);
+  assert.ok(!d.includes('<i>x</i>')); assert.match(d, /nothing here says one caused another/);
+  assert.match(d, /overall view/);
+  assert.match(h, /aria-pressed="true"/);
+});
+
+test('drawer: neighbour button moves the selection; first and last say none; chosen context explains why; close and reload behave; error row is marked', async () => {
+  const w = await page(async () => res(200, series()));
+  as(w, ['cases:read']); withCase(w, 7); await w.eval('longitudinalLoad()');
+  await w.eval("lgSelect('observation:1')");
+  assert.match(box(w), /Previous: none among the loaded events/);
+  w.document.querySelector('#lg_drawer [data-act="longSelect"]').click();
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal(w.eval('LG.sel'), 'observation:3');
+  await w.eval("LG.ctx=['ckd']; renderLongitudinal()");
+  assert.match(w.document.getElementById('lg_drawer').innerHTML, /chosen context \(Chronic kidney disease\)/);
+  await w.eval("lgSelect('observation:2')");
+  assert.match(w.document.getElementById('lg_drawer').outerHTML, /border-left/); assert.match(w.document.getElementById('lg_drawer').innerHTML, /entered in error/);
+  w.document.querySelector('[data-act="longClose"]').click(); await new Promise(r => setTimeout(r, 30));
+  assert.equal(w.eval('LG.sel'), null); assert.ok(!box(w).includes('lg_drawer'));
+  await w.eval("lgSelect('nope')"); assert.equal(w.eval('LG.sel'), null);
 });
