@@ -6,9 +6,9 @@
    context cannot be established say "unmapped"; nothing is guessed. Context views come in R9g; this is the overall view only.
    Nothing here implies that two events are related because they are close in time. All text is escaped. */
 const LG_PAGE=100;
-const LG={events:[],pid:null,total:0,offset:0,hidden:0,truncated:false,errs:false,from:'',to:'',msg:'',loaded:false,busy:false};
+const LG={events:[],pid:null,total:0,offset:0,hidden:0,truncated:false,errs:false,from:'',to:'',msg:'',loaded:false,busy:false,ctx:[],counts:null,avail:[]};
 const LG_KIND={observation:'Value',note:'Signed note',problem:'Problem',allergy:'Allergy',medication:'Medication',encounter:'Encounter',note_amendment:'Note amendment',context_change:'Context change'};
-const lgReset=()=>{LG.events=[];LG.pid=null;LG.total=0;LG.offset=0;LG.hidden=0;LG.truncated=false;LG.msg='';LG.loaded=false};
+const lgReset=()=>{LG.events=[];LG.pid=null;LG.total=0;LG.offset=0;LG.hidden=0;LG.truncated=false;LG.msg='';LG.loaded=false;LG.ctx=[];LG.counts=null;LG.avail=[]};
 const lgTime=v=>v?String(v).slice(0,16).replace('T',' '):'not recorded';
 function renderLongitudinalNav(){
   const b=$('navLongitudinal');if(!b)return;
@@ -19,6 +19,7 @@ function lgQuery(offset){
   const p=['limit='+LG_PAGE,'offset='+offset];
   if(/^\d{4}-\d{2}-\d{2}$/.test(LG.from))p.push('from='+LG.from);
   if(/^\d{4}-\d{2}-\d{2}$/.test(LG.to))p.push('to='+LG.to);
+  if(LG.ctx.length)p.push('context='+LG.ctx.map(encodeURIComponent).join(','));
   if(LG.errs)p.push('includeErrors=1');
   return '?'+p.join('&');
 }
@@ -36,6 +37,8 @@ async function longitudinalLoad(more){
   const b=r.body||{};
   LG.events=more?LG.events.concat(b.events||[]):(b.events||[]);
   LG.total=Number(b.total)||0;LG.hidden=Number(b.hiddenInError)||0;LG.truncated=!!b.truncated;LG.msg='';LG.loaded=true;
+  if(b.counts&&typeof b.counts==='object')LG.counts=b.counts;
+  if(Array.isArray(b.available))LG.avail=b.available;
   renderLongitudinal();
 }
 const lgKeep=()=>{const f=$('lg_from'),t=$('lg_to');if(f)LG.from=f.value;if(t)LG.to=t.value};
@@ -47,6 +50,28 @@ function lgWhat(e){
   }
   if(e.kind==='note')return'<b>Signed note</b> <span class="mu">(open the Notes tab of the case to read it)</span>';
   return`<b>${escA(e.label||LG_KIND[e.kind]||e.kind)}</b>`;
+}
+// Context views (R9g): All, one context, or several together. The server filters; a record in two contexts is sent once.
+function lgToggle(key){
+  if(key==='all')LG.ctx=[];
+  else if(LG.avail.some(a=>a.key===key))LG.ctx=LG.ctx.includes(key)?LG.ctx.filter(k=>k!==key):LG.ctx.concat(key);
+  else return;
+  lgKeep();return longitudinalLoad(false);
+}
+function lgChips(){
+  if(!LG.avail.length)return'';
+  const n=k=>LG.counts&&LG.counts[k]!==undefined?' ('+escA(LG.counts[k])+')':'';
+  const chip=(k,label,on)=>`<button class="b ${on?'':'sec '}sm" data-act="longCtx" data-arg="${escA(k)}" aria-pressed="${on}"${LG.busy?' disabled':''}>${escA(label)}${n(k)}</button>`;
+  let h='<div class="flex" style="margin:6px 0;gap:4px;flex-wrap:wrap">'+chip('all','All history',!LG.ctx.length)+LG.avail.map(a=>chip(a.key,a.label,LG.ctx.includes(a.key))).join('')+'</div>';
+  if(LG.ctx.length>1)h+='<div class="mu">Combined view: records in any of the chosen contexts, each shown once, with every context it belongs to.</div>';
+  else if(!LG.ctx.length&&LG.counts&&LG.counts.unmapped)h+=`<div class="mu">${escA(LG.counts.unmapped)} record(s) have no established context (unmapped); they appear in All history only.</div>`;
+  return h;
+}
+function lgLanes(e){
+  const c=Array.isArray(e.contexts)?e.contexts:[];
+  if(c.length)return c.map(x=>`<span class="bd" title="${escA((x.reasons||[]).join('; '))}">${escA(x.label)}</span>`).join(' ');
+  if(e.scope==='shared')return`<span class="mu">(shared: ${escA(e.scopeLabel||'shared')})</span>`;
+  return e.scope==='unmapped'?'<span class="mu">(context: unmapped)</span>':'';
 }
 function lgSource(e){
   const ref=`source ${escA(e.kind)} #${escA(e.sourceId)}`;
@@ -65,9 +90,10 @@ function renderLongitudinal(){
     <label class="mu">To <input type="date" id="lg_to" value="${escA(LG.to)}" aria-label="To date"></label>
     <label class="mu"><input type="checkbox" id="lg_errs" data-act="longErrors" data-ev="change"${LG.errs?' checked':''}> Show entered in error</label>
     <button class="b sm" data-act="longReload"${dis}>Apply</button></div></div>`;
+  h+=lgChips();
   if(LG.truncated)h+='<div class="gen-warn">Some sources have more rows than one request can read, so this view may be incomplete. Narrow the dates.</div>';
   if(!LG.errs&&LG.hidden)h+=`<div class="mu">${escA(LG.hidden)} entered-in-error row(s) are hidden.</div>`;
-  if(LG.loaded&&!LG.events.length&&!LG.msg)h+='<div class="empty">Nothing recorded in this period.</div>';
+  if(LG.loaded&&!LG.events.length&&!LG.msg)h+=`<div class="empty">Nothing recorded ${LG.ctx.length?'for this context ':''}in this period.</div>`;
   let year='',day='';
   LG.events.forEach(e=>{
     const d=String(e.at||'').slice(0,10)||'undated',y=d==='undated'?'undated':d.slice(0,4);
@@ -75,7 +101,7 @@ function renderLongitudinal(){
     if(d!==day){day=d;h+=`<h4 style="margin:10px 0 2px">${escA(d)}</h4>`}
     const gone=e.status==='entered_in_error';
     h+=`<div class="cd"><span class="kind">${escA(e.kindLabel||LG_KIND[e.kind]||e.kind)}</span> <span${gone?' style="text-decoration:line-through"':''}>${lgWhat(e)}</span>
-      ${gone?'<span class="bd" style="background:var(--r)">entered in error</span>':''}${e.scope==='unmapped'?' <span class="mu">(context: unmapped)</span>':''}
+      ${gone?'<span class="bd" style="background:var(--r)">entered in error</span>':''} ${lgLanes(e)}
       <div class="mu">Effective ${escA(lgTime(e.effectiveAt))} · recorded ${escA(lgTime(e.recordedAt))} · by ${escA(e.by===null||e.by===undefined?'unknown':e.by)} · ${lgSource(e)}</div></div>`;
   });
   if(LG.events.length<LG.total)h+=`<div class="flex" style="margin-top:6px"><button class="b sec sm" data-act="longMore"${dis}>Load more (${escA(LG.events.length)} of ${escA(LG.total)})</button></div>`;

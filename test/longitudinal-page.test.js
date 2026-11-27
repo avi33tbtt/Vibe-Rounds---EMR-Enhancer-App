@@ -9,7 +9,7 @@ const { pageHtml, localScripts } = require('./html');
 
 const raw = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
 const mod = fs.readFileSync(path.join(__dirname, '..', 'modules', '79-longitudinal.js'), 'utf8');
-const NAMES = ['renderLongitudinalNav', 'longitudinalLoad', 'renderLongitudinal', 'lgQuery', 'lgWhat', 'lgSource'];
+const NAMES = ['lgToggle', 'lgChips', 'lgLanes', 'renderLongitudinalNav', 'longitudinalLoad', 'renderLongitudinal', 'lgQuery', 'lgWhat', 'lgSource'];
 
 async function page(fetchImpl) {
   const dom = new JSDOM(pageHtml(), { runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
@@ -108,4 +108,44 @@ test('a truncated read is warned about', async () => {
   const w = await page(async () => res(200, body([E()], { truncated: true })));
   as(w, ['cases:read']); withCase(w, 7); await w.eval('longitudinalLoad()');
   assert.match(box(w), /may be incomplete/);
+});
+
+const AV = [{ key: 'diabetes', label: 'Diabetes' }, { key: 'ckd', label: 'Chronic kidney disease' }];
+const M = (key, label) => ({ key, label, reasons: ['set ' + key] });
+const ctxBody = (u) => {
+  const both = E({ key: 'observation:2', sourceId: 2, fieldKey: 'egfr', scope: 'condition', contexts: [M('diabetes', 'Diabetes'), M('ckd', 'Chronic kidney disease')] });
+  const un = E({ key: 'observation:3', sourceId: 3, fieldKey: 'weird', scope: 'unmapped' });
+  const q = /context=([^&]*)/.exec(u); const keys = q ? decodeURIComponent(q[1]).split(',') : [];
+  const all = [both, un];
+  const ev = keys.length ? all.filter(e => e.contexts.some(c => keys.includes(c.key))) : all;
+  return body(ev, { available: AV, counts: { all: 2, shared: 0, unmapped: 1, diabetes: 1, ckd: 1 }, contexts: keys });
+};
+
+test('context chips: All, one, combined; the request carries context=; a record in two contexts shows once with both lanes; unmapped only in All', async () => {
+  const calls = [];
+  const w = await page(async (u) => { calls.push(u); return res(200, ctxBody(u)); });
+  as(w, ['cases:read']); withCase(w, 7); await w.eval('longitudinalLoad()');
+  let h = box(w);
+  assert.match(h, /All history \(2\)/); assert.match(h, /Diabetes \(1\)/); assert.match(h, /1 record\(s\) have no established context/);
+  assert.match(h, /weird/); assert.match(h, /context: unmapped/);
+  await w.eval("lgToggle('diabetes')");
+  assert.match(calls[calls.length - 1], /context=diabetes/); h = box(w);
+  assert.ok(!/weird/.test(h), 'unmapped not in a condition view'); assert.match(h, /egfr/);
+  await w.eval("lgToggle('ckd')");
+  assert.match(calls[calls.length - 1], /context=diabetes,ckd/); h = box(w);
+  assert.equal((h.match(/egfr/g) || []).length, 1, 'shown once'); assert.match(h, /Combined view/);
+  assert.match(h, /<span class="bd" title="set diabetes">Diabetes<\/span>/); assert.match(h, /Chronic kidney disease<\/span>/);
+  await w.eval("lgToggle('diabetes')"); assert.match(calls[calls.length - 1], /context=ckd(&|$)/);
+  await w.eval("lgToggle('all')"); assert.ok(!/context=/.test(calls[calls.length - 1]));
+  const n = calls.length; await w.eval("lgToggle('<bad>')"); assert.equal(calls.length, n, 'unknown key sends nothing');
+});
+
+test('switching context keeps the date range; clicking a chip goes through the delegated listener; labels are escaped', async () => {
+  const calls = [];
+  const w = await page(async (u) => { calls.push(u); const b = ctxBody(u); b.available = [{ key: 'diabetes', label: '<b>D</b>' }, AV[1]]; return res(200, b); });
+  as(w, ['cases:read']); withCase(w, 7); w.eval("LG.from='2025-01-01'"); await w.eval('longitudinalLoad()');
+  assert.ok(!box(w).includes('<b>D</b>'));
+  w.document.querySelector('[data-act="longCtx"][data-arg="ckd"]').click();
+  await new Promise(r => setTimeout(r, 50));
+  assert.match(calls[calls.length - 1], /from=2025-01-01.*context=ckd/);
 });

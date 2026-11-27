@@ -146,6 +146,7 @@ const ACT={
   timelineErrors:(el)=>{TL.errs=!!el.checked;tlKeep();timelineLoad(false)},
   longReload:()=>{lgKeep();longitudinalLoad(false)},
   longMore:()=>longitudinalLoad(true),
+  longCtx:(el,e,a)=>lgToggle(a),
   longErrors:(el)=>{LG.errs=!!el.checked;lgKeep();longitudinalLoad(false)},
   longOpenCase:(el,e,a)=>lgOpenCase(a),
   termPick:(el)=>termPick(el),
