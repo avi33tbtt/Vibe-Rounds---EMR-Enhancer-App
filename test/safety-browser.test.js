@@ -72,6 +72,9 @@ test('browser smoke: sign in, open a case, enter a value, export the FHIR bundle
   await row.getByRole('button', { name: 'Open case' }).click();
   await page.locator('#pbanner', { hasText: 'SMOKE-1' }).waitFor();
   assert.match(await page.locator('#pbanner').innerText(), /Smoke Patient/);
+  assert.ok(await page.locator('#summary').evaluate(el => el.classList.contains('on')), 'the chart Summary opens first');
+  assert.match(await page.locator('#summaryBox').innerText(), /Smoke Patient/);
+  await page.locator('nav [data-t=case]').click();
   assert.ok(await page.locator('#case').evaluate(el => el.classList.contains('on')), 'the Case screen is showing');
 
   // 4. apply a set and enter a value (heart rate 88)

@@ -88,6 +88,15 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
 .gen-err{color:var(--r);font-size:13px;margin:6px 0}
 .dupbox{border:1px solid var(--a);border-left-width:4px;border-radius:6px;padding:8px 12px;margin:8px 0;font-size:13px}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px}
+.pbA{padding:6px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;border-bottom:1px solid var(--bd);background:var(--cd)}
+.pbA .t{font-weight:600;color:var(--mu);font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-left:6px}.pbA .t:first-child{margin-left:0}
+.al-chip{border:1px solid var(--r);color:var(--r);border-radius:12px;padding:1px 10px;font-weight:600}
+.pr-chip{border:1px solid var(--bd);background:var(--chip);border-radius:12px;padding:1px 10px}
+.ab-chip{border:1px solid var(--a);color:var(--a);border-radius:12px;padding:1px 10px;font-weight:600}
+nav button.sep{margin-left:10px;border-left:1px solid var(--bd)}
+.sumGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin:8px 0}
+.sumGrid .cd{margin:0}.sumGrid h4{margin:0 0 6px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+.sumGrid ul{margin:0;padding-left:18px}.sumGrid li{margin:3px 0}
 </style>
 </head>
 <body>
@@ -99,25 +108,27 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
   <span id="who" class="mu"></span>
   <button class="b sec sm" data-act="tg" data-arg="setPanel">Settings</button>
   <nav>
-    <button class="on" data-t="case">Case</button>
     <button data-t="patients">Patients</button>
-    <button data-t="cases">Cases</button>
-    <button data-t="lib">Library</button>
-    <button data-t="review" id="navReview" style="display:none">Review</button>
-    <button data-t="terms" id="navTerms" style="display:none">Local terms</button>
+    <button data-t="summary" id="navSummary" style="display:none">Summary</button>
+    <button class="on" data-t="case">Case</button>
+    <button data-t="notes">Notes</button>
     <button data-t="problems" id="navProblems" style="display:none">Problems</button>
     <button data-t="allergies" id="navAllergies" style="display:none">Allergies</button>
     <button data-t="medications" id="navMedications" style="display:none">Medications</button>
     <button data-t="orders" id="navOrders" style="display:none">Orders</button>
     <button data-t="timeline" id="navTimeline" style="display:none">Timeline</button>
     <button data-t="longitudinal" id="navLongitudinal" style="display:none">Longitudinal</button>
+    <button class="sep" data-t="cases">Cases</button>
     <button data-t="bundles" id="navBundles" style="display:none">Import</button>
     <button data-t="create">Create / Generate</button>
-    <button data-t="notes">Notes</button>
+    <button class="sep" data-t="lib">Library</button>
+    <button data-t="review" id="navReview" style="display:none">Review</button>
+    <button data-t="terms" id="navTerms" style="display:none">Local terms</button>
     <button data-t="codes">Codes &amp; FHIR<span class="planned" title="Server-side terminology verification is planned. Verification here calls a public test server.">verify: planned</span></button>
   </nav>
 </header>
 <div id="pbanner" class="pb"></div>
+<div id="pbAlerts" class="pbA" style="display:none" role="status"></div>
 <div id="conflictBox" class="cd" style="display:none" role="alert"></div>
 
 <dialog id="aiDlg">
@@ -248,6 +259,7 @@ pre.body{white-space:pre-wrap;font:inherit;margin:6px 0}
     </div>
 
     <!-- LIBRARY -->
+    <div class="pane" id="summary"><div id="summaryBox"></div></div>
     <div class="pane" id="lib">
       <h3>Element &amp; Pathway Library</h3>
       <div id="libSrv"></div>
@@ -915,6 +927,7 @@ function renderBanner(){
   $('pbanner').innerHTML=head+
     dx.map(x=>`<span class="kind disease">${escA(x)}</span>`).join('')+pw.map(x=>`<span class="kind pathway">${escA(x)}</span>`).join('')+
     (CASE.status==='archived'?'<span class="kind">archived</span>':'')+'<span class="mu">synthetic data only</span>';
+  sumKick();
 }
 // B5b: download the CCIS context envelope of the open case. The server logs each export; the file holds no name, record number or narrative.
 async function ctxDownload(){
@@ -1678,6 +1691,72 @@ function suggest(){
   if(n>=1&&n<=suggestions.length)applySet(suggestions[n-1].id);
 }
 
+/* ---------- Chart view: alert strip under the patient banner and the Summary page ----------
+   Read-only. It shows what the other tabs already hold for the OPEN registered patient: allergies, active problems, recorded and ordered
+   medications, abnormal results waiting for acknowledgement, and the latest notes. Nothing is stored in the browser, nothing is decided
+   here, and each list comes from the same server route (and permission) as its own tab. A list the role may not read is left out.
+   Every text is escaped. "No allergies recorded" means none were entered; it is never shown as "no known allergies". */
+const SUM={pid:null,uid:null,d:null,loading:false};
+const sumCan=()=>!!Srv.user&&typeof CASE!=='undefined'&&!!CASE&&!!CASE.patientId;
+function sumReset(){SUM.pid=null;SUM.uid=null;SUM.d=null;SUM.loading=false;renderSumAlerts();renderSummary()}
+function sumKick(force){
+  const nb=$('navSummary');if(nb)nb.style.display=Srv.user?'':'none';
+  if(!sumCan()){if(SUM.pid!==null||SUM.d)sumReset();else{renderSumAlerts();renderSummary()}return}
+  if(!force&&SUM.d&&SUM.pid===CASE.patientId&&SUM.uid===Srv.user.username)return;
+  sumLoad();
+}
+async function sumLoad(){
+  if(!sumCan())return sumReset();
+  const pid=CASE.patientId,uid=Srv.user.username;
+  if(SUM.loading&&SUM.pid===pid&&SUM.uid===uid)return;
+  if(SUM.pid!==pid||SUM.uid!==uid)SUM.d=null;
+  SUM.loading=true;SUM.pid=pid;SUM.uid=uid;renderSummary();
+  const get=async(perm,path,key)=>{if(!srvCan(perm))return null;const r=await api('GET','/api/patients/'+encodeURIComponent(pid)+path);return r.status===200?(r.body[key]||[]):undefined};
+  const [pr,al,me,od,ab]=await Promise.all([get('problems:read','/problems','problems'),get('allergies:read','/allergies','allergies'),get('medications:read','/medications','medications'),get('orders:read','/medication-orders','orders'),get('results:read','/abnormal-results','pending')]);
+  if(SUM.pid!==pid||SUM.uid!==uid)return;   // another patient or user meanwhile
+  SUM.loading=false;
+  if(!sumCan()||CASE.patientId!==pid||Srv.user.username!==uid)return;
+  SUM.d={pr,al,me,od,ab};renderSumAlerts();renderSummary();
+}
+const sumAct=a=>(a||[]).filter(x=>x.status==='active');
+function renderSumAlerts(){
+  const b=$('pbAlerts');if(!b)return;
+  const d=SUM.d;if(!sumCan()||!d){b.style.display='none';b.innerHTML='';return}
+  let h='';
+  if(d.al===undefined)h+='<span class="t">Allergies</span><span class="mu">could not be loaded</span>';
+  else if(d.al!==null){const a=sumAct(d.al);h+='<span class="t">Allergies</span>'+(a.length?a.map(x=>`<span class="al-chip">${escA(x.substance)}${x.reaction?' · '+escA(x.reaction):''}${x.severity?' · '+escA(x.severity):''}</span>`).join(''):'<span class="mu">none recorded</span>')}
+  if(d.pr===undefined)h+='<span class="t">Problems</span><span class="mu">could not be loaded</span>';
+  else if(d.pr!==null){const a=sumAct(d.pr);h+='<span class="t">Active problems</span>'+(a.length?a.map(x=>`<span class="pr-chip">${escA(x.label)}</span>`).join(''):'<span class="mu">none recorded</span>')}
+  if(Array.isArray(d.ab)&&d.ab.length)h+=`<span class="ab-chip">${d.ab.length} abnormal result${d.ab.length>1?'s':''} waiting</span>`;
+  b.innerHTML=h;b.style.display=h?'flex':'none';
+}
+function sumCard(title,body){return `<div class="cd"><h4>${escA(title)}</h4>${body}</div>`}
+function sumList(items,empty,line){return items.length?`<ul>${items.map(line).join('')}</ul>`:`<div class="mu">${escA(empty)}</div>`}
+const sumT=v=>escA(String(v||'').slice(0,16).replace('T',' '));
+function renderSummary(){
+  const box=$('summaryBox');if(!box)return;
+  if(!Srv.user){box.innerHTML='<div class="empty">Sign in and open a registered patient to see the chart summary.</div>';return}
+  if(!sumCan()){box.innerHTML='<div class="empty">No patient is open. Open one from the <a href="#" data-act="sumGo" data-arg="patients">Patients</a> tab to see their chart summary.</div>';return}
+  const lp=Srv.pts[CASE.patientId],d=SUM.d;
+  let h=`<div class="note">Chart summary of <b>${escA(caseName(CASE))}</b> (synthetic data only). It only shows what the other tabs hold; change things in those tabs. <button class="b sec sm" data-act="sumReload"${SUM.loading?' disabled':''}>Refresh</button></div>`;
+  if(lp)h+=`<div class="cd"><b>${escA(lp.name)}</b> <span class="mu">MRN ${escA(lp.mrn)} · ${escA(lp.age)} · ${escA(SEXL[lp.sex]||lp.sex)} · DOB ${escA(lp.dob)} · ${lp.open_bed?'bed '+escA(lp.open_bed):'no open encounter'}</span></div>`;
+  if(!d){box.innerHTML=h+'<div class="empty">Loading the chart…</div>';return}
+  const cards=[],no=(v,what)=>v===undefined?`<div class="gen-warn">${escA(what)} could not be loaded.</div>`:null;
+  if(d.al!==null)cards.push(sumCard('Allergies',no(d.al,'The allergies')||sumList(sumAct(d.al),'None recorded for this patient.',x=>`<li><b class="al-chip" style="border:0;padding:0">${escA(x.substance)}</b>${x.reaction?' · '+escA(x.reaction):''}${x.severity?' · '+escA(x.severity):''}</li>`)));
+  if(d.pr!==null)cards.push(sumCard('Active problems',no(d.pr,'The problems')||sumList(sumAct(d.pr),'None recorded for this patient.',x=>`<li>${escA(x.label)}${x.onset_date?` <span class="mu">since ${escA(x.onset_date)}</span>`:''}</li>`)));
+  if(d.me!==null)cards.push(sumCard('Medications recorded',no(d.me,'The medications')||sumList(sumAct(d.me),'None recorded as current.',x=>`<li>${escA(x.medication)}</li>`)));
+  if(d.od!==null)cards.push(sumCard('Active medication orders',no(d.od,'The orders')||sumList(sumAct(d.od),'No active orders.',x=>`<li>${escA(x.medication)}</li>`)));
+  if(d.ab!==null)cards.push(sumCard('Abnormal results waiting',no(d.ab,'The abnormal results')||sumList(d.ab,'None waiting for acknowledgement.',x=>`<li><b>${escA(x.test_name)}</b>: ${escA(x.value_text)}${x.unit_text?' '+escA(x.unit_text):''}</li>`)));
+  const notes=((CASE.notes||[]).filter(n=>n.status!=='discarded')).slice(-3).reverse();
+  cards.push(sumCard('Latest notes of this case',sumList(notes,'No notes in this case.',n=>`<li><span class="mu">${sumT(n.createdAt)} · ${escA(n.author||'')} · ${escA(n.status||'')}</span><br>${escA(String(n.body||'').slice(0,160))}${String(n.body||'').length>160?'…':''}</li>`)));
+  const go=[['case','Case'],['notes','Notes'],['problems','Problems'],['allergies','Allergies'],['medications','Medications'],['orders','Orders'],['timeline','Timeline']].filter(([t])=>{const n=document.querySelector('nav [data-t='+t+']');return n&&n.style.display!=='none'});
+  cards.push(sumCard('Go to',`<div class="flex" style="flex-wrap:wrap">${go.map(([t,l])=>`<button class="b sec sm" data-act="sumGo" data-arg="${t}">${escA(l)}</button>`).join(' ')}</div>`));
+  box.innerHTML=h+`<div class="sumGrid">${cards.join('')}</div>`;
+}
+function sumGo(t){if(!/^[a-z]+$/.test(t||''))return;const n=document.querySelector('nav [data-t='+t+']');if(n&&n.style.display!=='none')n.click()}
+// After sign-in or opening a patient the chart opens on its Summary; without one the work list (Patients) opens.
+function chartLand(){const n=document.querySelector('nav [data-t=summary]');(n&&n.style.display!=='none'?n:document.querySelector('nav [data-t=case]')).click()}
+
 /* Nav */
 document.querySelectorAll('nav button').forEach(b=>{
   b.onclick=()=>{
@@ -1699,6 +1778,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     if(b.dataset.t==='cases')casesShow();
     if(b.dataset.t==='patients')ptShow();
     if(b.dataset.t==='notes')renderNotes();
+    if(b.dataset.t==='summary')sumLoad();else sumKick(true);
   };
 });
 

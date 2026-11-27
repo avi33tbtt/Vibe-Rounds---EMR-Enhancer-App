@@ -41,7 +41,7 @@ async function openCaseSrv(id){
   [c.pinsOk,c.notesOk]=await Promise.all([pinsLoad(c),notesLoad(c)]);
   CASE=c;conflictHide();
   fillPatient();$('narrative').value=c.narrative;$('narSt').textContent='';$('bj').textContent='';$('bchk').textContent='';
-  renderAll();document.querySelector('[data-t=case]').click();
+  renderAll();chartLand();
   if(c.patientId)refreshPatient(c.patientId);
 }
 async function ptOpenCaseSrv(pid){

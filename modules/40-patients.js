@@ -25,7 +25,7 @@ async function srvLogin(){
   const r=await api('POST','/api/login',{username:$('lg_u').value.trim(),password:$('lg_p').value});
   $('lg_p').value='';
   if(r.status!==200){$('lg_err').textContent=r.status===401?'Wrong username or password.':apiMsg(r);return}
-  Srv.user=r.body.user;storeEnter();await libLoad();await loadLinkedAll();await aiRefresh();renderWho();ptShow();
+  Srv.user=r.body.user;storeEnter();await libLoad();await loadLinkedAll();await aiRefresh();renderWho();ptShow();document.querySelector('[data-t=patients]').click();
 }
 async function srvLogout(){await storeFlush();await api('POST','/api/logout');Srv.user=null;Srv.pts={};storeLeave();renderWho();ptShow()}
 
