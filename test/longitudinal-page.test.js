@@ -9,7 +9,7 @@ const { pageHtml, localScripts } = require('./html');
 
 const raw = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
 const mod = fs.readFileSync(path.join(__dirname, '..', 'modules', '79-longitudinal.js'), 'utf8');
-const NAMES = ['lgPickDate', 'lgDateLanes', 'lgSelect', 'lgDrawer', 'lgNeighbours', 'lgToggle', 'lgChips', 'lgLanes', 'renderLongitudinalNav', 'longitudinalLoad', 'renderLongitudinal', 'lgQuery', 'lgWhat', 'lgSource'];
+const NAMES = ['lgTrend', 'lgSeries', 'lgNum', 'lgPickDate', 'lgDateLanes', 'lgSelect', 'lgDrawer', 'lgNeighbours', 'lgToggle', 'lgChips', 'lgLanes', 'renderLongitudinalNav', 'longitudinalLoad', 'renderLongitudinal', 'lgQuery', 'lgWhat', 'lgSource'];
 
 async function page(fetchImpl) {
   const dom = new JSDOM(pageHtml(), { runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
@@ -221,4 +221,47 @@ test('selecting an event sets the date to that event\'s day; another patient cle
   w.document.querySelector('#lg_drawer [data-act="longSelect"]').click(); await new Promise(r => setTimeout(r, 30));
   assert.equal(w.eval('LG.date'), '2025-01-10', 'neighbour moves the date too');
   withCase(w, 8); await w.eval('longitudinalLoad()'); assert.equal(w.eval('LG.date'), null);
+});
+
+const trendBody = () => body([
+  E({ key: 'observation:1', sourceId: 1, at: '2025-01-10T08:00:00Z', effectiveAt: '2025-01-10T08:00:00Z', value: 7.1 }),
+  E({ key: 'observation:2', sourceId: 2, at: '2025-04-10T08:00:00Z', effectiveAt: '2025-04-10T08:00:00Z', value: null }),
+  E({ key: 'observation:3', sourceId: 3, at: '2025-06-10T08:00:00Z', effectiveAt: '2025-06-10T08:00:00Z', value: 999, status: 'entered_in_error', inError: true }),
+  E({ key: 'observation:4', sourceId: 4, at: '2025-09-10T08:00:00Z', effectiveAt: '2025-09-10T08:00:00Z', value: 7.9 }),
+  E({ key: 'observation:5', sourceId: 5, at: '2025-10-10T08:00:00Z', effectiveAt: '2025-10-10T08:00:00Z', value: 'Unknown' }),
+  E({ key: 'observation:6', sourceId: 6, at: '2025-11-10T08:00:00Z', effectiveAt: '2025-11-10T08:00:00Z', value: 53 , unit: 'mmol/mol' }),
+  E({ key: 'observation:7', sourceId: 7, at: '2026-01-10T08:00:00Z', effectiveAt: '2026-01-10T08:00:00Z', value: 8.2 }),
+  E({ key: 'observation:8', sourceId: 8, at: '2026-01-11T08:00:00Z', effectiveAt: '2026-01-11T08:00:00Z', fieldKey: 'sbp', value: 130, unit: 'mmHg' })]);
+
+test('trend chart: one field and unit at a time (units never joined); no value, text and entered in error are left out and counted, never zero; fields with fewer than 2 points are not offered', async () => {
+  const w = await page(async () => res(200, trendBody()));
+  as(w, ['cases:read']); withCase(w, 7); await w.eval('longitudinalLoad()');
+  assert.ok(!box(w).includes('lg_chart'), 'no chart until chosen');
+  const opts = [...w.document.querySelectorAll('#lg_trend option')].map(o => o.value);
+  assert.deepEqual(opts, ['', 'hba1c|%']); // hba1c in mmol/mol has 1 point, sbp has 1
+  w.document.getElementById('lg_trend').value = 'hba1c|%';
+  w.document.getElementById('lg_trend').dispatchEvent(new w.Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 30));
+  const svg = w.document.getElementById('lg_chart');
+  assert.ok(svg); assert.equal(svg.querySelectorAll('circle').length, 3, '7.1, 7.9, 8.2 only');
+  const h = box(w);
+  assert.ok(!/999/.test(svg.outerHTML) && !/>0</.test(svg.outerHTML), 'no error value, no zero');
+  assert.match(h, /3 value\(s\) in %/); assert.match(h, /3 row\(s\) of this field and unit are not plotted/);
+  assert.match(h, /does not start at zero/); assert.match(h, /does not show why it changed/);
+  assert.ok(!/53/.test(svg.outerHTML), 'other unit never mixed in');
+});
+
+test('trend chart: a point opens the drawer and the selected date is marked; labels are escaped; nothing to plot gives a note, not a chart', async () => {
+  const w = await page(async () => res(200, trendBody()));
+  as(w, ['cases:read']); withCase(w, 7); await w.eval('longitudinalLoad()');
+  w.eval("LG.trend='hba1c|%'; renderLongitudinal()");
+  w.document.querySelector('#lg_chart circle[data-arg="observation:4"]').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 30));
+  assert.equal(w.eval('LG.sel'), 'observation:4'); assert.equal(w.eval('LG.date'), '2025-09-10');
+  assert.ok(w.document.getElementById('lg_drawer')); assert.match(box(w), /stroke-dasharray/);
+  const w2 = await page(async () => res(200, body([E({ fieldKey: '<img src=x onerror=alert(1)>' }), E({ key: 'observation:2', sourceId: 2, fieldKey: '<img src=x onerror=alert(1)>' })])));
+  as(w2, ['cases:read']); withCase(w2, 7); await w2.eval('longitudinalLoad()');
+  assert.equal(w2.document.querySelector('#longitudinalBox img'), null, 'no element is created from a field name'); assert.equal(w2.document.querySelector('#lg_trend option:nth-child(2)').textContent, '<img src=x onerror=alert(1)> (%)');
+  const w3 = await page(async () => res(200, body([E()])));
+  as(w3, ['cases:read']); withCase(w3, 7); await w3.eval('longitudinalLoad()');
+  assert.match(box(w3), /no field has two or more plottable numeric values/); assert.ok(!box(w3).includes('<svg'));
 });

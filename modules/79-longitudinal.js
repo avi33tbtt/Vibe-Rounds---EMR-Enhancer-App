@@ -6,9 +6,9 @@
    context cannot be established say "unmapped"; nothing is guessed. Context views come in R9g; this is the overall view only.
    Nothing here implies that two events are related because they are close in time. All text is escaped. */
 const LG_PAGE=100;
-const LG={events:[],pid:null,total:0,offset:0,hidden:0,truncated:false,errs:false,from:'',to:'',msg:'',loaded:false,busy:false,ctx:[],counts:null,avail:[],sel:null,date:null};
+const LG={events:[],pid:null,total:0,offset:0,hidden:0,truncated:false,errs:false,from:'',to:'',msg:'',loaded:false,busy:false,ctx:[],counts:null,avail:[],sel:null,date:null,trend:''};
 const LG_KIND={observation:'Value',note:'Signed note',problem:'Problem',allergy:'Allergy',medication:'Medication',encounter:'Encounter',note_amendment:'Note amendment',context_change:'Context change'};
-const lgReset=()=>{LG.events=[];LG.pid=null;LG.total=0;LG.offset=0;LG.hidden=0;LG.truncated=false;LG.msg='';LG.loaded=false;LG.ctx=[];LG.counts=null;LG.avail=[];LG.sel=null;LG.date=null};
+const lgReset=()=>{LG.events=[];LG.pid=null;LG.total=0;LG.offset=0;LG.hidden=0;LG.truncated=false;LG.msg='';LG.loaded=false;LG.ctx=[];LG.counts=null;LG.avail=[];LG.sel=null;LG.date=null;LG.trend=''};
 const lgTime=v=>v?String(v).slice(0,16).replace('T',' '):'not recorded';
 function renderLongitudinalNav(){
   const b=$('navLongitudinal');if(!b)return;
@@ -122,6 +122,53 @@ function lgDrawer(){
     ${e.kind==='observation'?`<h4 style="margin:8px 0 2px">Same field, before and after</h4>${nbLine('Previous',nb.prev)}${nbLine('Next',nb.next)}`:''}
     <div class="mu" style="margin-top:6px">Events close in time are not shown as related, and nothing here says one caused another.</div></div>`;
 }
+// Trend chart (R9i): one field in ONE unit at a time, drawn from the events already loaded. Values of different units are never joined
+// (each field+unit pair is its own choice). A value is plotted only if it is a finite number; no value, unknown, text and entered-in-error
+// are left out and counted, never drawn as zero. The axis does not start at zero and says so. Nothing here is a threshold or a target.
+const lgUnit=u=>u===null||u===undefined||u===''?'':String(u);
+function lgNum(e){
+  let v=e.value;if(v&&typeof v==='object')v=v.value;
+  if(typeof v==='number')return Number.isFinite(v)?v:null;
+  if(typeof v==='string'&&/^-?\d+(\.\d+)?$/.test(v.trim()))return Number(v);
+  return null;
+}
+const lgWhen=e=>{const t=Date.parse(e.effectiveAt||e.at||'');return Number.isFinite(t)?t:null};
+function lgSeries(){
+  const obs=LG.events.filter(e=>e.kind==='observation'&&e.fieldKey);
+  const groups=new Map();
+  obs.forEach(e=>{
+    const id=e.fieldKey+'|'+lgUnit(e.unit);
+    const g=groups.get(id)||{id,field:e.fieldKey,unit:lgUnit(e.unit),pts:[],skipped:0};groups.set(id,g);
+    const v=lgNum(e),t=lgWhen(e);
+    if(e.status==='entered_in_error'||e.inError||v===null||t===null)g.skipped++;
+    else g.pts.push({key:e.key,v,t,day:lgDay(e)});
+  });
+  return[...groups.values()].filter(g=>g.pts.length>=2).sort((a,b)=>a.id<b.id?-1:1);
+}
+function lgTrend(){
+  const all=lgSeries();
+  if(!all.length)return LG.events.length?'<div class="mu">Trend chart: no field has two or more plottable numeric values among the loaded events.</div>':'';
+  const g=all.find(x=>x.id===LG.trend)||null;
+  const opts=all.map(x=>`<option value="${escA(x.id)}"${g&&g.id===x.id?' selected':''}>${escA(x.field)} (${escA(x.unit||'no unit')})</option>`).join('');
+  let h=`<div class="note" id="lg_trend_box"><label class="mu">Trend of <select id="lg_trend" data-act="longTrend" data-ev="change" aria-label="Field to chart"><option value="">none</option>${opts}</select></label>`;
+  if(g){
+    const W=640,H=190,L=56,R=12,T=12,B=28,pts=g.pts.slice().sort((a,b)=>a.t-b.t);
+    let lo=Math.min(...pts.map(p=>p.v)),hi=Math.max(...pts.map(p=>p.v));if(lo===hi){lo-=1;hi+=1}
+    const t0=pts[0].t,t1=pts[pts.length-1].t,span=(t1-t0)||1;
+    const X=t=>L+(t-t0)/span*(W-L-R),Y=v=>T+(hi-v)/(hi-lo)*(H-T-B);
+    const unit=g.unit?' '+escA(g.unit):'';
+    const line=pts.map(p=>X(p.t).toFixed(1)+','+Y(p.v).toFixed(1)).join(' ');
+    const dots=pts.map(p=>`<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="${p.key===LG.sel?6:4}" fill="${p.key===LG.sel?'#b00':'#06c'}" data-act="longSelect" data-arg="${escA(p.key)}" style="cursor:pointer" tabindex="0"><title>${escA(p.day)}: ${escA(p.v)}${unit}</title></circle>`).join('');
+    const sel=LG.date?pts.find(p=>p.day===LG.date):null;
+    const selLine=sel?`<line x1="${X(sel.t).toFixed(1)}" x2="${X(sel.t).toFixed(1)}" y1="${T}" y2="${H-B}" stroke="#b00" stroke-dasharray="3,3"/>`:'';
+    h+=`<svg id="lg_chart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Trend of ${escA(g.field)}${g.unit?' in '+escA(g.unit):''}, ${pts.length} values"><line x1="${L}" x2="${L}" y1="${T}" y2="${H-B}" stroke="currentColor" opacity=".4"/><line x1="${L}" x2="${W-R}" y1="${H-B}" y2="${H-B}" stroke="currentColor" opacity=".4"/>
+      <text x="${L-4}" y="${T+8}" text-anchor="end" font-size="10" fill="currentColor">${escA(hi)}</text><text x="${L-4}" y="${H-B}" text-anchor="end" font-size="10" fill="currentColor">${escA(lo)}</text>
+      <text x="${L}" y="${H-10}" font-size="10" fill="currentColor">${escA(new Date(t0).toISOString().slice(0,10))}</text><text x="${W-R}" y="${H-10}" text-anchor="end" font-size="10" fill="currentColor">${escA(new Date(t1).toISOString().slice(0,10))}</text>
+      ${selLine}<polyline points="${line}" fill="none" stroke="#06c" stroke-width="1.5"/>${dots}</svg>
+      <div class="mu">${escA(pts.length)} value(s) in ${escA(g.unit||'no unit')}, at their effective time. The vertical axis does not start at zero. ${g.skipped?escA(g.skipped)+' row(s) of this field and unit are not plotted (no value, not a number, or entered in error); they are not counted as zero. ':''}Click a point to see its detail. The chart shows what was recorded; it does not show why it changed.</div>`;
+  }
+  return h+'</div>';
+}
 function lgSource(e){
   const ref=`source ${escA(e.kind)} #${escA(e.sourceId)}`;
   if(e.caseId===null||e.caseId===undefined)return ref+' · no case';
@@ -142,6 +189,7 @@ function renderLongitudinal(jump){
   h+=lgChips();
   if(LG.sel&&!LG.events.some(x=>x.key===LG.sel))LG.sel=null;
   h+=lgDateLanes();
+  h+=lgTrend();
   h+=lgDrawer();
   if(LG.truncated)h+='<div class="gen-warn">Some sources have more rows than one request can read, so this view may be incomplete. Narrow the dates.</div>';
   if(!LG.errs&&LG.hidden)h+=`<div class="mu">${escA(LG.hidden)} entered-in-error row(s) are hidden.</div>`;

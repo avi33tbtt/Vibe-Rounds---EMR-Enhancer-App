@@ -149,6 +149,7 @@ const ACT={
   longCtx:(el,e,a)=>lgToggle(a),
   longSelect:(el,e,a)=>lgSelect(a),
   longDate:(el,e,a)=>lgPickDate(a),
+  longTrend:(el)=>{LG.trend=String(el.value||'');renderLongitudinal()},
   longClearDate:()=>lgPickDate(null),
   longClose:()=>{LG.sel=null;renderLongitudinal()},
   longErrors:(el)=>{LG.errs=!!el.checked;lgKeep();longitudinalLoad(false)},
