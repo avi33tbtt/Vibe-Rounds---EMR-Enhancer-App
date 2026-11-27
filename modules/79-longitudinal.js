@@ -6,9 +6,9 @@
    context cannot be established say "unmapped"; nothing is guessed. Context views come in R9g; this is the overall view only.
    Nothing here implies that two events are related because they are close in time. All text is escaped. */
 const LG_PAGE=100;
-const LG={events:[],pid:null,total:0,offset:0,hidden:0,truncated:false,errs:false,from:'',to:'',msg:'',loaded:false,busy:false,ctx:[],counts:null,avail:[],sel:null};
+const LG={events:[],pid:null,total:0,offset:0,hidden:0,truncated:false,errs:false,from:'',to:'',msg:'',loaded:false,busy:false,ctx:[],counts:null,avail:[],sel:null,date:null};
 const LG_KIND={observation:'Value',note:'Signed note',problem:'Problem',allergy:'Allergy',medication:'Medication',encounter:'Encounter',note_amendment:'Note amendment',context_change:'Context change'};
-const lgReset=()=>{LG.events=[];LG.pid=null;LG.total=0;LG.offset=0;LG.hidden=0;LG.truncated=false;LG.msg='';LG.loaded=false;LG.ctx=[];LG.counts=null;LG.avail=[];LG.sel=null};
+const lgReset=()=>{LG.events=[];LG.pid=null;LG.total=0;LG.offset=0;LG.hidden=0;LG.truncated=false;LG.msg='';LG.loaded=false;LG.ctx=[];LG.counts=null;LG.avail=[];LG.sel=null;LG.date=null};
 const lgTime=v=>v?String(v).slice(0,16).replace('T',' '):'not recorded';
 function renderLongitudinalNav(){
   const b=$('navLongitudinal');if(!b)return;
@@ -75,7 +75,18 @@ function lgLanes(e){
 }
 // Event detail drawer (R9h-1). Facts come from the record; the labels under "Worked out by this page" are derived here and say so.
 // Previous/next look only at the events loaded in this page, never at older or newer unloaded ones. No causal wording.
-function lgSelect(key){const e=LG.events.find(x=>x.key===key);LG.sel=e?e.key:null;renderLongitudinal()}
+const lgDay=e=>String(e.at||'').slice(0,10);
+// One selected date (R9h-2): chosen by selecting an event or a day heading, kept when the context view, the date range or the drawer changes.
+function lgSelect(key){const e=LG.events.find(x=>x.key===key);LG.sel=e?e.key:null;if(e&&/^\d{4}-\d{2}-\d{2}$/.test(lgDay(e)))LG.date=lgDay(e);renderLongitudinal(true)}
+function lgPickDate(d){LG.date=/^\d{4}-\d{2}-\d{2}$/.test(d)?d:null;renderLongitudinal(true)}
+// Per lane (each context in view, or each context the server lists in the overall view): how many loaded events fall on the selected date.
+function lgDateLanes(){
+  if(!LG.date)return'';
+  const on=LG.events.filter(e=>lgDay(e)===LG.date);
+  const lanes=(LG.ctx.length?LG.avail.filter(a=>LG.ctx.includes(a.key)):LG.avail).map(a=>{const n=on.filter(e=>(e.contexts||[]).some(c=>c.key===a.key)).length;return`${escA(a.label)}: ${n}`});
+  if(!LG.ctx.length)lanes.push('Unmapped: '+on.filter(e=>e.scope==='unmapped').length);
+  return`<div class="note" id="lg_date">Selected date <b>${escA(LG.date)}</b> (kept when you change the view). Records on that date in this view: ${escA(on.length)}${on.length?'':' — none in the loaded part of this view'}. By lane: ${lanes.join(' · ')}. <button class="b sec sm" data-act="longClearDate">Clear date</button></div>`;
+}
 function lgNeighbours(e){
   if(e.kind!=='observation'||!e.fieldKey)return{prev:null,next:null};
   const same=LG.events.filter(x=>x.kind==='observation'&&x.fieldKey===e.fieldKey&&(!x.inError&&x.status!=='entered_in_error'||x.key===e.key));
@@ -116,7 +127,7 @@ function lgSource(e){
   if(e.caseId===null||e.caseId===undefined)return ref+' · no case';
   return`${ref} · case #${escA(e.caseId)} <button class="b sec sm" data-act="longOpenCase" data-arg="${escA(e.caseId)}" aria-label="Open case ${escA(e.caseId)}">Open case</button>`;
 }
-function renderLongitudinal(){
+function renderLongitudinal(jump){
   const box=$('longitudinalBox');if(!box)return;
   if(!srvCan('cases:read')){box.innerHTML='';return}
   lgKeep();
@@ -130,6 +141,7 @@ function renderLongitudinal(){
     <button class="b sm" data-act="longReload"${dis}>Apply</button></div></div>`;
   h+=lgChips();
   if(LG.sel&&!LG.events.some(x=>x.key===LG.sel))LG.sel=null;
+  h+=lgDateLanes();
   h+=lgDrawer();
   if(LG.truncated)h+='<div class="gen-warn">Some sources have more rows than one request can read, so this view may be incomplete. Narrow the dates.</div>';
   if(!LG.errs&&LG.hidden)h+=`<div class="mu">${escA(LG.hidden)} entered-in-error row(s) are hidden.</div>`;
@@ -138,7 +150,7 @@ function renderLongitudinal(){
   LG.events.forEach(e=>{
     const d=String(e.at||'').slice(0,10)||'undated',y=d==='undated'?'undated':d.slice(0,4);
     if(y!==year){year=y;day='';h+=`<h3 style="margin:14px 0 2px">${escA(y)}</h3>`}
-    if(d!==day){day=d;h+=`<h4 style="margin:10px 0 2px">${escA(d)}</h4>`}
+    if(d!==day){day=d;const on=d===LG.date;h+=`<h4 style="margin:10px 0 2px${on?';background:var(--y,#fff3b0)':''}"${on?' id="lg_seldate" aria-current="date"':''}>${escA(d)} <button class="b sec sm" data-act="longDate" data-arg="${escA(d)}" aria-label="Select date ${escA(d)}">Select date</button></h4>`}
     const gone=e.status==='entered_in_error';
     h+=`<div class="cd"><span class="kind">${escA(e.kindLabel||LG_KIND[e.kind]||e.kind)}</span> <span${gone?' style="text-decoration:line-through"':''}>${lgWhat(e)}</span>
       ${gone?'<span class="bd" style="background:var(--r)">entered in error</span>':''} ${lgLanes(e)}
@@ -148,6 +160,7 @@ function renderLongitudinal(){
   if(LG.events.length<LG.total)h+=`<div class="flex" style="margin-top:6px"><button class="b sec sm" data-act="longMore"${dis}>Load more (${escA(LG.events.length)} of ${escA(LG.total)})</button></div>`;
   else if(LG.loaded&&LG.events.length)h+=`<div class="mu">${escA(LG.total)} event(s) shown.</div>`;
   box.innerHTML=h;
+  if(jump){const t=$('lg_seldate');if(t&&t.scrollIntoView)t.scrollIntoView({block:'nearest'})}
 }
 async function lgOpenCase(serverId){
   // event.caseId is the server id; the page lists cases by a local id that carries it as serverId. Nothing is written.

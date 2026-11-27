@@ -9,7 +9,7 @@ const { pageHtml, localScripts } = require('./html');
 
 const raw = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
 const mod = fs.readFileSync(path.join(__dirname, '..', 'modules', '79-longitudinal.js'), 'utf8');
-const NAMES = ['lgSelect', 'lgDrawer', 'lgNeighbours', 'lgToggle', 'lgChips', 'lgLanes', 'renderLongitudinalNav', 'longitudinalLoad', 'renderLongitudinal', 'lgQuery', 'lgWhat', 'lgSource'];
+const NAMES = ['lgPickDate', 'lgDateLanes', 'lgSelect', 'lgDrawer', 'lgNeighbours', 'lgToggle', 'lgChips', 'lgLanes', 'renderLongitudinalNav', 'longitudinalLoad', 'renderLongitudinal', 'lgQuery', 'lgWhat', 'lgSource'];
 
 async function page(fetchImpl) {
   const dom = new JSDOM(pageHtml(), { runScripts: 'dangerously', pretendToBeVisual: true, url: 'http://localhost/',
@@ -190,4 +190,35 @@ test('drawer: neighbour button moves the selection; first and last say none; cho
   w.document.querySelector('[data-act="longClose"]').click(); await new Promise(r => setTimeout(r, 30));
   assert.equal(w.eval('LG.sel'), null); assert.ok(!box(w).includes('lg_drawer'));
   await w.eval("lgSelect('nope')"); assert.equal(w.eval('LG.sel'), null);
+});
+
+test('selected date: set by an event or a day heading, highlighted, counted per lane, kept across context switch, range change and drawer close; empty day says so; clear works', async () => {
+  const calls = [];
+  const w = await page(async (u) => { calls.push(u); return res(200, ctxBody(u)); });
+  as(w, ['cases:read']); withCase(w, 7); await w.eval('longitudinalLoad()');
+  assert.ok(!box(w).includes('lg_date'), 'no date by default');
+  w.document.querySelector('[data-act="longDate"]').click(); await new Promise(r => setTimeout(r, 30));
+  assert.equal(w.eval('LG.date'), '2026-11-20');
+  let h = box(w);
+  assert.match(h, /id="lg_seldate"/); assert.match(h, /aria-current="date"/);
+  assert.match(h, /Records on that date in this view: 2/); assert.match(h, /Diabetes: 1/); assert.match(h, /Chronic kidney disease: 1/); assert.match(h, /Unmapped: 1/);
+  await w.eval("lgToggle('ckd')");
+  assert.equal(w.eval('LG.date'), '2026-11-20', 'kept across the view switch'); h = box(w);
+  assert.match(h, /Records on that date in this view: 1/); assert.ok(!/Unmapped:/.test(h)); assert.match(h, /Chronic kidney disease: 1/);
+  await w.eval("LG.from='2026-01-01'; longitudinalLoad(false)"); assert.equal(w.eval('LG.date'), '2026-11-20', 'kept across a range change');
+  await w.eval("lgSelect('observation:2')"); w.document.querySelector('[data-act="longClose"]').click(); await new Promise(r => setTimeout(r, 30));
+  assert.equal(w.eval('LG.date'), '2026-11-20', 'kept when the drawer closes');
+  await w.eval("lgPickDate('2024-02-02')"); assert.match(box(w), /none in the loaded part of this view/);
+  await w.eval("lgPickDate('<bad>')"); assert.equal(w.eval('LG.date'), null);
+  await w.eval("lgPickDate('2026-11-20')"); w.document.querySelector('[data-act="longClearDate"]').click(); await new Promise(r => setTimeout(r, 30));
+  assert.equal(w.eval('LG.date'), null); assert.ok(!box(w).includes('lg_date'));
+});
+
+test('selecting an event sets the date to that event\'s day; another patient clears the date', async () => {
+  const w = await page(async () => res(200, series()));
+  as(w, ['cases:read']); withCase(w, 7); await w.eval('longitudinalLoad()');
+  await w.eval("lgSelect('observation:3')"); assert.equal(w.eval('LG.date'), '2025-09-10');
+  w.document.querySelector('#lg_drawer [data-act="longSelect"]').click(); await new Promise(r => setTimeout(r, 30));
+  assert.equal(w.eval('LG.date'), '2025-01-10', 'neighbour moves the date too');
+  withCase(w, 8); await w.eval('longitudinalLoad()'); assert.equal(w.eval('LG.date'), null);
 });
