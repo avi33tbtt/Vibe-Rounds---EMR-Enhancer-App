@@ -17,6 +17,7 @@
     "terms:reset": "node --env-file=.env scripts/seed-terms.js --reset",
     "terms:starter": "node --env-file=.env scripts/seed-starter-terms.js",
     "terms:starter:reset": "node --env-file=.env scripts/seed-starter-terms.js --reset",
+    "library:publish": "node --env-file=.env scripts/publish-demo-library.js",
     "terms:bind": "node --env-file=.env scripts/bind-demo-codes.js",
     "demo:run": "node --env-file=.env scripts/demo-bridge.js",
     "fhir:validate": "node scripts/validate-fhir.js",
