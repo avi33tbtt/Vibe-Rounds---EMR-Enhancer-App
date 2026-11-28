@@ -1,0 +1,21 @@
+{
+  "source": "https://github.com/avi33tbtt/Vibe-Rounds---CCIS",
+  "path": "ccis/schemas/",
+  "commit": "ccf64202be8bd4c345b8069471b0bc5ff98828bc",
+  "standard": "0.2.0",
+  "files": {
+    "analytics.schema.json": "4789ec19a083c3cc5fccaac30554ec983354e34b070d05822a4c9e7ce8edfa02",
+    "context-envelope.schema.json": "4888b6a3a2a2138d504b4ea72f0a81f9545f4b1f38faa78c37d8f25b0075b921",
+    "decision-node.schema.json": "56ce0eca80849d5d432bf0489d50e5f5099a715d37be811daec2811a97bd9ce7",
+    "element-group.schema.json": "3599595c467a293d49f35d2ed2a53afd3f2232952df10051cfa377aea7b322da",
+    "element.schema.json": "5361fcaccdc176037ae30e6bb24e3cf083f2e978db88b0973926bb069bd4466f",
+    "import-report.schema.json": "92a30134ef2509323957d50d48435d0745762adb7d28b909f36197451837307f",
+    "manifest.schema.json": "fc03303817109cba32c420b6f4d42b3e18d96aa4043a92b5834901aab9e121ef",
+    "pathway.schema.json": "c19dbe399528063fcd478f79b85304a14b6ea6b042dbb7a2b6b67b6f5082cbdc",
+    "rule-pack.schema.json": "a9f976d69303e7ef6b256408c0103c9cc5f3e7505fd62c35a90181085bd2d8e1",
+    "run-record.schema.json": "67234e1df1f555dcb70c0983daf110b43c4ff33cc6052723d540de91e412d830",
+    "run-result.schema.json": "d2923e82ac4c3019d2f46311e2a81aac76ee3a0b0215a98eaa57eb4dda906240",
+    "terminology-binding.schema.json": "2c9675235fd8d691d9379866472a0eed3eac9c76e781de01266f2d951541c582",
+    "validation-record.schema.json": "2437dc94ac8eafbda44ba8c9b60971c09bc03c7de4c5b96e02610a01a3a2c904"
+  }
+}

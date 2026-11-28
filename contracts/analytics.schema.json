@@ -168,6 +168,53 @@
         "maxOutputBytes": { "type": "integer", "minimum": 1 }
       }
     },
+    "tests": {
+      "description": "The package's own tests (A-003). Each names a fixture case and the parameters it enables, marked test-only, and the expected result by output id. No value member: parameter values come from the fixture, so parameters stay valueless (D-022, D-078).",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": { "^x-": {} },
+        "required": ["id", "fixture", "enables", "expect"],
+        "properties": {
+          "id": { "$ref": "#/$defs/key" },
+          "fixture": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "enables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["parameter", "testOnly"],
+              "properties": {
+                "parameter": { "$ref": "#/$defs/key" },
+                "testOnly": { "const": true }
+              }
+            }
+          },
+          "expect": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["output"],
+              "properties": {
+                "output": { "$ref": "#/$defs/key" },
+                "state": { "enum": ["needs-data", "indeterminate", "not-applicable", "conflict", "parameter-not-enabled"] },
+                "label": { "$ref": "#/$defs/text" },
+                "matchesFixture": { "const": true }
+              },
+              "oneOf": [
+                { "required": ["state"] },
+                { "required": ["label"] },
+                { "required": ["matchesFixture"] }
+              ]
+            }
+          }
+        }
+      }
+    },
     "evidence": {
       "type": "object",
       "additionalProperties": false,
@@ -207,7 +254,7 @@
           "additionalProperties": false,
           "required": ["op", "args"],
           "properties": {
-            "op": { "enum": ["and", "or", "not", "is-present", "state-of", "eq", "ne", "lt", "le", "gt", "ge", "add", "sub", "time-diff", "convert", "if", "count", "select"] },
+            "op": { "enum": ["and", "or", "not", "is-present", "state-of", "eq", "ne", "lt", "le", "gt", "ge", "add", "sub", "time-diff", "convert", "if", "count", "select", "min", "max", "coalesce"] },
             "args": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/expr" } }
           }
         },

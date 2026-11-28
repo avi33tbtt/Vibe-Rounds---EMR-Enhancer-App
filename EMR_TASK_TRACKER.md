@@ -271,6 +271,7 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | D8b-1 | chunk-D8b-emr-cohort-exporter.md | Server: `POST /api/cohort-export` (permission `cohort:export`), cohort selection, only fields the purpose needs, de-identified by default, manifest, audit of purpose and counts; matrix and audit tests on purpose (items 1, 4) | BLOCKED |  | 1 routes file, permissions, 2 test files | Needs B3c, B5b and CCIS 6.4. Re-read chunk against 6.4 first. Never narrative or identity. |
 | D8b-2 | chunk-D8b-emr-cohort-exporter.md | Page: small export dialog with purpose and preview of included fields (item 2) | BLOCKED |  | page + 1 test file | Needs D8b-1. |
 | D8b-3 | chunk-D8b-emr-cohort-exporter.md | Contract test: real export accepted by the CCIS import path; export without narrative or identity (item 3) | BLOCKED |  | 1 test file + fixture | Needs D8b-1 and CCIS 6.4. |
+| ECO-D1 | (Studio tracker) | Refresh `contracts/` from CCIS 0.2.0: 6 schemas added, 3 refreshed, `SOURCE.json` pin and `test/contracts-pin.test.js`. | DONE | 2026-11-28 | none | Pin ccf6420. Pure tests pass; DB tests not run here. ED-76 in Studio DECISIONS. |
 
 Suggested order: numeric within each track; Track A, then B. The EMR side then waits for the CCIS repo: B5 needs CCIS row 0.3 (import contract), D8b needs CCIS row 6.4. Exceptions that are safe: 8e and 8f can be done any time after 6a; 6e and 7d can share one session.
 

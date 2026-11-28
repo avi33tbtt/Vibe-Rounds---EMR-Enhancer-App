@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccis.invalid/schemas/element.schema.json",
+  "title": "CCIS contextual element",
+  "description": "Required core plus optional modules (CCIS-REQ-021, 022). Holds no thresholds, doses or bands.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": { "^x-": {} },
+  "required": ["manifest", "intent", "fields", "provenance"],
+  "properties": {
+    "manifest": {
+      "allOf": [
+        { "$ref": "https://ccis.invalid/schemas/manifest.schema.json" },
+        { "type": "object", "properties": { "type": { "const": "contextual-element" } } }
+      ]
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "required": ["purpose", "setting", "population", "exclusions", "rationale"],
+      "properties": {
+        "purpose": { "$ref": "#/$defs/text" },
+        "setting": { "$ref": "#/$defs/text" },
+        "population": { "$ref": "#/$defs/text" },
+        "exclusions": { "type": "array", "items": { "$ref": "#/$defs/text" } },
+        "rationale": { "$ref": "#/$defs/text" }
+      }
+    },
+    "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/field" } },
+    "modules": {
+      "description": "Conditional modules. Not every element carries every property (CCIS-REQ-022).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": { "^x-": {} },
+        "required": ["id", "appliesWhen", "fields"],
+        "properties": {
+          "id": { "$ref": "#/$defs/key" },
+          "appliesWhen": { "$ref": "#/$defs/text" },
+          "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/field" } }
+        }
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": { "^x-": {} },
+        "required": ["kind", "from", "to"],
+        "properties": {
+          "kind": { "enum": ["derived-from", "part-of", "refines", "requires"] },
+          "from": { "$ref": "#/$defs/key" },
+          "to": { "$ref": "#/$defs/key" }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "required": ["origin", "basis"],
+      "properties": {
+        "origin": { "$ref": "#/$defs/text" },
+        "basis": { "$ref": "#/$defs/text" }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": { "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/reference" }
+    }
+  },
+  "$defs": {
+    "text": { "type": "string", "pattern": "^\\S.*$" },
+    "key": { "type": "string", "pattern": "^[a-z][A-Za-z0-9]*$" },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "required": ["key", "label", "type", "cardinality", "epistemic", "sourceClasses"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "label": { "$ref": "#/$defs/text" },
+        "type": { "enum": ["quantity", "integer", "boolean", "code", "string", "date", "datetime"] },
+        "cardinality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": {
+            "min": { "type": "integer", "minimum": 0 },
+            "max": { "oneOf": [{ "type": "integer", "minimum": 1 }, { "const": "unbounded" }] }
+          }
+        },
+        "units": {
+          "description": "Permitted units (UCUM strings). Dimensionless counts use \"1\" (CCIS-REQ-042).",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^\\S+$" }
+        },
+        "precision": { "type": "object", "additionalProperties": false, "required": ["decimals"], "properties": { "decimals": { "type": "integer", "minimum": 0 } } },
+        "timeSemantics": { "enum": ["event-time", "recorded-time", "collection-time"] },
+        "binding": { "$ref": "https://ccis.invalid/schemas/terminology-binding.schema.json" },
+        "concept": {
+          "description": "Shared meaning of this field: a binding in the local code system (ED-9). Identity only; the key format is checked by the validator (B2), not here.",
+          "type": "object",
+          "allOf": [{ "$ref": "https://ccis.invalid/schemas/terminology-binding.schema.json" }],
+          "required": ["codeSystem", "code"],
+          "not": { "required": ["valueSet"] },
+          "properties": {
+            "codeSystem": { "type": "object", "required": ["id"], "properties": { "id": { "const": "local" } } },
+            "mapping": { "type": "object", "required": ["status"], "properties": { "status": { "const": "mapped" } } }
+          }
+        },
+        "ownedBy": {
+          "description": "For a field that uses a concept it does not own: the owner element id and field key (ED-12). Whether the owner exists and agrees on type and unit is checked by the validator, not here. An owner field has a concept and no ownedBy.",
+          "type": "object",
+          "additionalProperties": false,
+          "patternProperties": { "^x-": {} },
+          "required": ["element", "key"],
+          "properties": {
+            "element": { "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactId" },
+            "key": { "$ref": "#/$defs/key" }
+          }
+        },
+        "contexts": {
+          "description": "Context tags for this field. Which tags are known is checked by the validator (B2), not here.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+        },
+        "epistemic": {
+          "description": "Which of the six states this field can represent, kept distinct (CCIS-REQ-032).",
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["absent", "unknown", "not-collected", "not-applicable", "explicitly-negative", "entered-in-error"] }
+        },
+        "sourceClasses": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["patient-reported", "informant-reported", "clinician-entered", "clinician-verified", "imported", "device", "derived", "ai-proposed"] }
+        },
+        "constraints": { "type": "array", "items": { "$ref": "#/$defs/text" } }
+      },
+      "dependentRequired": { "ownedBy": ["concept"] },
+      "allOf": [
+        { "if": { "properties": { "type": { "enum": ["quantity", "integer"] } }, "required": ["type"] }, "then": { "required": ["units"] } },
+        { "if": { "properties": { "type": { "enum": ["date", "datetime"] } }, "required": ["type"] }, "then": { "required": ["timeSemantics"] } },
+        { "if": { "properties": { "type": { "const": "code" } }, "required": ["type"] }, "then": { "required": ["binding"] } },
+        { "if": { "properties": { "type": { "enum": ["string", "boolean", "code", "date", "datetime"] } }, "required": ["type"] }, "then": { "not": { "required": ["units"] } } }
+      ]
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccis.invalid/schemas/terminology-binding.schema.json",
+  "title": "CCIS terminology binding",
+  "description": "Binds a concept to a code by code-system reference, never by label (CCIS-REQ-040, 041, 044).",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": { "^x-": {} },
+  "required": ["mapping"],
+  "properties": {
+    "codeSystem": { "$ref": "#/$defs/systemRef" },
+    "valueSet": { "$ref": "#/$defs/systemRef" },
+    "code": { "type": "string", "pattern": "^\\S+$" },
+    "display": { "type": "string", "description": "For people only. Never used for matching." },
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["mapped", "lossy", "low-confidence", "unmapped"] },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "note": { "type": "string", "pattern": "^\\S.*$" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "enum": ["lossy", "low-confidence"] } }, "required": ["status"] },
+          "then": { "required": ["confidence", "note"] }
+        },
+        {
+          "if": { "properties": { "status": { "const": "unmapped" } }, "required": ["status"] },
+          "then": { "required": ["note"] }
+        }
+      ]
+    }
+  },
+  "if": { "type": "object", "properties": { "mapping": { "type": "object", "properties": { "status": { "const": "unmapped" } } } }, "required": ["mapping"] },
+  "then": {
+    "description": "An unmapped concept carries no code and no system: it is reported, not guessed.",
+    "not": { "anyOf": [{ "required": ["code"] }, { "required": ["codeSystem"] }, { "required": ["valueSet"] }] }
+  },
+  "else": {
+    "required": ["codeSystem", "code"]
+  },
+  "$defs": {
+    "systemRef": {
+      "description": "Pinned to a version where one exists; otherwise says explicitly that none is published.",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^\\S+$" },
+        "version": { "type": "string", "pattern": "^\\S+$" },
+        "noVersionPublished": { "const": true }
+      },
+      "oneOf": [
+        { "required": ["version"] },
+        { "required": ["noVersionPublished"] }
+      ]
+    }
+  }
+}

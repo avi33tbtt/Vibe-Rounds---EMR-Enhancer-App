@@ -9,6 +9,13 @@
     "^x-": {}
   },
   "required": ["id", "name", "type", "version", "publisher", "standard", "status"],
+  "allOf": [
+    {
+      "description": "A validated claim carries its scope (A-003). Whether the scope matches the exact version is a layer 8 check, not a schema check.",
+      "if": { "properties": { "status": { "enum": ["validated", "conditionally-validated"] } }, "required": ["status"] },
+      "then": { "required": ["validation"] }
+    }
+  ],
   "properties": {
     "id": { "$ref": "#/$defs/artefactId" },
     "name": { "type": "string", "pattern": "^\\S.*$" },
@@ -45,6 +52,19 @@
     "status": {
       "enum": ["draft", "submitted", "in-review", "reviewed", "validated", "conditionally-validated", "deprecated", "withdrawn", "rejected"]
     },
+    "validation": {
+      "description": "What a validated claim covers (A-003): exact package version, population, setting and intended use. Optional for draft.",
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": { "^x-": {} },
+      "required": ["version", "population", "setting", "intendedUse"],
+      "properties": {
+        "version": { "$ref": "#/$defs/semver" },
+        "population": { "type": "string", "pattern": "^\\S.*$" },
+        "setting": { "type": "string", "pattern": "^\\S.*$" },
+        "intendedUse": { "type": "string", "pattern": "^\\S.*$" }
+      }
+    },
     "mandatoryExtensions": {
       "description": "Extensions a reader must understand, else compatibility fails safely (CCIS-REQ-016).",
       "type": "array",
@@ -67,7 +87,7 @@
       "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)*$"
     },
     "artefactType": {
-      "enum": ["contextual-element", "element-group", "pathway", "analytics-package", "terminology-package", "test-validation-package"]
+      "enum": ["contextual-element", "element-group", "pathway", "analytics-package", "terminology-package", "test-validation-package", "rule-pack"]
     },
     "reference": {
       "description": "A named artefact at an exact version or a range. Never an embedded copy (CCIS-REQ-014).",

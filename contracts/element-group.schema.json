@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ccis.invalid/schemas/element-group.schema.json",
+  "title": "CCIS element group",
+  "description": "Declares member elements, how shared concepts are identified (by meaning, never by label), and how overlaps and version constraints are resolved (CCIS-REQ-023, 024). Holds no thresholds, doses or bands.",
+  "type": "object",
+  "additionalProperties": false,
+  "patternProperties": {
+    "^x-": {}
+  },
+  "required": [
+    "manifest",
+    "intent",
+    "members",
+    "sharedConcepts",
+    "versionPolicy",
+    "provenance"
+  ],
+  "properties": {
+    "manifest": {
+      "allOf": [
+        {
+          "$ref": "https://ccis.invalid/schemas/manifest.schema.json"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "element-group"
+            }
+          }
+        }
+      ]
+    },
+    "intent": {
+      "$ref": "#/$defs/intent"
+    },
+    "members": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": {
+          "^x-": {}
+        },
+        "required": [
+          "element",
+          "required"
+        ],
+        "properties": {
+          "element": {
+            "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/reference"
+          },
+          "required": {
+            "description": "true: mandatory member; false: optional member.",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "sharedConcepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "patternProperties": {
+          "^x-": {}
+        },
+        "required": [
+          "concept",
+          "meaning",
+          "fields",
+          "resolution"
+        ],
+        "properties": {
+          "concept": {
+            "description": "The shared concept: a camelCase key or a local concept code (ED-9). The strict local key format is checked by the validator, not here.",
+            "$ref": "#/$defs/conceptKey"
+          },
+          "meaning": {
+            "description": "The meaning in words. Identification is by meaning, never by label (CCIS-REQ-024).",
+            "$ref": "#/$defs/text"
+          },
+          "fields": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "patternProperties": {
+                "^x-": {}
+              },
+              "required": [
+                "element",
+                "field"
+              ],
+              "properties": {
+                "element": {
+                  "type": "string",
+                  "pattern": "^\\S+$"
+                },
+                "field": {
+                  "$ref": "#/$defs/key"
+                }
+              }
+            }
+          },
+          "resolution": {
+            "enum": [
+              "same-concept",
+              "related-not-merged"
+            ]
+          },
+          "owner": {
+            "description": "Which listed field owns this concept (ED-12). Optional here; whether it is required and whether it is one of the listed fields is checked by the validator (B3a).",
+            "type": "object",
+            "additionalProperties": false,
+            "patternProperties": {
+              "^x-": {}
+            },
+            "required": [
+              "element",
+              "field"
+            ],
+            "properties": {
+              "element": {
+                "$ref": "https://ccis.invalid/schemas/manifest.schema.json#/$defs/artefactId"
+              },
+              "field": {
+                "$ref": "#/$defs/key"
+              }
+            }
+          }
+        }
+      }
+    },
+    "versionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "conflict"
+      ],
+      "properties": {
+        "conflict": {
+          "enum": [
+            "refuse",
+            "prefer-listed-order"
+          ]
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "origin",
+        "basis"
+      ],
+      "properties": {
+        "origin": {
+          "$ref": "#/$defs/text"
+        },
+        "basis": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "pattern": "^\\S.*$"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9]*$"
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^x-": {}
+      },
+      "required": [
+        "purpose",
+        "setting",
+        "population",
+        "exclusions",
+        "rationale"
+      ],
+      "properties": {
+        "purpose": {
+          "$ref": "#/$defs/text"
+        },
+        "setting": {
+          "$ref": "#/$defs/text"
+        },
+        "population": {
+          "$ref": "#/$defs/text"
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "rationale": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "conceptKey": {
+      "type": "string",
+      "pattern": "^[a-z0-9][A-Za-z0-9._-]*$"
+    }
+  }
+}
