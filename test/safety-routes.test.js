@@ -45,6 +45,8 @@ const MATRIX = {
   'POST /api/cases/:id/observations': { guard: 'cases:write' },
   'GET /api/cases/:id/timeline':    { guard: 'cases:read' },
   'GET /api/cases/:id/composed-form': { guard: 'cases:read' },
+  'GET /api/cases/:id/concepts':    { guard: 'cases:read' },
+  'GET /api/cases/:id/concepts/:key': { guard: 'cases:read' },
   'GET /api/patients/:id/timeline': { guard: 'cases:read' },
   'GET /api/patients/:id/longitudinal': { guard: 'cases:read' },
   'GET /api/cases/:id/context':     { guard: 'context:read' },

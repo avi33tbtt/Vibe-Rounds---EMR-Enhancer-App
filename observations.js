@@ -299,6 +299,45 @@ function mountObservations(app, pool) {
     await audit(pool, req, 'case.timeline_view', 'case', cs.id, { patientId: cs.patient_id, includeErrors, count: observations.length });
     res.json({ appliedSets, observations, hiddenInError: hidden, events });
   });
+
+  /* ---------- D14: reads by concept (ED-93 to ED-95). Read only. ---------- */
+  // Concept of a row: its own concept_key, else the concept of its field in the pinned definition (old rows are NULL and immutable, ED-78).
+  const CONCEPT = `COALESCE(o.concept_key, (SELECT f->>'concept' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(v.definition_json->'fields') = 'array' THEN v.definition_json->'fields' ELSE '[]'::jsonb END) f WHERE f->>'id' = o.field_key LIMIT 1))`;
+  const BASE = `WITH base AS (SELECT ${OBS}, ${CONCEPT} AS concept ${OBS_FROM} WHERE o.case_id = $1)`;
+  const HEAD = `status <> 'entered_in_error' AND corrected_by_id IS NULL`;   // a head: not in error and not corrected (a withdrawn correction does not revive its original)
+  const caseOf = id => pool.query('SELECT id, patient_id FROM clinical_cases WHERE id = $1', [id]).then(r => r.rows[0]);
+  const byText = (x, y) => (x < y ? -1 : x > y ? 1 : 0);
+
+  app.get('/api/cases/:id/concepts', A.requirePerm(pool, 'cases:read'), async (req, res) => {
+    const cs = await caseOf(req.params.id);
+    if (!cs) return res.status(404).json({ error: 'not_found' });
+    const heads = `${BASE}, heads AS (SELECT * FROM base WHERE ${HEAD})`;
+    const cur = (await pool.query(`${heads} SELECT DISTINCT ON (concept) * FROM heads WHERE concept IS NOT NULL ORDER BY concept, effective_at DESC, id DESC LIMIT 200`, [cs.id])).rows;
+    const stats = (await pool.query(`${heads} SELECT concept, count(*)::int AS n, array_agg(DISTINCT unit_display) FILTER (WHERE unit_display IS NOT NULL) AS units,
+        jsonb_agg(DISTINCT jsonb_build_object('setSlug', set_slug, 'fieldKey', field_key)) AS fields FROM heads WHERE concept IS NOT NULL GROUP BY concept`, [cs.id])).rows;
+    const none = (await pool.query(`${heads} SELECT count(*)::int AS n FROM heads WHERE concept IS NULL`, [cs.id])).rows[0].n;
+    const by = new Map(stats.map(r => [r.concept, r]));
+    const concepts = cur.map(c => { const st = by.get(c.concept), units = (st.units || []).slice().sort(byText);
+      return { concept: c.concept, current: numId(c), count: st.n, units, mixedUnits: units.length > 1, fields: st.fields.slice().sort((x, y) => byText(x.setSlug + '/' + x.fieldKey, y.setSlug + '/' + y.fieldKey)) }; });
+    await audit(pool, req, 'case.concepts_view', 'case', cs.id, { patientId: cs.patient_id, count: concepts.length });
+    res.json({ concepts, withoutConcept: none });
+  });
+
+  app.get('/api/cases/:id/concepts/:key', A.requirePerm(pool, 'cases:read'), async (req, res) => {
+    const key = req.params.key;
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(key)) return bad(res, 'The concept key must be 1 to 64 lowercase letters, digits, . _ - .');
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 500);
+    const cs = await caseOf(req.params.id);
+    if (!cs) return res.status(404).json({ error: 'not_found' });
+    const rows = (await pool.query(`${BASE} SELECT * FROM base WHERE concept = $2 AND ${HEAD} ORDER BY effective_at DESC, id DESC LIMIT $3`, [cs.id, key, limit + 1])).rows;
+    const truncated = rows.length > limit, series = rows.slice(0, limit).reverse().map(numId);
+    const st = (await pool.query(`${BASE} SELECT count(*) FILTER (WHERE status <> 'entered_in_error' AND corrected_by_id IS NOT NULL)::int AS superseded,
+        count(*) FILTER (WHERE status = 'entered_in_error')::int AS hidden,
+        array_agg(DISTINCT unit_display) FILTER (WHERE unit_display IS NOT NULL AND ${HEAD}) AS units FROM base WHERE concept = $2`, [cs.id, key])).rows[0];
+    const units = (st.units || []).slice().sort(byText);
+    await audit(pool, req, 'case.concept_series_view', 'case', cs.id, { patientId: cs.patient_id, count: series.length });
+    res.json({ concept: key, current: series.length ? series[series.length - 1] : null, series, superseded: st.superseded, hiddenInError: st.hidden, units, mixedUnits: units.length > 1, truncated });
+  });
 }
 
 module.exports = { mountObservations, APPLIED, APPLIED_FROM, shapeValue, parseInstant, FUTURE_SLACK_MS };   // R6f-2b: bundle accept reuses the same value rules
