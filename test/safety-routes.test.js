@@ -120,6 +120,7 @@ const MATRIX = {
   'GET /api/import/packages/:id': { guard: 'import:write' },
   'POST /api/import/package-proposals/:id/reject': { guard: 'import:write' },
   'POST /api/import/package-proposals/:id/accept': { guard: 'import:write' },   // D7: also needs sets:write (admin and doctor hold both)
+  'POST /api/import/package-proposals/:id/accept-pathway': { guard: 'import:write' },   // D8: also needs sets:write (admin and doctor hold both)
   'POST /api/import/proposals/:id/accept': { guard: 'import:write' },   // R6f-2b: also needs cases:write (admin and doctor hold both)
   'POST /api/import/proposals/:id/accept-to-patient': { guard: 'import:write' },   // R6f-2c: also needs problems:write or allergies:write (admin and doctor hold both)
   'POST /api/followups/:id/entered-in-error': { guard: 'orders:write' },
@@ -777,6 +778,29 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal(ok.status, 200, JSON.stringify(ok.body));
         assert.equal((await doctor.c.post(`/api/import/package-proposals/${p.id}/accept`, { rowVersion: 2 })).status, 409);
         return ['import.package_accept'];
+      }],
+      ['POST /api/import/package-proposals/:id/accept-pathway', doctor, async () => {      // D8: a draft pathway over PUBLISHED sets; creator = session user
+        const C = await import(require('node:url').pathToFileURL(require('node:path').join(__dirname, '..', 'vendor', 'ccis', 'ccis-compile.js')).href);
+        const mk = (doc) => ({ checksum: C.checksumOf(C.canonicalize(doc).text), document: doc });
+        const man = (id, type) => ({ id, name: 'Audit ' + id, type, version: '0.1.0', status: 'draft', publisher: { name: 'Synthetic test publisher' }, standard: { version: '0.2.0' } });
+        const el = { manifest: man('audit.pw.el', 'contextual-element'), intent: { purpose: 'Record information.' }, provenance: { origin: 'x', basis: 'Synthetic basis.' },
+          fields: [{ key: 'note', label: 'Note', type: 'string', cardinality: { min: 0, max: 1 } }] };
+        const pw = { manifest: man('audit.pw.path', 'pathway'), scope: 'Scope.', elements: [{ id: 'audit.pw.el', type: 'contextual-element', range: '0.1.0' }], stages: [],
+          entryForm: { sections: [{ id: 'main', label: 'Main', items: [{ kind: 'element', element: 'audit.pw.el' }] }] }, contexts: [] };
+        const st = await doctor.c.post('/api/import/packages', { format: 'ccis-package-bundle/1', artefacts: [mk(el), mk(pw)] });
+        assert.equal(st.status, 201, JSON.stringify(st.body));
+        const sp = st.body.import.proposals.find(x => x.kind === 'set'), pp = st.body.import.proposals.find(x => x.kind === 'pathway');
+        const okSet = await doctor.c.post(`/api/import/package-proposals/${sp.id}/accept`, { rowVersion: 1 }); assert.equal(okSet.status, 200, JSON.stringify(okSet.body));
+        assert.equal((await doctor.c.post(`/api/import/package-proposals/${pp.id}/accept-pathway`, { rowVersion: 1 })).status, 409, 'sets not published yet');
+        assert.equal((await doctor.c.post(`/api/element-sets/${okSet.body.setId}/versions/1/submit`, {})).status, 200);
+        const inf2 = client(aenv.base); assert.equal((await inf2.login('informatician2')).status, 200);
+        for (const c of [reviewer.c, inf2]) { const a = await c.post(`/api/element-sets/${okSet.body.setId}/versions/1/approve`, { reason: 'Audit approval' }); if (a.body.status === 'reviewed') break; }
+        assert.equal((await admin.c.post(`/api/element-sets/${okSet.body.setId}/versions/1/publish`, {})).status, 200);
+        assert.equal((await doctor.c.post(`/api/import/package-proposals/${pp.id}/accept-pathway`, { rowVersion: 1, ...fake })).status, 400, 'a body that names a user is refused');
+        const ok = await doctor.c.post(`/api/import/package-proposals/${pp.id}/accept-pathway`, { rowVersion: 1 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body));
+        assert.equal((await doctor.c.post(`/api/import/package-proposals/${pp.id}/accept-pathway`, { rowVersion: 2 })).status, 409);
+        return ['import.package_accept_pathway'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);

@@ -250,4 +250,4 @@ function mountPathways(app, pool) {
   }
 }
 
-module.exports = { mountPathways };
+module.exports = { mountPathways, checkText, contentOf };

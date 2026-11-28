@@ -26,6 +26,7 @@ const { mountProcedures } = require('./procedures');
 const { mountFollowups } = require('./followups');
 const { mountBundleStaging, isBundleStagePath } = require('./bundle-staging');
 const { mountPackageStaging, isPackageStagePath } = require('./package-staging');
+const { mountPackagePathwayAccept } = require('./package-pathway-accept');
 const { mountAdmissions } = require('./admissions');
 const { mountAdministrations } = require('./administrations');
 const { mountResultAcks } = require('./result-acks');
@@ -358,6 +359,7 @@ function createApp(pool, opts = {}) {
   mountFollowups(app, pool);
   mountBundleStaging(app, pool);
   mountPackageStaging(app, pool);
+  mountPackagePathwayAccept(app, pool);
 
   /* ---------- medication administration record (task R5d) ---------- */
   mountAdministrations(app, pool);
