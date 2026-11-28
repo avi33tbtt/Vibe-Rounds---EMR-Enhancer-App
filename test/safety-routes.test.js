@@ -115,6 +115,10 @@ const MATRIX = {
   'POST /api/import/bundles': { guard: 'import:write' },
   'GET /api/import/bundles/:id': { guard: 'import:write' },
   'POST /api/import/proposals/:id/reject': { guard: 'import:write' },
+  'GET /api/import/packages': { guard: 'import:write' },
+  'POST /api/import/packages': { guard: 'import:write' },
+  'GET /api/import/packages/:id': { guard: 'import:write' },
+  'POST /api/import/package-proposals/:id/reject': { guard: 'import:write' },
   'POST /api/import/proposals/:id/accept': { guard: 'import:write' },   // R6f-2b: also needs cases:write (admin and doctor hold both)
   'POST /api/import/proposals/:id/accept-to-patient': { guard: 'import:write' },   // R6f-2c: also needs problems:write or allergies:write (admin and doctor hold both)
   'POST /api/followups/:id/entered-in-error': { guard: 'orders:write' },
@@ -744,6 +748,22 @@ test('audit coverage: every write route leaves an audit row, written from the se
         assert.equal(ok.status, 200, JSON.stringify(ok.body));
         assert.equal((await doctor.c.get('/api/import/bundles')).status, 200); assert.equal((await doctor.c.get('/api/import/bundles/' + S.ibid)).status, 200);   // the two reads are audited too
         return ['import.proposal_reject', 'import.bundles_view', 'import.bundle_view'];
+      }],
+      ['POST /api/import/packages', doctor, async () => {      // D6: package staging; the audit holds counts and a hash only
+        const C = await import(require('node:url').pathToFileURL(require('node:path').join(__dirname, '..', 'vendor', 'ccis', 'ccis-compile.js')).href);
+        const el = { manifest: { id: 'audit.pkg', name: 'Audit package', type: 'contextual-element', version: '0.1.0', status: 'draft', publisher: { name: 'Synthetic test publisher' }, standard: { version: '0.2.0' } }, intent: { purpose: 'Audit.' },
+          fields: [{ key: 'note', label: 'Note', type: 'string', cardinality: { min: 0, max: 1 } }] };
+        const b = { format: 'ccis-package-bundle/1', artefacts: [{ checksum: C.checksumOf(C.canonicalize(el).text), document: el }], ...fake };
+        const ok = await doctor.c.post('/api/import/packages', b);
+        assert.equal(ok.status, 201, JSON.stringify(ok.body)); S.pkid = ok.body.import.id; S.pkpid = ok.body.import.proposals[0].id;
+        assert.equal((await doctor.c.post('/api/import/packages', { format: 'nope' })).status, 400); return ['import.package_stage', 'import.package_refused'];
+      }],
+      ['POST /api/import/package-proposals/:id/reject', doctor, async () => {
+        assert.equal((await doctor.c.post(`/api/import/package-proposals/${S.pkpid}/reject`, { reason: 'Audit reject', rowVersion: 1, ...fake })).status, 400, 'a body that names a user is refused');
+        const ok = await doctor.c.post(`/api/import/package-proposals/${S.pkpid}/reject`, { reason: 'Audit reject', rowVersion: 1 });
+        assert.equal(ok.status, 200, JSON.stringify(ok.body));
+        assert.equal((await doctor.c.get('/api/import/packages')).status, 200); assert.equal((await doctor.c.get('/api/import/packages/' + S.pkid)).status, 200);   // the two reads are audited too
+        return ['import.package_proposal_reject', 'import.packages_view', 'import.package_view'];
       }],
       ['PATCH /api/patients/:id/archive', doctor, async () => {
         assert.equal((await doctor.c.patch(`/api/patients/${S.pid}/archive`, { archived: true, ...fake })).status, 200);
