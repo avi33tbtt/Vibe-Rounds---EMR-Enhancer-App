@@ -33,6 +33,7 @@ const { mountResultAcks } = require('./result-acks');
 const { mountPatientTimeline } = require('./patient-timeline');
 const { mountPatientLongitudinal } = require('./patient-longitudinal');
 const { mountPathways } = require('./pathways');
+const { mountComposedForm } = require('./composed-form-route');
 const { mountContext } = require('./context');
 const { mountCcisRuns, isRunImportPath } = require('./ccis-runs');
 const { createLimiter } = require('./ratelimit');
@@ -376,6 +377,7 @@ function createApp(pool, opts = {}) {
 
   /* ---------- pathways and applying them (task B4a) ---------- */
   mountPathways(app, pool);
+  mountComposedForm(app, pool);
 
   /* ---------- context envelope for CCIS (task B5) ---------- */
   mountContext(app, pool, opts);
