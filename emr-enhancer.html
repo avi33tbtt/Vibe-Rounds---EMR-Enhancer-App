@@ -310,6 +310,9 @@ nav button.sep{margin-left:10px;border-left:1px solid var(--bd)}
       <h3>Import a FHIR Bundle</h3>
       <input type="file" id="bnd_file" accept=".json,application/json" aria-label="FHIR Bundle file" style="display:none" data-act="bndPick" data-ev="change">
       <div id="bundleBox"></div>
+      <h3>Import a Marketplace package</h3>
+      <input type="file" id="pkg_file" accept=".json,application/json" aria-label="Marketplace package file" style="display:none" data-act="pkgPick" data-ev="change">
+      <div id="packageBox"></div>
     </div>
 
     <!-- MEDICATION HISTORY (R3f) -->
@@ -537,6 +540,7 @@ nav button.sep{margin-left:10px;border-left:1px solid var(--bd)}
 <script src="modules/89-mar.js"></script>
 <script src="modules/89-followups.js"></script>
 <script src="modules/89-bundles.js"></script>
+<script src="modules/91-packages.js"></script>
 <script src="modules/90-wire.js"></script>
 <script>
 
@@ -1773,6 +1777,7 @@ document.querySelectorAll('nav button').forEach(b=>{
     if(b.dataset.t==='timeline')timelineLoad();
     if(b.dataset.t==='longitudinal')longitudinalLoad();
     if(b.dataset.t==='bundles')bundlesLoad();
+    if(b.dataset.t==='bundles')packagesLoad();
     if(b.dataset.t==='create')renderCustomList();
     if(b.dataset.t==='codes')codesUI();
     if(b.dataset.t==='cases')casesShow();
