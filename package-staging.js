@@ -2,13 +2,14 @@
 // Task D6: stage a package bundle as PROPOSALS (stage, list, read one, reject one). Staging, listing, reading and rejecting create no element set, no pathway and no clinical record.
 // The parser is package-import.js (D5, D5a, pure, unchanged). The person is the session user, never a value from the file. The raw bundle is never stored.
 // A package with blockers IS staged so a person can read them; a package with no readable element is refused (400). The same bundle (same hash) is staged once: a second try gives 409.
-// Audit rows hold counts, ids and a hash only: never titles, labels or reasons. One permission, import:write, guards all four routes. Accepting is D7 and D8.
+// Audit rows hold counts, ids and a hash only: never titles, labels or reasons. import:write guards all routes. D7: accept one ready set proposal as a DRAFT set (also needs sets:write); the pathway is D8.
 // Prototype. Synthetic data only. Not for clinical use.
 const express = require('express');
 const { tx } = require('./db');
 const { audit } = require('./audit');
 const A = require('./auth');
 const { parsePackage, PackageImportError } = require('./package-import');
+const { checksumOf, validateDefinition, SCHEMA_VERSION } = require('./sets');   // D7: the same definition rules and checksum as the set routes
 
 const BODY_LIMIT = '2mb', MAX_LIST = 50, MAX_REASON = 1000;
 const isPackageStagePath = p => p === '/api/import/packages';
@@ -99,6 +100,40 @@ function mountPackageStaging(app, pool) {
       await c.query(`UPDATE package_proposals SET status = 'rejected', row_version = row_version + 1, rejected_by = $2, rejected_at = clock_timestamp(), reject_reason = $3 WHERE id = $1`, [id, req.user.id, reason]);
       await audit(c, req, 'import.package_proposal_reject', 'package_import', p.import_id, { proposalId: id, kind: p.kind, length: reason.length, rowVersion: rv + 1 });
       return { status: 200, body: { proposal: (await c.query(`SELECT ${PCOLS} ${PFROM} WHERE p.id = $1`, [id])).rows[0] } };
+    });
+    res.status(out.status).json(out.body);
+  });
+
+  /* ---------- D7: accept ONE ready set proposal as a draft set (version 1, source columns kept) ----------
+     The stored body is checked again with the set rules: nothing is trusted because it was staged. The accepter is the creator, so the existing review and publish rules apply unchanged.
+     Accepting never submits, approves or publishes (D7a submits). A slug taken by another set is refused (ED-88). */
+  app.post('/api/import/package-proposals/:id/accept', guard, A.requirePerm(pool, 'sets:write'), async (req, res) => {
+    const s = strict(req.body, ['rowVersion']);
+    if (s.error) return res.status(400).json(s.error);
+    const id = idParam(req.params.id), rv = posInt(s.body.rowVersion);
+    if (rv === null) return bad(res, 'rowVersion is required (the version you loaded).');
+    if (!id) return res.status(404).json({ error: 'not_found' });
+    const out = await tx(pool, async c => {
+      const p = (await c.query('SELECT id, import_id, kind, slug, body, ready, status, row_version FROM package_proposals WHERE id = $1 FOR UPDATE', [id])).rows[0];
+      if (!p) return { status: 404, body: { error: 'not_found' } };
+      if (p.status !== 'staged') return { status: 409, body: { error: 'proposal_final', message: 'This proposal was already ' + p.status + '.', currentRowVersion: p.row_version } };
+      if (p.row_version !== rv) return { status: 409, body: { error: 'version_conflict', message: 'This proposal was changed by someone else. Reload it and try again.', currentRowVersion: p.row_version } };
+      if (p.kind !== 'set') return { status: 409, body: { error: 'not_a_set', message: 'Only a set proposal is accepted here. The pathway is accepted in a later step.' } };
+      if (!p.ready) return { status: 409, body: { error: 'not_ready', message: 'This proposal has blockers. It cannot be accepted.' } };
+      const b = p.body, src = b && b.source, def = b && b.definition;
+      const refuse = async (status, error, message) => { await audit(c, req, 'import.package_accept_refused', 'package_import', p.import_id, { proposalId: id, reason: error }); return { status, body: { error, message } }; };
+      if (!def || typeof def !== 'object' || !src || b.slug !== p.slug || b.setKind !== 'custom' || !/^[0-9a-f]{64}$/.test(src.checksum || '') || typeof src.artefactId !== 'string' || typeof src.version !== 'string'
+          || validateDefinition(def, p.slug, 'custom').length) return refuse(422, 'invalid_definition', 'The staged content is not valid declarative data. It was not accepted.');
+      const dup = (await c.query('SELECT 1 FROM element_set_versions WHERE source_artefact_id = $1 AND source_version = $2 AND source_checksum = $3', [src.artefactId, src.version, src.checksum])).rows[0];
+      if (dup) return refuse(409, 'already_imported', 'This artefact version was imported before.');
+      if ((await c.query('SELECT 1 FROM element_sets WHERE slug = $1', [p.slug])).rows[0]) return refuse(409, 'slug_taken', 'A set with that slug already exists. A new version from a package is not built yet.');
+      const set = (await c.query('INSERT INTO element_sets(slug, title, kind, created_by) VALUES ($1,$2,$3,$4) RETURNING id', [p.slug, def.title.trim(), 'custom', req.user.id])).rows[0];
+      const checksum = checksumOf(def);
+      await c.query(`INSERT INTO element_set_versions(element_set_id, version, schema_version, definition_json, checksum, created_by, source_artefact_id, source_version, source_checksum) VALUES ($1,1,$2,$3,$4,$5,$6,$7,$8)`,
+        [set.id, SCHEMA_VERSION, JSON.stringify(def), checksum, req.user.id, src.artefactId, src.version, src.checksum]);
+      await c.query(`UPDATE package_proposals SET status = 'accepted', row_version = row_version + 1, accepted_by = $2, accepted_at = clock_timestamp(), accepted_ref = $3 WHERE id = $1`, [id, req.user.id, set.id]);
+      await audit(c, req, 'import.package_accept', 'package_import', p.import_id, { proposalId: id, setId: set.id, slug: p.slug, version: 1, checksum, sourceChecksum: src.checksum });
+      return { status: 200, body: { proposal: (await c.query(`SELECT ${PCOLS} ${PFROM} WHERE p.id = $1`, [id])).rows[0], setId: set.id } };
     });
     res.status(out.status).json(out.body);
   });
