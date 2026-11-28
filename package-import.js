@@ -10,6 +10,7 @@
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { validateDefinition } = require('./sets');
+const { pathwayProposal, conceptMap } = require('./package-pathway');
 
 const LIMITS = { artefacts: 60, bytes: 1000000, fields: 200, citation: 500, title: 200, desc: 2000 };
 const FORMAT = 'ccis-package-bundle/1';
@@ -85,12 +86,13 @@ function elementProposal(doc, sum, ctx) {
   if (!all.length) B.push({ path: '/fields', code: 'no-fields', message: 'The element has no fields.' });
   if (all.length > LIMITS.fields) B.push({ path: '/fields', code: 'too-many-fields', message: `The element has more than ${LIMITS.fields} fields.` });
   const local = { concepts: [], valueSets: ctx.valueSets, display: ctx.display };
-  const fields = all.slice(0, LIMITS.fields).map(([f, at]) => convertField(f, at, local, B)).filter(Boolean);
+  const fieldIds = {};
+  const fields = all.slice(0, LIMITS.fields).map(([f, at]) => { const o = convertField(f, at, local, B); if (o && o.id && isObj(f) && typeof f.key === 'string') fieldIds[f.key] = o.id; return o; }).filter(Boolean);
   const def = { title, fields };
   if (desc !== undefined) def.desc = desc;
   if (plain(basis) && basis.length <= LIMITS.citation) def.citation = basis;   // longer or odd text is left out, never cut (design section 7)
   if (!B.length) for (const e of validateDefinition(def, slug, 'custom')) B.push({ path: e.path, code: 'definition', message: 'The set rules refuse the definition.' });
-  P.definition = def; P.concepts = local.concepts; P.ready = B.length === 0;
+  P.definition = def; P.fieldIds = fieldIds; P.concepts = local.concepts; P.ready = B.length === 0;
   return P;
 }
 
@@ -129,8 +131,17 @@ async function parsePackage(bundle) {
     proposals.push(p);
     for (const b of p.blockers) blockers.push({ artefact: p.artefact, ...b });
   }
-  const counts = { artefacts: items.length, verified: verified.length, elements: proposals.length, ready: proposals.filter(p => p.ready).length, blockers: blockers.length };
-  return { ok: blockers.length === 0 && proposals.length > 0, proposals, blockers, counts, bundleHash: checksumOf(canonicalize(bundle).text).slice(7) };
+  const H = { plain, SLUG_RE, ID_RE }, pathways = [];
+  for (const { doc, sum, index } of verified) {
+    if (!isObj(doc.manifest) || doc.manifest.type !== 'pathway') continue;
+    const w = pathwayProposal(doc, sum, proposals, H);
+    w.artefact = `/artefacts/${index}`; pathways.push(w);
+    for (const b of w.blockers) blockers.push({ artefact: w.artefact, ...b });
+  }
+  const cm = await conceptMap(verified.map(v => v.doc), proposals, H);
+  for (const b of cm.blockers) blockers.push({ artefact: '', ...b });
+  const counts = { artefacts: items.length, verified: verified.length, elements: proposals.length, ready: proposals.filter(p => p.ready).length, pathways: pathways.length, blockers: blockers.length };
+  return { ok: blockers.length === 0 && proposals.length > 0, proposals, pathways, conceptMap: cm.map, blockers, counts, bundleHash: checksumOf(canonicalize(bundle).text).slice(7) };
 }
 
 module.exports = { parsePackage, PackageImportError, LIMITS, FORMAT };
