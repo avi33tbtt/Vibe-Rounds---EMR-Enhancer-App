@@ -51,7 +51,7 @@ function checkSteps(raw) {
 }
 
 const PATH_COLS = `p.id, p.slug, p.title, p.status, p.created_at, p.updated_at`;
-const VER_COLS = `v.id AS version_id, v.version, v.title, v.description, v.status, v.checksum, v.created_at, v.published_at, v.retired_at,
+const VER_COLS = `v.id AS version_id, v.version, v.title, v.description, v.status, v.checksum, v.created_at, v.published_at, v.retired_at, v.entry_form, v.contexts, v.source_artefact_id, v.source_version, v.source_checksum,
   cu.username AS created_by, pu.username AS published_by, ru.username AS retired_by,
   (SELECT count(*)::int FROM pathway_version_steps st WHERE st.pathway_version_id = v.id) AS step_count`;
 const VER_JOINS = `JOIN users cu ON cu.id = v.created_by LEFT JOIN users pu ON pu.id = v.published_by LEFT JOIN users ru ON ru.id = v.retired_by`;
