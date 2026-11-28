@@ -507,6 +507,7 @@ nav button.sep{margin-left:10px;border-left:1px solid var(--bd)}
 </div>
 
 <script src="sdc.js"></script>
+<script src="pathway-form.js"></script>
 <script src="modules/00-boot.js"></script>
 <script src="modules/10-escape.js"></script>
 <script src="modules/20-session.js"></script>
@@ -541,6 +542,7 @@ nav button.sep{margin-left:10px;border-left:1px solid var(--bd)}
 <script src="modules/89-followups.js"></script>
 <script src="modules/89-bundles.js"></script>
 <script src="modules/91-packages.js"></script>
+<script src="modules/92-pathway-form.js"></script>
 <script src="modules/90-wire.js"></script>
 <script>
 
@@ -1308,13 +1310,8 @@ function fieldHTML(f,a){
   return`<label>${escA(f.label)}${f.unit?' ('+escA(f.unit)+')':''}${f.required?' *':''} ${badge}</label>${inp}${f.rationale?`<div class="mu">${escA(f.rationale)}</div>`:''}`;
 }
 
-function renderForms(){
-  const area=$('forms'),empty=$('formEmpty');
-  if(!CASE.applied.length){area.innerHTML='';empty.style.display='block';return}
-  empty.style.display='none';
-  let html=srvCase()&&CASE.obsCut?'<div class="note">Only the oldest 500 entries of this case were loaded here. Newer values may be missing from this screen.</div>':'';
-  CASE.applied.forEach(a=>{
-    const s=resolve(a);if(!s||!s.fields)return;
+function formCard(a){   // one applied set as a card (D11: also used by pathway-form.js's page module for sets a layout does not place)
+    const s=resolve(a);if(!s||!s.fields)return'';let html='';
     html+=`<div class="cd"><div class="flex" style="justify-content:space-between">
       <h3 style="margin:0">${escA(s.title)} <span class="kind ${escA(s.kind)}">${escA(s.kind)}</span>${s.generated?' <span class="mu">generated</span>':''}${sdcBadge(s)}${uncodedBadge(s)}</h3>
       <button class="b sec sm" data-act="removeSet" data-arg="${escA(s.id)}">Remove</button></div>
@@ -1322,8 +1319,15 @@ function renderForms(){
     let hid=0,qh=0;
     s.fields.forEach(f=>{if(adaptHidden(s,f,a)){hid++;return}if(modeHidden(s,f,a)){qh++;return}html+=fieldHTML(f,a)});   // R1f: Quick mode leaves recorded and unlisted-set questions alone (modules/59-mode.js)
     html+=adaptNote(hid)+modeNote(qh)+`</div>`;   // R1c: follow-up questions held back until an earlier answer asks for them
-
-  });
+    return html;
+}
+function renderForms(){
+  const area=$('forms'),empty=$('formEmpty');
+  if(!CASE.applied.length){area.innerHTML='';empty.style.display='block';return}
+  empty.style.display='none';
+  let html=srvCase()&&CASE.obsCut?'<div class="note">Only the oldest 500 entries of this case were loaded here. Newer values may be missing from this screen.</div>':'';
+  const pf=pfRender();if(pf!==null){area.innerHTML=html+pf;return}   // D11: one package pathway with a layout
+  CASE.applied.forEach(a=>{html+=formCard(a)});
   area.innerHTML=html;
 }
 function renderLib(){

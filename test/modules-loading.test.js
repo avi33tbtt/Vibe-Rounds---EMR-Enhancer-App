@@ -13,7 +13,7 @@ const nonceOf = csp => /'nonce-([^']+)'/.exec(csp)[1];
 
 test('the page loads modules/00-boot.js (classic script, relative src) before the inline script', () => {
   const raw = fs.readFileSync(path.join(__dirname, '..', 'emr-enhancer.html'), 'utf8');
-  assert.deepEqual(localScripts().slice(0, 2), ['sdc.js', 'modules/00-boot.js']);   // later rows add more modules after these
+  assert.deepEqual(localScripts().slice(0, 3), ['sdc.js', 'pathway-form.js', 'modules/00-boot.js']);   // later rows add more modules after these
   assert.ok(raw.indexOf('modules/00-boot.js') < raw.indexOf('<script>'), 'module comes before the inline script');
   assert.ok(!/type="module"/.test(raw), 'no ES modules: the page must work from file://');
   assert.ok(!/const \$=i=>/.test(raw), 'the helpers live in the module only');

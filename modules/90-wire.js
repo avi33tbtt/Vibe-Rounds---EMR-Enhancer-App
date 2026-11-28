@@ -3,6 +3,7 @@
 /* Delegated events (chunk 06d-2): data-act names a function in ACT (no eval, no string-built code); data-arg is its text argument.
    data-ev picks the event: click (default), change, input, or enter (Enter key). An action that returns false cancels the default. */
 const ACT={
+  pfGoTab:(el,e,arg)=>pfGoTab(arg),
   addFieldRow:()=>addFieldRow(),
   aiRank:()=>aiRank(),
   applyGenerated:()=>applyGenerated(),

@@ -18,6 +18,7 @@ const MATRIX = {
   'GET /':                          { guard: 'public' },
   'GET /emr-enhancer.html':         { guard: 'public' },
   'GET /sdc.js':                    { guard: 'public' },
+  'GET /pathway-form.js':           { guard: 'public' },
   'GET /modules/:file':            { guard: 'public' },
   'POST /api/login':                { guard: 'public' },
   'POST /api/logout':               { guard: 'login' },

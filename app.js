@@ -143,6 +143,8 @@ function createApp(pool, opts = {}) {
   });
   const sdc = path.join(__dirname, 'sdc.js');   // the one shared copy of the SDC code
   app.get('/sdc.js', (_req, res) => res.sendFile(sdc));
+  const pathwayForm = path.join(__dirname, 'pathway-form.js');   // D11: the one shared copy of the pathway form model
+  app.get('/pathway-form.js', (_req, res) => res.sendFile(pathwayForm));
   // R0a: page modules (classic scripts, same origin). Only plain file names in modules/ are served.
   const modulesDir = path.join(__dirname, 'modules');
   app.get('/modules/:file', (req, res) => {

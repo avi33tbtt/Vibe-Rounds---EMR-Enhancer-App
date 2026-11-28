@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const root = path.join(__dirname, '..');
-const TAG = /<script src="((?:sdc\.js|modules\/[a-z0-9][a-z0-9-]*\.js))"><\/script>/g;
+const TAG = /<script src="((?:sdc\.js|pathway-form\.js|modules\/[a-z0-9][a-z0-9-]*\.js))"><\/script>/g;
 const rawPage = () => fs.readFileSync(path.join(root, 'emr-enhancer.html'), 'utf8');
 function localScripts() { return [...rawPage().matchAll(TAG)].map(m => m[1]); }
 function pageHtml() {

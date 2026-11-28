@@ -60,7 +60,7 @@ async function pwLoad(){   // published pathways (B4b): the latest published ver
     const x=pubs[i],v=r.status===200&&r.body.version;
     if(!v||!Array.isArray(v.steps)){bad++;return}
     out.push({id:x.slug,kind:'pathway',title:v.title,desc:v.description||'',members:v.steps.map(t=>t.set_slug),
-      srvPw:{pathwayId:x.id,version:v.version,checksum:v.checksum,steps:v.steps.map(t=>({slug:t.set_slug,version:t.set_version}))}});
+      layout:v.entry_form?{entryForm:v.entry_form,contexts:v.contexts||[]}:null,srvPw:{pathwayId:x.id,version:v.version,checksum:v.checksum,steps:v.steps.map(t=>({slug:t.set_slug,version:t.set_version}))}});
   });
   if(bad)LIB.msg=(LIB.msg?LIB.msg+' ':'')+bad+' published pathway(s) could not be read and are left out.';
   return out;
