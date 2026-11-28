@@ -30,7 +30,7 @@ const BAD_CHARS = /\u0000|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff]
 const TOP_KEYS = { title: 'str:200', desc: 'str:2000', fields: 'fields', citation: 'str:500', sdc: 'sdc' };
 const FIELD_KEYS = {
   id: 'id', label: 'str:200', type: 'str:20', unit: 'str:40', options: 'options', repeat: 'bool', required: 'bool', derived: 'bool',
-  flag: 'str:200', rationale: 'str:1000', citation: 'str:500', codingPolicy: 'policy', bindings: 'bindings',
+  concept: 'key', flag: 'str:200', rationale: 'str:1000', citation: 'str:500', codingPolicy: 'policy', bindings: 'bindings',
   linkId: 'str:200', sdcType: 'str:40', text: 'str:500', path: 'path',
 };
 const SDC_KEYS = { url: 'str:500', version: 'str:100', publisher: 'str:200', modified: 'bool' };   // the original Questionnaire is not kept (rebuilt by sdc.js)
@@ -63,6 +63,7 @@ function validateDefinition(def, slug, kind) {
     const [t, n] = kind_.split(':');
     if (t === 'str') return str(v, +n, path);
     if (t === 'bool') return typeof v === 'boolean' || err(path, 'must be true or false.');
+    if (t === 'key') { if (!isStr(v) || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(v)) err(path, 'must be 1 to 64 lowercase letters, digits, . _ - (starting with a letter or digit).'); return; }
     if (t === 'id') { if (!isStr(v) || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(v)) err(path, 'must be 1 to 64 letters, digits, . _ - (starting with a letter or digit).'); return; }
     if (t === 'options') {
       if (!Array.isArray(v) || v.length > MAX_OPTIONS) return err(path, `must be a list of at most ${MAX_OPTIONS} options.`);

@@ -273,6 +273,7 @@ If a chat ends midway (limit hit): nothing is marked `DONE` until verified, so o
 | D8b-3 | chunk-D8b-emr-cohort-exporter.md | Contract test: real export accepted by the CCIS import path; export without narrative or identity (item 3) | BLOCKED |  | 1 test file + fixture | Needs D8b-1 and CCIS 6.4. |
 | ECO-D1 | (Studio tracker) | Refresh `contracts/` from CCIS 0.2.0: 6 schemas added, 3 refreshed, `SOURCE.json` pin and `test/contracts-pin.test.js`. | DONE | 2026-11-28 | none | Pin ccf6420. Pure tests pass; DB tests not run here. ED-76 in Studio DECISIONS. |
 | ECO-D2 | (Studio tracker) | Vendor CCIS validator, canonical JSON, SHA-256 and compose modules (22 files) under `vendor/ccis/`, `SOURCE.json` pin, `.gitattributes`, `test/vendor-ccis.test.js`. | DONE | 2026-11-28 | none | Pin ccf6420. Pure tests pass; DB tests not run here. ED-77 in Studio DECISIONS. |
+| ECO-D3 | (Studio tracker) | Migration 034: `observations.concept_key` (nullable, format CHECK, partial index); field `concept` key in `sets.js`; set at write from the pinned field (record and correct). | DONE | 2026-11-28 | none | 8-case test pass on PostgreSQL 16. safety-routes 7 and safety-data 1 fail the same without D3. ED-78 in Studio DECISIONS. |
 
 Suggested order: numeric within each track; Track A, then B. The EMR side then waits for the CCIS repo: B5 needs CCIS row 0.3 (import contract), D8b needs CCIS row 6.4. Exceptions that are safe: 8e and 8f can be done any time after 6a; 6e and 7d can share one session.
 

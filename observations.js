@@ -43,6 +43,9 @@ function parseInstant(s) {
 }
 
 // Check one value against the field of the pinned version. Returns { error } or { type, json, unit }.
+// The concept of a pinned field (D3): a key from the definition, never from a request body; NULL when the field has none.
+const conceptOf = f => (f && typeof f.concept === 'string' && f.concept) || null;
+
 function shapeValue(field, item) {
   if (!field) return { error: ['unknown_field_key', 'That field is not in the version of the set this case applied.'] };
   if (field.derived === true) return { error: ['derived_field', 'A derived field is computed, never stored as a value.'] };
@@ -192,7 +195,9 @@ function mountObservations(app, pool) {
         const a = sets.get(it.appliedSetId);
         if (!a) return { status: 404, body: { error: 'applied_set_not_found', message: `Entry ${it.i + 1}: that set is not applied to this case.`, index: it.i } };
         if (a.state !== 'active') return { status: 409, body: { error: 'set_not_active', message: `Entry ${it.i + 1}: that set is ${a.state}; it takes no new values.`, index: it.i } };
-        const r = shapeValue(await fieldOf(c, a.element_set_version_id, it.fieldKey, defs), it);
+        const fld = await fieldOf(c, a.element_set_version_id, it.fieldKey, defs);
+        const r = shapeValue(fld, it);
+        if (!r.error) r.concept = conceptOf(fld);
         if (r.error) return { status: 400, body: { error: r.error[0], message: `Entry ${it.i + 1}: ${r.error[1]}`, index: it.i } };
         shaped.push(r);
       }
@@ -200,9 +205,9 @@ function mountObservations(app, pool) {
       for (let k = 0; k < items.length; k++) {
         const it = items[k], r = shaped[k];
         const ins = await c.query(
-          `INSERT INTO observations(case_id, applied_set_id, field_key, value_type, value_json, unit_display, effective_at, source_type, source_ref, status, recorded_by)
-           VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::timestamptz,$8,$9,$10,$11) RETURNING id`,
-          [cs.id, it.appliedSetId, it.fieldKey, r.type, r.json === null ? null : JSON.stringify(r.json), r.unit, it.effectiveAt, it.sourceType, it.sourceRef === undefined ? null : it.sourceRef, it.status, req.user.id]);
+          `INSERT INTO observations(case_id, applied_set_id, field_key, value_type, value_json, unit_display, effective_at, source_type, source_ref, status, recorded_by, concept_key)
+           VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::timestamptz,$8,$9,$10,$11,$12) RETURNING id`,
+          [cs.id, it.appliedSetId, it.fieldKey, r.type, r.json === null ? null : JSON.stringify(r.json), r.unit, it.effectiveAt, it.sourceType, it.sourceRef === undefined ? null : it.sourceRef, it.status, req.user.id, r.concept]);
         ids.push(Number(ins.rows[0].id));
       }
       await event(c, cs.id, 'observation_recorded', req.user.id, { count: ids.length, observationIds: ids, appliedSetIds: [...sets.keys()] });
@@ -236,13 +241,15 @@ function mountObservations(app, pool) {
       const o = (await c.query(`SELECT o.id, o.status, o.applied_set_id, o.field_key, a.element_set_version_id FROM observations o JOIN case_applied_sets a ON a.id = o.applied_set_id WHERE o.id = $1`, [req.params.id])).rows[0];
       if (o.status === 'entered_in_error') return { status: 409, body: { error: 'entered_in_error', message: 'This row was entered in error and cannot be corrected.' } };
       if ((await c.query('SELECT 1 FROM observations WHERE corrects_id = $1', [o.id])).rowCount) return { status: 409, body: { error: 'already_corrected', message: 'This row was already corrected. Reload the timeline and correct the newest row.' } };
-      const r = shapeValue(await fieldOf(c, o.element_set_version_id, o.field_key, new Map()), b);
+      const fld = await fieldOf(c, o.element_set_version_id, o.field_key, new Map());
+      const r = shapeValue(fld, b);
+      if (!r.error) r.concept = conceptOf(fld);
       if (r.error) return { status: 400, body: { error: r.error[0], message: r.error[1] } };
       // effective_at is copied inside SQL when not sent, so its microseconds survive exactly
       const id = (await c.query(
-        `INSERT INTO observations(case_id, applied_set_id, field_key, value_type, value_json, unit_display, effective_at, source_type, source_ref, status, recorded_by, corrects_id, change_reason)
-         SELECT o.case_id, o.applied_set_id, o.field_key, $2, $3::jsonb, $4, COALESCE($5::timestamptz, o.effective_at), $6, $7, 'amended', $8, o.id, $9 FROM observations o WHERE o.id = $1 RETURNING id`,
-        [o.id, r.type, r.json === null ? null : JSON.stringify(r.json), r.unit, b.effectiveAt === undefined ? null : b.effectiveAt, b.sourceType, b.sourceRef === undefined ? null : b.sourceRef, req.user.id, reason])).rows[0].id;
+        `INSERT INTO observations(case_id, applied_set_id, field_key, value_type, value_json, unit_display, effective_at, source_type, source_ref, status, recorded_by, corrects_id, change_reason, concept_key)
+         SELECT o.case_id, o.applied_set_id, o.field_key, $2, $3::jsonb, $4, COALESCE($5::timestamptz, o.effective_at), $6, $7, 'amended', $8, o.id, $9, $10 FROM observations o WHERE o.id = $1 RETURNING id`,
+        [o.id, r.type, r.json === null ? null : JSON.stringify(r.json), r.unit, b.effectiveAt === undefined ? null : b.effectiveAt, b.sourceType, b.sourceRef === undefined ? null : b.sourceRef, req.user.id, reason, r.concept])).rows[0].id;
       await event(c, cs.id, 'observation_corrected', req.user.id, { observationId: Number(id), corrects: o.id });
       await touch(c, cs.id);
       await audit(c, req, 'observation.correct', 'case', cs.id, { observationId: Number(id), corrects: o.id, reasonLength: reason.length });
