@@ -1,0 +1,30 @@
+{
+  "source": "https://github.com/avi33tbtt/Vibe-Rounds---CCIS",
+  "commit": "ccf64202be8bd4c345b8069471b0bc5ff98828bc",
+  "standard": "0.2.0",
+  "note": "Root files come from the CCIS repo root; ccis/validators/ccis-validators.js from ccis/validators/.",
+  "files": {
+    "ccis-compile.js": "c7268cb671ad6354bd59dd8f5a5c53f3e699ca27391cc697bb8b329358cb478a",
+    "ccis-compose-group.js": "d901d9e15c79ba82a7d30bf815c403ef2d17da41f2f9868c1aa4c60237360033",
+    "ccis-compose-pathway.js": "31fc4dab69960b6a1bd34a113452d3fd9ef5b123f0c696924f9df19c46d917b4",
+    "ccis-compose.js": "242400dbbfdf2b47ae9a65b44e87697b8066f50ab75e1f81428c6d8be62cebfd",
+    "ccis-concept-owners.js": "96713b3b047d646c42a18a5b9e109445f254bed0b139508a76a00afbc54dd678",
+    "ccis-sha256.js": "a9233ceea20151cb24c3fb19692244ff01fdb664bbfc2d775e29eaa543134429",
+    "ccis-validator-concept-package.js": "73a8c4ea79ff0d5e848ac9126a38d665efc90c6bd7da5f0ac109d700ac291123",
+    "ccis-validator-concept.js": "fa18bc3302b7384e2b164fbe1d4c211e01e72d662739090dd3edeb2788a6332e",
+    "ccis-validator-contexts.js": "5042c1fa40832394168cb93655a1e107d987aceb2b9350ae246e44d4a9d4af8f",
+    "ccis-validator-entryform.js": "d7ce6f943d1d428c37a4ae7a26ab2582b7246f59b613664ffb2d065ff22495f0",
+    "ccis-validator-governance.js": "f21486b6676eee0bf072c2218bb605556c287124f41de33cf10ae01811dd6e95",
+    "ccis-validator-group.js": "f2ee85aea8c36c8203615270da327b591d0c06a193a21619588bb0a6df097f7c",
+    "ccis-validator-owner.js": "7b1aeb08ebb21af5147ae00b2c3445bfe2d6f5f421cee59fd6ee22309d400912",
+    "ccis-validator-rulepack-cases.js": "0350c96b508e4baaa019b692fe3bb30bcbd77d0ec37458b8cdffd81d1df522f7",
+    "ccis-validator-rulepack-checks.js": "7a27a4395c742e0d479c035ba9559988c1f5ad9816e6b3d7071d850bb5a9c38b",
+    "ccis-validator-rulepack-governance.js": "d367a0ae9626477580f8a19a42b4fe513086d5b49277989777597ce8cbf655d6",
+    "ccis-validator-rulepack-shape.js": "0362f9b1da58dedd8f7015cc5a10df1171cce165136f75636e2df9322fccb63b",
+    "ccis-validator-rulepack.js": "1ac641585065237baf800c527e6851d509cd4e54a0685897e9a43c4d89cf3351",
+    "ccis-validator-semantic.js": "ac65930cf39bfc52ff7b76b2e49018254acd0c81ae5d1f1aed3986af4df92000",
+    "ccis-validator-terminology.js": "d4517d9e7cae05c44ecd1620ef7cb06e366020bb3499bc48352e40b7a782ddbf",
+    "ccis-validator.js": "e66d6ec377cd06f0713ae87718131e98c999225aa4cdf9b9c42e10d66e386c07",
+    "ccis/validators/ccis-validators.js": "d471570cf8cb0ae1ee5560fc1c7c1a0dbf09358ad5098bb833a13d20dc644257"
+  }
+}
